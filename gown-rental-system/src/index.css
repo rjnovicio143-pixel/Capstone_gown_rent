@@ -1,0 +1,36 @@
+/* Color Palette definition */
+:root {
+  --bg-main: #ffffff;         /* Pure white background */
+  --bg-sidebar: #f8fafc;      /* Very light gray for sidebar */
+  --bg-card: #ffffff;         /* White cards */
+  --border-color: #e2e8f0;    /* Light border for cards/inputs */
+  
+  /* The Main Accent Color: Golden Yellow */
+  --accent-gold: #d4a72c;     /* A slightly darker gold for better text readability */
+  --accent-gold-hover: #b8860b; /* Goldenrod color for hover states */
+  
+  /* Text colors */
+  --text-main: #1e293b;       /* Dark slate for main text */
+  --text-muted: #64748b;      /* Gray for subtler text */
+  --text-on-gold: #ffffff;    /* White text when background is gold */
+  
+  font-family: 'Inter', sans-serif;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Base styles para sa mga common elements */
+button {
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+}
+
+input {
+  font-family: inherit;
+}

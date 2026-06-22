@@ -1,0 +1,293 @@
+/* ==========================================================================
+   MRS. G GOWN CLINIC - 3D MANNEQUIN STUDIO LIGHT THEME
+   ========================================================================== */
+
+:root {
+  --m3d-bg-page: #fcfbf7;
+  --m3d-bg-card: #ffffff;
+  --m3d-text-dark: #1e293b;
+  --m3d-text-gray: #64748b;
+  --m3d-gold: #d4af37;
+  --m3d-gold-light: #faf5e6;
+  --m3d-gold-hover: #b5922a;
+  --m3d-border: #e2e8f0;
+  --m3d-shadow: 0 10px 30px rgba(212, 175, 55, 0.04);
+}
+
+.m3d-page-container {
+  max-width: 1350px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  color: var(--m3d-text-dark);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Three-Column Mockup Layout */
+.m3d-grid-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr 300px;
+  gap: 24px;
+}
+
+@media (max-width: 1100px) {
+  .m3d-grid-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Control Cards Styling */
+.m3d-section-card {
+  background: var(--m3d-bg-card);
+  border: 1px solid var(--m3d-border);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: var(--m3d-shadow);
+  margin-bottom: 20px;
+}
+
+.m3d-section-card h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--m3d-text-dark);
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-subtitle {
+  font-size: 0.85rem;
+  color: var(--m3d-text-gray);
+  margin: 0 0 18px 0;
+}
+
+/* Gender Tabs Custom Styles */
+.gender-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.gender-btn {
+  background: #f8fafc;
+  color: var(--m3d-text-gray);
+  border: 1px solid var(--m3d-border);
+  padding: 12px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gender-btn:hover {
+  background: #f1f5f9;
+}
+
+.gender-btn.active {
+  background: var(--m3d-gold-light);
+  color: var(--m3d-gold);
+  border-color: var(--m3d-gold);
+}
+
+/* Preset Sizes Layout (S, M, L, XL, XXL) */
+.presets-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-btn {
+  background: #f8fafc;
+  border: 1px solid var(--m3d-border);
+  color: var(--m3d-text-gray);
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 48px;
+  text-align: center;
+}
+
+.preset-btn:hover {
+  border-color: var(--m3d-gold);
+  color: var(--m3d-gold);
+}
+
+.preset-btn.active {
+  background: var(--m3d-gold);
+  border-color: var(--m3d-gold);
+  color: #ffffff;
+}
+
+/* Fine-Tuning Measurement Sliders */
+.slider-group {
+  margin-bottom: 18px;
+}
+
+.slider-group:last-child {
+  margin-bottom: 0;
+}
+
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--m3d-text-dark);
+  margin-bottom: 6px;
+}
+
+.slider-group input[type="range"] {
+  width: 100%;
+  accent-color: var(--m3d-gold);
+  cursor: pointer;
+  height: 6px;
+  border-radius: 4px;
+}
+
+/* Center Panel: Main 3D Canvas Box */
+.m3d-canvas-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.m3d-canvas-wrapper {
+  background: var(--m3d-bg-card);
+  border: 1px solid var(--m3d-border);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: var(--m3d-shadow);
+  display: flex;
+  flex-direction: column;
+  height: 640px;
+}
+
+.canvas-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.live-badge {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--m3d-text-dark);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--m3d-gold);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--m3d-gold);
+}
+
+.active-item-tag {
+  background: var(--m3d-gold-light);
+  color: var(--m3d-gold);
+  padding: 6px 14px;
+  border-radius: 30px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.canvas-viewport-container {
+  background: radial-gradient(circle, #ffffff 40%, #f7f5ef 100%);
+  border-radius: 16px;
+  flex-grow: 1;
+  overflow: hidden;
+  border: 1px solid var(--m3d-border);
+}
+
+/* Right Gown Selection Styles */
+.gown-grid-selector {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.gown-grid-selector::-webkit-scrollbar {
+  width: 4px;
+}
+
+.gown-grid-selector::-webkit-scrollbar-thumb {
+  background: var(--m3d-gold);
+  border-radius: 10px;
+}
+
+.gown-select-card {
+  background: #f8fafc;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gown-select-card:hover {
+  border-color: rgba(212, 175, 55, 0.3);
+  transform: translateY(-1px);
+}
+
+.gown-select-card.selected {
+  background: var(--m3d-gold-light);
+  border-color: var(--m3d-gold);
+}
+
+.gown-thumbnail-wrapper {
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  overflow: hidden;
+  background-color: #e2e8f0;
+}
+
+.gown-thumbnail-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gown-meta-details h4 {
+  font-size: 0.9rem;
+  margin: 0 0 4px 0;
+  color: var(--m3d-text-dark);
+}
+
+.tag-3d {
+  background: #ffffff;
+  color: var(--m3d-text-gray);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--m3d-border);
+}
+
+/* Gidugang para sa Size Badges */
+.size-tags {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.size-badge {
+  background: var(--m3d-gold);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}

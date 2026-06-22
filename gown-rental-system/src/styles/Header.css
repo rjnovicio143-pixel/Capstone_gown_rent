@@ -1,0 +1,165 @@
+.app-header-modern {
+  height: 65px;
+  /* Gi-combine nimo ang imong dark theme gradient */
+  background: linear-gradient(180deg, #1e1e1e 0%, #121212 100%); 
+  backdrop-filter: blur(10px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-right: 20px;
+  color: #ffffff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+  
+  /* IMPORTANTE: Transition para dungan sa sidebar collapse/expand */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Siguroha nga ang header-left-section naay sulod puhon para balance */
+.header-left-section {
+  font-size: 14px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.header-right-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 20px;
+}
+
+/* Clock Display */
+.digital-clock {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #94a3b8;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+}
+
+.header-v-divider {
+  width: 1px;
+  height: 20px;
+  background-color: rgba(255, 255, 255, 0.1);
+  margin: 0 8px;
+}
+
+/* Admin Status Badge */
+.admin-status-badge {
+  background: rgba(9, 9, 8, 0.288);
+  border: 1px solid rgba(240, 182, 10, 0.763);
+  padding: 4px 10px;
+  border-radius: 50px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge-label {
+  color: #fef8c7;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+/* User Profile Section */
+.user-profile-compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+.user-profile-compact:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.profile-avatar-icon { color: #64748b; }
+
+.profile-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.profile-role {
+  font-size: 10px;
+  color: #64748b;
+}
+
+/* Control Buttons */
+.header-control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.sun-icon { color: #f59e0b; }
+
+.notif-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  background-color: #f43f5e;
+  border-radius: 50%;
+  border: 2px solid #0f172a;
+}
+
+/* Premium Logout Button */
+.header-logout-action {
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  color: #fb7185;
+  padding: 8px 15px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 5px;
+  transition: all 0.2s;
+}
+
+.header-logout-action:hover {
+  background: #f43f5e;
+  color: #ffffff;
+  border-color: #f43f5e;
+  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.3);
+}

@@ -1,0 +1,126 @@
+.public-navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 60px;
+  background-color: #ffffff;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+/* Logo Styling */
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-icon {
+  color: var(--accent-gold, #d4a72c);
+}
+
+.logo-text {
+  font-size: 24px;
+  font-weight: 800;
+  color: #1e293b;
+  letter-spacing: -0.5px;
+}
+
+.logo-accent {
+  color: var(--accent-gold, #d4a72c);
+}
+
+/* Nav Links Styling */
+.nav-links {
+  display: flex;
+  list-style: none;
+  gap: 15px;
+  margin: 0;
+  padding: 0;
+  align-items: center;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: #64748b; /* Slate gray para sa inactive state */
+  font-weight: 500;
+  font-size: 14.5px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  transition: all 0.25s ease;
+}
+
+/* Hover State sa Normal links */
+.nav-item:hover {
+  color: var(--accent-gold, #d4a72c);
+  background-color: #f8fafc;
+}
+
+/* Active State sa Normal links */
+.nav-item.active {
+  color: var(--accent-gold, #d4a72c);
+  font-weight: 600;
+  background-color: #fef9c3; /* Soft very light gold bg */
+}
+
+/* Premium Style para sa Virtual Try-On link */
+.nav-item.tryon-link {
+  color: var(--accent-gold, #d4a72c);
+  background-color: #fef9c3;
+  border: 1px dashed #fde047;
+  font-weight: 600;
+}
+
+.nav-item.tryon-link:hover {
+  background-color: #fef08a;
+  border-color: var(--accent-gold, #d4a72c);
+}
+
+.nav-item.tryon-link.active {
+  background-color: var(--accent-gold, #d4a72c);
+  color: #ffffff;
+  border-style: solid;
+}
+
+/* Login Admin Button */
+.login-admin-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--accent-gold, #d4a72c);
+  color: #ffffff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px -1px rgba(212, 167, 44, 0.15);
+}
+
+.login-admin-btn:hover {
+  background-color: #b8860b; /* Goldenrod shadow hover */
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px -1px rgba(212, 167, 44, 0.25);
+}
+
+.login-admin-btn:active {
+  transform: translateY(0);
+}
+
+/* Responsive Styles */
+@media (max-width: 992px) {
+  .public-navbar {
+    padding: 16px 24px;
+  }
+  .nav-item span {
+    display: none; /* Icon nlng kung gamay ang screen */
+  }
+}

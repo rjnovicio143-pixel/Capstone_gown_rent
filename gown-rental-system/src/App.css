@@ -1,0 +1,30 @@
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #f8fafc;
+}
+
+.main-wrapper {
+  flex: 1;
+  /* Transition para dungan sa sidebar animation */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Mao ni ang mo-adjust sa margin depende sa state */
+.main-wrapper.sidebar-open {
+  margin-left: 220px; /* Match sa imong original sidebar width */
+}
+
+.main-wrapper.sidebar-closed {
+  margin-left: 80px; /* Match sa imong collapsed sidebar width */
+}
+
+.page-content {
+  padding: 30px;
+}
+
+.content-area {
+  width: 100%;
+}

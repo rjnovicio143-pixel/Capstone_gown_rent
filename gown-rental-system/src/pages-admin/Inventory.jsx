@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Search, PlusCircle, X, Upload, Package, CheckCircle, AlertCircle, Trash2, Edit, Tag, Camera, Ruler } from 'lucide-react'; 
+import { Search, PlusCircle, X, Upload, Package, CheckCircle, AlertCircle, Trash2, Edit, Camera } from 'lucide-react';
 import '../styles/Inventory.css';
 import Header from '../components/Header';
-import { db } from '../firebase'; 
-import { supabase } from '../supabaseClient'; 
-import { collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { supabase } from '../supabaseClient';
+import { logActivity } from '../utils/activityLogger';
 
 const Inventory = () => {
   const [gowns, setGowns] = useState([]);
   const [selectedGown, setSelectedGown] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false); 
-  const [searchTerm, setSearchTerm] = useState(""); 
-  const [filter, setFilter] = useState("All"); 
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filter, setFilter] = useState("All");
   const [categories, setCategories] = useState(['Wedding', 'Debut', 'Formal', 'Accessories']);
   const [isAddingNewCat, setIsAddingNewCat] = useState(false);
   const [newCatInput, setNewCatInput] = useState("");
@@ -23,34 +22,42 @@ const Inventory = () => {
     name: '', price: '', category: 'Wedding', stock: 1, desc: '', image: null, size: ''
   });
 
+  // --- FETCH DATA FROM SUPABASE ---
   useEffect(() => {
-    const q = query(collection(db, "gowns"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const gownData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setGowns(gownData);
-      const uniqueCats = [...new Set(gownData.map(g => g.category))];
-      setCategories([...new Set(['Wedding', 'Debut', 'Formal', 'Accessories', ...uniqueCats])]);
-    });
-    return () => unsubscribe();
+    fetchGowns();
   }, []);
 
-  const handleImageChange = (e, isEdit = false) => {
-    const file = e.target.files[0];
-    if (file) { 
-      setImageFile(file);
-      const imgUrl = URL.createObjectURL(file);
-      if(isEdit) setSelectedGown({...selectedGown, image: imgUrl});
-      else setNewGown({ ...newGown, image: imgUrl }); 
+  const fetchGowns = async () => {
+    const { data, error } = await supabase
+      .from('gowns')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("Error fetching gowns:", error);
+    } else {
+      setGowns(data);
+      const uniqueCats = [...new Set(data.map(g => g.category))];
+      setCategories([...new Set(['Wedding', 'Debut', 'Formal', 'Accessories', ...uniqueCats])]);
     }
   };
 
-  // --- REUSABLE UPLOAD FUNCTION ---
+  const handleImageChange = (e, isEdit = false) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImageFile(file);
+      const imgUrl = URL.createObjectURL(file);
+      if (isEdit) setSelectedGown({ ...selectedGown, image: imgUrl });
+      else setNewGown({ ...newGown, image: imgUrl });
+    }
+  };
+
   const uploadToSupabase = async (file) => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}.${fileExt}`;
-    
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('Gown images') 
+
+    const { error: uploadError } = await supabase.storage
+      .from('Gown images')
       .upload(fileName, file);
 
     if (uploadError) throw uploadError;
@@ -62,6 +69,13 @@ const Inventory = () => {
     return urlData.publicUrl;
   };
 
+  const resetAddForm = () => {
+    setNewGown({ name: '', price: '', category: 'Wedding', stock: 1, desc: '', image: null, size: '' });
+    setImageFile(null);
+    setIsAddingNewCat(false);
+    setNewCatInput("");
+  };
+
   const handleSave = async () => {
     if (!newGown.name || !newGown.price) return alert("Palihug butangi og ngalan ug presyo!");
     setLoading(true);
@@ -71,35 +85,40 @@ const Inventory = () => {
         imageUrl = await uploadToSupabase(imageFile);
       }
 
-      let finalCategory = isAddingNewCat ? newCatInput : newGown.category;
-      await addDoc(collection(db, "gowns"), {
+      const finalCategory = isAddingNewCat ? newCatInput : newGown.category;
+
+      const { error } = await supabase.from('gowns').insert([{
         name: newGown.name,
         price: Number(newGown.price),
         stock: Number(newGown.stock),
         category: finalCategory,
         desc: newGown.desc,
-        size: newGown.size, // Gi-save ang size
-        image: imageUrl, 
-        status: Number(newGown.stock) > 0 ? "Available" : "Out of Stock",
-        createdAt: serverTimestamp()
-      });
+        size: newGown.size,
+        image: imageUrl,
+        status: Number(newGown.stock) > 0 ? "Available" : "Out of Stock"
+      }]);
 
+      if (error) throw error;
+
+      await logActivity('gown_added', `Added gown: ${newGown.name} (${finalCategory})`);
+
+      fetchGowns();
       setIsAddModalOpen(false);
-      setNewGown({ name: '', price: '', category: 'Wedding', stock: 1, desc: '', image: null, size: '' });
-      setImageFile(null);
-      setIsAddingNewCat(false);
-      setNewCatInput("");
-    } catch (error) { 
-      console.error("Error saving gown:", error); 
-      alert("Naay sayop sa pag-save.");
-    } finally { 
-      setLoading(false); 
+      resetAddForm();
+    } catch (error) {
+      console.error("Error saving gown:", error);
+      alert("Naay sayop sa pag-save: " + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDelete = async (id) => {
-    if(window.confirm("Sigurado ka nga gusto nimo i-delete kini?")) {
-      await deleteDoc(doc(db, "gowns", id));
+    if (window.confirm("Sigurado ka nga gusto nimo i-delete kini?")) {
+      const gownToDelete = gowns.find(g => g.id === id);
+      await supabase.from('gowns').delete().eq('id', id);
+      await logActivity('gown_deleted', `Deleted gown: ${gownToDelete?.name || id}`);
+      fetchGowns();
       setSelectedGown(null);
     }
   };
@@ -113,27 +132,41 @@ const Inventory = () => {
         currentImageUrl = await uploadToSupabase(imageFile);
       }
 
-      const gownRef = doc(db, "gowns", selectedGown.id);
-      await updateDoc(gownRef, {
-        name: selectedGown.name,
-        price: Number(selectedGown.price),
-        stock: Number(selectedGown.stock),
-        desc: selectedGown.desc,
-        size: selectedGown.size, // Gi-update ang size
-        image: currentImageUrl, 
-        status: Number(selectedGown.stock) > 0 ? "Available" : "Out of Stock",
-      });
+      const { error } = await supabase
+        .from('gowns')
+        .update({
+          name: selectedGown.name,
+          price: Number(selectedGown.price),
+          stock: Number(selectedGown.stock),
+          desc: selectedGown.desc,
+          size: selectedGown.size,
+          image: currentImageUrl,
+          status: Number(selectedGown.stock) > 0 ? "Available" : "Out of Stock",
+        })
+        .eq('id', selectedGown.id);
 
+      if (error) throw error;
+
+      await logActivity('gown_edited', `Edited gown: ${selectedGown.name}`);
+
+      fetchGowns();
       setIsEditMode(false);
       setSelectedGown(null);
       setImageFile(null);
       alert("Gown updated successfully!");
-    } catch (error) { 
-      console.error(error); 
-      alert("Error updating gown.");
+    } catch (error) {
+      console.error(error);
+      alert("Error updating gown: " + error.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const closeDetailsModal = () => {
+    if (loading) return;
+    setSelectedGown(null);
+    setIsEditMode(false);
+    setImageFile(null);
   };
 
   const filteredGowns = gowns.filter(gown => {
@@ -146,31 +179,39 @@ const Inventory = () => {
     <div className="inventory-page-wrapper">
       <Header />
       <div className="inventory-container">
+        {/* --- SUMMARY --- */}
         <div className="inventory-summary">
           <div className="stat-card">
             <Package className="stat-icon blue" />
-            <div><span>Total Items</span> <h3>{gowns.length}</h3></div>
+            <div><span>Total Items</span><h3>{gowns.length}</h3></div>
           </div>
           <div className="stat-card">
             <CheckCircle className="stat-icon green" />
-            <div><span>Available</span> <h3>{gowns.filter(g => g.stock > 0).length}</h3></div>
+            <div><span>Available</span><h3>{gowns.filter(g => g.stock > 0).length}</h3></div>
           </div>
           <div className="stat-card">
             <AlertCircle className="stat-icon red" />
-            <div><span>Out of Stock</span> <h3>{gowns.filter(g => (g.stock || 0) === 0).length}</h3></div>
+            <div><span>Out of Stock</span><h3>{gowns.filter(g => (g.stock || 0) === 0).length}</h3></div>
           </div>
         </div>
 
+        {/* --- SEARCH + ADD --- */}
         <header className="inventory-header">
           <div className="search-box">
             <Search size={18} className="search-icon" />
-            <input type="text" placeholder="Search gowns..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <input
+              type="text"
+              placeholder="Search gowns..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
           <button className="add-btn" onClick={() => setIsAddModalOpen(true)}>
             <PlusCircle size={18} /> Add New Item
           </button>
         </header>
 
+        {/* --- FILTER TAGS --- */}
         <div className="filter-tags">
           <span className={`tag ${filter === "All" ? 'active' : ''}`} onClick={() => setFilter("All")}>All</span>
           {categories.map(tag => (
@@ -178,17 +219,18 @@ const Inventory = () => {
           ))}
         </div>
 
+        {/* --- GRID --- */}
         <div className="gown-grid">
           {filteredGowns.map((gown) => (
             <div key={gown.id} className="gown-card" onClick={() => { setSelectedGown(gown); setIsEditMode(false); }}>
               <div className="image-box">
-                 <span className="category-badge">{gown.category}</span>
-                 <span className={`stock-indicator ${gown.stock > 0 ? 'in' : 'out'}`}>{gown.stock || 0} left</span>
-                 {gown.image ? <img src={gown.image} alt={gown.name} className="gown-img-preview" /> : <div className="no-img">👗</div>}
+                <span className="category-badge">{gown.category}</span>
+                <span className={`stock-indicator ${gown.stock > 0 ? 'in' : 'out'}`}>{gown.stock || 0} left</span>
+                {gown.image ? <img src={gown.image} alt={gown.name} className="gown-img-preview" /> : <div className="no-img">👗</div>}
               </div>
               <div className="gown-info">
                 <h3>{gown.name}</h3>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="gown-info-row">
                   <p className="price">₱{gown.price?.toLocaleString()}</p>
                   <span className="size-tag">Size: {gown.size || 'N/A'}</span>
                 </div>
@@ -202,41 +244,78 @@ const Inventory = () => {
 
         {/* --- ADD MODAL --- */}
         {isAddModalOpen && (
-          <div className="modal-overlay">
-            <div className="modal-content">
+          <div className="modal-overlay" onClick={() => { if (!loading) setIsAddModalOpen(false); }}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header-simple">
-                  <h2>Insert New Gown</h2>
-                  <button className="close-btn" onClick={() => setIsAddModalOpen(false)}><X /></button>
+                <h2>Insert New Gown</h2>
+                <button className="close-btn" onClick={() => setIsAddModalOpen(false)}><X size={18} /></button>
               </div>
               <div className="add-form-body">
                 <label className="upload-container">
-                  {newGown.image ? <img src={newGown.image} className="preview-upload" /> : <div className="upload-placeholder"><Upload /><span>Select Photo</span></div>}
+                  {newGown.image
+                    ? <img src={newGown.image} className="preview-upload" alt="preview" />
+                    : <div className="upload-placeholder"><Upload /><span>Select Photo</span></div>}
                   <input type="file" accept="image/*" onChange={(e) => handleImageChange(e, false)} hidden />
                 </label>
-                <input type="text" placeholder="Gown Name" value={newGown.name} onChange={(e) => setNewGown({...newGown, name: e.target.value})} />
+
+                <input
+                  type="text"
+                  placeholder="Gown Name"
+                  value={newGown.name}
+                  onChange={(e) => setNewGown({ ...newGown, name: e.target.value })}
+                />
+
                 <div className="input-group">
-                  <input type="number" placeholder="Price (₱)" value={newGown.price} onChange={(e) => setNewGown({...newGown, price: e.target.value})} />
-                  <input type="number" placeholder="Stocks" value={newGown.stock} onChange={(e) => setNewGown({...newGown, stock: e.target.value})} />
-                  <input type="text" placeholder="Size (e.g. S, M, L)" value={newGown.size} onChange={(e) => setNewGown({...newGown, size: e.target.value})} />
+                  <input
+                    type="number"
+                    placeholder="Price (₱)"
+                    value={newGown.price}
+                    onChange={(e) => setNewGown({ ...newGown, price: e.target.value })}
+                  />
+                  <input
+                    type="number"
+                    placeholder="Stocks"
+                    value={newGown.stock}
+                    onChange={(e) => setNewGown({ ...newGown, stock: e.target.value })}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Size (e.g. S, M, L)"
+                    value={newGown.size}
+                    onChange={(e) => setNewGown({ ...newGown, size: e.target.value })}
+                  />
                 </div>
-                <div className="category-field-wrapper" style={{ marginBottom: '15px' }}>
+
+                <div className="category-field-wrapper">
                   {!isAddingNewCat ? (
-                    <select 
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', background: '#2a2a2a', color: 'white', border: '1px solid #444' }}
-                      value={newGown.category} 
-                      onChange={(e) => e.target.value === "ADD_NEW" ? setIsAddingNewCat(true) : setNewGown({...newGown, category: e.target.value})}
+                    <select
+                      className="category-select"
+                      value={newGown.category}
+                      onChange={(e) => e.target.value === "ADD_NEW" ? setIsAddingNewCat(true) : setNewGown({ ...newGown, category: e.target.value })}
                     >
                       {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                       <option value="ADD_NEW">+ Add New Category</option>
                     </select>
                   ) : (
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <input type="text" placeholder="New category..." style={{ flex: 1, border: '1px solid #ffd900' }} value={newCatInput} onChange={(e) => setNewCatInput(e.target.value)} autoFocus />
+                    <div className="new-category-row">
+                      <input
+                        type="text"
+                        placeholder="New category..."
+                        value={newCatInput}
+                        onChange={(e) => setNewCatInput(e.target.value)}
+                        autoFocus
+                      />
                       <button type="button" onClick={() => setIsAddingNewCat(false)}>Back</button>
                     </div>
                   )}
                 </div>
-                <textarea placeholder="Description" value={newGown.desc} onChange={(e) => setNewGown({...newGown, desc: e.target.value})} />
+
+                <textarea
+                  placeholder="Description"
+                  value={newGown.desc}
+                  onChange={(e) => setNewGown({ ...newGown, desc: e.target.value })}
+                />
+
                 <button className="save-btn" onClick={handleSave} disabled={loading}>
                   {loading ? "Saving..." : "Save to Inventory"}
                 </button>
@@ -247,41 +326,51 @@ const Inventory = () => {
 
         {/* --- DETAILS & EDIT MODAL --- */}
         {selectedGown && (
-          <div className="modal-overlay" onClick={() => { if(!loading) setSelectedGown(null); setIsEditMode(false); }}>
+          <div className="modal-overlay" onClick={closeDetailsModal}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <button className="close-modal" onClick={() => setSelectedGown(null)}><X /></button>
+              <button className="close-modal" onClick={closeDetailsModal}><X size={18} /></button>
+
               <div className="modal-body">
                 <div className="modal-image">
                   {isEditMode ? (
                     <label className="edit-upload-label">
-                      {selectedGown.image ? <img src={selectedGown.image} className="full-img" /> : <div className="no-img">👗</div>}
-                      <div className="edit-image-overlay"><Camera size={24} /> <span>Change Photo</span></div>
+                      {selectedGown.image ? <img src={selectedGown.image} className="full-img" alt={selectedGown.name} /> : <div className="no-img">👗</div>}
+                      <div className="edit-image-overlay"><Camera size={24} /><span>Change Photo</span></div>
                       <input type="file" accept="image/*" onChange={(e) => handleImageChange(e, true)} hidden />
                     </label>
                   ) : (
-                    selectedGown.image ? <img src={selectedGown.image} className="full-img" /> : <div className="no-img">👗</div>
+                    selectedGown.image ? <img src={selectedGown.image} className="full-img" alt={selectedGown.name} /> : <div className="no-img">👗</div>
                   )}
                 </div>
+
                 <div className="modal-info">
                   {isEditMode ? (
                     <div className="edit-form">
                       <label>Gown Name</label>
-                      <input type="text" value={selectedGown.name} onChange={(e) => setSelectedGown({...selectedGown, name: e.target.value})} />
+                      <input type="text" value={selectedGown.name} onChange={(e) => setSelectedGown({ ...selectedGown, name: e.target.value })} />
+
                       <label>Price (₱)</label>
-                      <input type="number" value={selectedGown.price} onChange={(e) => setSelectedGown({...selectedGown, price: e.target.value})} />
+                      <input type="number" value={selectedGown.price} onChange={(e) => setSelectedGown({ ...selectedGown, price: e.target.value })} />
+
                       <label>Stocks</label>
-                      <input type="number" value={selectedGown.stock} onChange={(e) => setSelectedGown({...selectedGown, stock: e.target.value})} />
+                      <input type="number" value={selectedGown.stock} onChange={(e) => setSelectedGown({ ...selectedGown, stock: e.target.value })} />
+
                       <label>Size</label>
-                      <input type="text" value={selectedGown.size} onChange={(e) => setSelectedGown({...selectedGown, size: e.target.value})} />
+                      <input type="text" value={selectedGown.size} onChange={(e) => setSelectedGown({ ...selectedGown, size: e.target.value })} />
+
                       <label>Description</label>
-                      <textarea value={selectedGown.desc} onChange={(e) => setSelectedGown({...selectedGown, desc: e.target.value})} />
+                      <textarea value={selectedGown.desc} onChange={(e) => setSelectedGown({ ...selectedGown, desc: e.target.value })} />
+
                       <button className="update-btn" onClick={handleUpdate} disabled={loading}>
-                         {loading ? "Updating..." : "Save Changes"}
+                        {loading ? "Updating..." : "Save Changes"}
+                      </button>
+                      <button className="cancel-btn" onClick={() => setIsEditMode(false)} disabled={loading}>
+                        Cancel
                       </button>
                     </div>
                   ) : (
                     <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="modal-info-top">
                         <span className="modal-category">{selectedGown.category}</span>
                         <span className="size-badge">Size: {selectedGown.size || 'N/A'}</span>
                       </div>

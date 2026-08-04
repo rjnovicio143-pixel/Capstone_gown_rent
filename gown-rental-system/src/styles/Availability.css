@@ -1,20 +1,32 @@
-/* WRAPPER PARA SA SIDE-BY-SIDE */
+/* =========================================
+   PAGE LAYOUT
+========================================= */
+.avail-page-container {
+  padding: 20px;
+  margin-left: 80px;
+  background-color: #f8fafc;
+  min-height: 100vh;
+}
+
 .availability-layout-wrapper {
   display: flex;
   gap: 25px;
   margin-top: 25px;
-  align-items: flex-start; /* Importante para dili ma-stretch ang sidebar */
+  align-items: flex-start;
 }
 
-.avail-content-main {
-  flex: 3;
-}
+.avail-content-main { flex: 3; min-width: 0; }
 
-/* SIDEBAR STICKY LOGIC */
 .avail-sidebar-calendar {
   flex: 1.2;
   position: sticky;
-  top: 20px; /* Mo-pilit kini sa taas samtang mag-scroll */
+  top: 20px;
+  min-width: 280px;
+}
+
+@media (max-width: 1024px) {
+  .availability-layout-wrapper { flex-direction: column; }
+  .avail-sidebar-calendar { position: static; width: 100%; }
 }
 
 .calendar-inner-card {
@@ -22,22 +34,35 @@
   padding: 20px;
   border-radius: 15px;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
-/* RE-USE INVENTORY DESIGN CLASSES */
-.inventory-container {
-  padding: 20px;
-  margin-left: 80px; /* Space for Sidebar */
-  background-color: #f8fafc;
-  min-height: 100vh;
+.calendar-header-row h3 {
+  font-size: 16px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1e293b;
 }
 
+.calendar-divider { margin: 15px 0; border: none; border-top: 1px solid #e2e8f0; opacity: 0.6; }
+.section-divider { border: none; border-top: 1px solid #f1f5f9; margin: 15px 0; }
+
+.selected-date-display {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #f1f5f9;
+}
+.selected-date-text { font-weight: 700; color: #1e293b; margin-top: 5px; }
+
+/* =========================================
+   SUMMARY STATS
+========================================= */
 .inventory-summary {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
-  margin-top: 20px;
 }
 
 .stat-card {
@@ -47,16 +72,321 @@
   display: flex;
   align-items: center;
   gap: 15px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
 }
 
+.stat-icon { padding: 10px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.stat-icon.green { background: #f0fdf4; color: #22c55e; }
+.stat-icon.red { background: #fef2f2; color: #ef4444; }
+
+.stat-card span { font-size: 13px; color: #64748b; display: block; }
+.stat-card h3 { margin: 4px 0 0 0; font-size: 22px; color: #1e293b; }
+
+/* =========================================
+   SEARCH BAR
+========================================= */
+.inventory-header { margin-bottom: 20px; }
+
+.search-box {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  padding: 10px 15px;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid #e2e8f0;
+}
+
+.search-box input {
+  background: none;
+  border: none;
+  outline: none;
+  margin-left: 10px;
+  width: 100%;
+  font-size: 14px;
+}
+
+.search-icon { color: #64748b; flex-shrink: 0; }
+
+/* =========================================
+   GOWN GRID & CARDS
+========================================= */
 .gown-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 20px;
 }
 
-/* CALENDAR TWEAKS */
+.gown-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.gown-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.image-box {
+  position: relative;
+  height: 180px;
+  background: #f8fafc;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gown-img-preview { width: 100%; height: 100%; object-fit: cover; }
+.no-img { font-size: 40px; display: flex; align-items: center; justify-content: center; height: 100%; width: 100%; }
+
+.category-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: #f59e0b;
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+
+.stock-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-weight: bold;
+}
+.stock-indicator.in { background: #dcfce7; color: #15803d; }
+.stock-indicator.out { background: #fee2e2; color: #b91c1c; }
+
+.gown-info { padding: 15px; }
+.gown-id-tag { font-size: 11px; color: #94a3b8; font-weight: 700; letter-spacing: 0.04em; }
+.gown-info h3 { margin: 5px 0; font-size: 16px; color: #1e293b; }
+.price { color: #f59e0b; font-weight: 700; font-size: 18px; margin: 5px 0; }
+
+.status { font-size: 13px; font-weight: 600; margin: 0; }
+.status.rented-out { color: #ef4444; }
+.status.renter-name { color: #64748b; font-weight: 500; }
+
+.booking-mini-info {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.booking-mini-info .status { font-size: 12px; }
+
+/* =========================================
+   MODAL (shared overlay)
+========================================= */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 20px;
+  position: relative;
+  animation: availSlideUp 0.3s ease-out;
+}
+
+@keyframes availSlideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.avail-modal-content {
+  width: 100%;
+  max-width: 550px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 30px;
+}
+
+.close-modal {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: #f1f5f9;
+  border: none;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  z-index: 5;
+}
+.close-modal:hover { background: #e2e8f0; }
+
+.avail-modal-body { display: flex; flex-direction: column; }
+
+.avail-modal-image {
+  width: 100%;
+  height: 220px;
+  overflow: hidden;
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #f8fafc;
+  margin-bottom: 16px;
+}
+
+.avail-modal-img { width: 100%; height: 100%; object-fit: contain; }
+.avail-modal-placeholder { font-size: 48px; }
+
+.modal-category {
+  color: #f59e0b;
+  font-weight: bold;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.avail-modal-title { margin: 5px 0 10px 0; font-size: 22px; color: #1e293b; }
+.avail-modal-price { color: #f59e0b; font-weight: 700; font-size: 20px; margin-bottom: 15px; }
+
+.avail-section-title {
+  margin: 15px 0 8px 0;
+  color: #1e293b;
+  font-size: 14px;
+  font-weight: 600;
+}
+.avail-section-title.with-icon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #1e293b;
+}
+.avail-section-title.with-icon svg { color: #f59e0b; }
+
+/* --- Status grid (4 mini cards) --- */
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.status-mini-card {
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: white;
+}
+
+.status-mini-card span {
+  font-size: 12px;
+  color: #64748b;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.status-value { margin: 0; font-weight: 600; font-size: 13px; }
+.status-value.success { color: #10b981; }
+.status-value.danger { color: #ef4444; }
+.status-value.warning { color: #f59e0b; }
+.status-value.dark { color: #1e293b; }
+.status-value.muted { color: #64748b; }
+
+/* --- Reservations list --- */
+.reservations-list-container {
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 5px;
+}
+
+.reservation-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 4px solid #f59e0b;
+}
+
+.reservation-left { display: flex; flex-direction: column; gap: 2px; }
+.reservation-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.reservation-sub { font-size: 11px; color: #64748b; }
+
+.reservation-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+
+.return-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ef4444;
+  background: #fef2f2;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.sched-text { font-size: 10px; color: #94a3b8; }
+
+.empty-reservations-text {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 10px 0;
+}
+
+.update-schedule-btn {
+  margin-top: 20px;
+  background: #f59e0b;
+  color: white;
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.update-schedule-btn:hover { opacity: 0.9; }
+
+/* =========================================
+   CALENDAR TWEAKS (react-calendar overrides)
+========================================= */
 .react-calendar {
   width: 100% !important;
   border: none !important;
@@ -67,10 +397,4 @@
   background: #ffd700 !important;
   color: black !important;
   border-radius: 8px;
-}
-
-.selected-date-display {
-  margin-top: 20px;
-  padding-top: 15px;
-  border-top: 1px solid #f1f5f9;
 }

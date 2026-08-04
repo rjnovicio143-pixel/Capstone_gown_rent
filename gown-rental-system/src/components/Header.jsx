@@ -1,11 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { Sun, LogOut, Bell, UserCircle } from 'lucide-react';
-import { supabase } from '../supabaseClient'; 
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { LogOut, Bell, UserCircle, Settings as SettingsIcon, History, AlertTriangle, Clock4 } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 import '../styles/Header.css';
 
 const Header = () => {
+  const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
-  const [userEmail, setUserEmail] = useState('Loading...'); // Temporary display samtang gakuha sa email
+  const [adminName, setAdminName] = useState('Loading...');
+  const [authMethod, setAuthMethod] = useState(null); // 'google' o 'password'
+
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const notifPanelRef = useRef(null);
 
   // 1. Digital Clock Timer Hook
   useEffect(() => {
@@ -13,40 +20,133 @@ const Header = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // 2. Hook para makuha ang tinuod nga Gmail gikan sa Supabase Session
+  // 2. Kuhaon ang naka-login nga admin — pwede Google OAuth (Supabase Auth session)
+  //    o pwede custom "admins" table login (gi-store sa Login.jsx sa localStorage).
+  //    Sa duha ka paagi, ang "admins" table ang source of truth sa name/role,
+  //    gi-match pinaagi sa email.
   useEffect(() => {
-    const fetchUserEmail = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUserEmail(session.user.email); // Dinhi makuha ang rjnovicio143@gmail.com
-      } else {
-        setUserEmail('Admin Account'); // Fallback string kon offline
+    const loadAdmin = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        let email = null;
+
+        if (session?.user) {
+          email = session.user.email; // Google login
+          setAuthMethod('google');
+        } else {
+          const stored = localStorage.getItem('admin');
+          if (stored) {
+            const localAdmin = JSON.parse(stored);
+            email = localAdmin?.email;
+          }
+          setAuthMethod('password');
+        }
+
+        if (!email) {
+          setAdminName('Admin Account');
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('admins')
+          .select('name, email')
+          .eq('email', email)
+          .single();
+
+        if (!error && data) {
+          setAdminName(data.name || data.email);
+        } else {
+          setAdminName(email);
+        }
+      } catch (err) {
+        console.error("Error loading admin session:", err);
+        setAdminName('Admin Account');
       }
     };
-    fetchUserEmail();
+    loadAdmin();
   }, []);
 
-  // ================= DEEP RADICAL SIGN OUT HANDLER =================
+  // 3. NOTIFICATIONS: due tomorrow + overdue nga mga "claimed" booking
+  // (claimed = gown naa pa sa customer, wala pa na-return)
+  const buildNotifications = (bookings) => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+
+    const notifs = [];
+
+    bookings.forEach((b) => {
+      if (b.return_status !== 'claimed' || !b.return_date) return;
+
+      const returnDate = new Date(b.return_date); returnDate.setHours(0, 0, 0, 0);
+
+      if (returnDate.getTime() === tomorrow.getTime()) {
+        notifs.push({
+          id: `due-${b.id}`,
+          type: 'due',
+          message: `Ugma na ang return date ni ${b.name} para sa "${b.gown_name}".`,
+        });
+      } else if (returnDate.getTime() < today.getTime()) {
+        const daysLate = Math.floor((today.getTime() - returnDate.getTime()) / 86400000);
+        notifs.push({
+          id: `overdue-${b.id}`,
+          type: 'overdue',
+          message: `Overdue na ${daysLate} ka adlaw ang booking ni ${b.name} para sa "${b.gown_name}" — wala pa gyapon nag-uli.`,
+        });
+      }
+    });
+
+    // Overdue una, unya due-tomorrow
+    return notifs.sort((a, b) => (a.type === b.type ? 0 : a.type === 'overdue' ? -1 : 1));
+  };
+
+  const fetchNotifications = async () => {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('id, name, gown_name, return_date, return_status')
+      .eq('return_status', 'claimed');
+
+    if (error) {
+      console.error("Error fetching notifications:", error);
+      return;
+    }
+    setNotifications(buildNotifications(data));
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    // I-refresh ang notifications kada 5 minutos samtang naa sa app
+    const interval = setInterval(fetchNotifications, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Close ang dropdown kung mag-click sa gawas niini
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target)) {
+        setShowNotifPanel(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleLogoutClick = async () => {
     const confirmLogout = window.confirm("Sigurado ka nga gusto ka mo-logout?");
-    if (confirmLogout) {
-      try {
-        // 1. I-terminate ang active session sa Supabase backend
-        await supabase.auth.signOut();
-        
-        // 2. Clear out all local browser data structure tokens
-        localStorage.clear(); 
-        sessionStorage.clear();
+    if (!confirmLogout) return;
 
-        // 3. Force completely hard reload balik sa login route
-        window.location.href = '/login';
-      } catch (error) {
-        console.error("Error sa pag-logout:", error);
-        localStorage.clear();
-        sessionStorage.clear();
-        window.location.href = '/login';
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await supabase.auth.signOut(); // Google OAuth session, kinahanglan i-terminate sa Supabase
       }
+    } catch (error) {
+      console.error("Error sa pag-logout:", error);
     }
+
+    localStorage.removeItem('admin');
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.href = '/login';
   };
 
   return (
@@ -62,7 +162,6 @@ const Header = () => {
 
         <div className="header-v-divider"></div>
 
-        {/* NAGPABILIN NGA ADMIN STATUS BADGE */}
         <div className="admin-status-badge">
           <span className="badge-icon">👑</span>
           <span className="badge-label">Admin</span>
@@ -71,24 +170,66 @@ const Header = () => {
         <div className="user-profile-compact">
           <UserCircle size={30} className="profile-avatar-icon" />
           <div className="profile-meta">
-            {/* DYNAMIC EMAIL NALANG KINI EMBES STATIC ADMIN USER */}
-            <span className="profile-name" style={{ fontSize: '13px', fontWeight: '600' }}>
-              {userEmail}
-            </span>
+            <span className="profile-name">{adminName}</span>
             <span className="profile-role">Super Admin</span>
           </div>
         </div>
 
         <div className="header-control-group">
-          <button className="control-btn notif-trigger">
-            <Bell size={18} />
-            <span className="notif-indicator"></span>
+          {/* NOTIFICATIONS */}
+          <div className="notif-wrapper" ref={notifPanelRef}>
+            <button
+              className="control-btn notif-trigger"
+              onClick={() => setShowNotifPanel(!showNotifPanel)}
+            >
+              <Bell size={18} />
+              {notifications.length > 0 && (
+                <span className="notif-count-badge">{notifications.length}</span>
+              )}
+            </button>
+
+            {showNotifPanel && (
+              <div className="notif-dropdown-panel">
+                <div className="notif-panel-header">
+                  <span>Notifications</span>
+                  <span className="notif-panel-count">{notifications.length}</span>
+                </div>
+                <div className="notif-panel-list">
+                  {notifications.length > 0 ? (
+                    notifications.map((n) => (
+                      <div key={n.id} className={`notif-item ${n.type}`}>
+                        <div className="notif-item-icon">
+                          {n.type === 'overdue' ? <AlertTriangle size={16} /> : <Clock4 size={16} />}
+                        </div>
+                        <p>{n.message}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="notif-empty-text">Walay bag-ong notification.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* SETTINGS */}
+          <button
+            className="control-btn"
+            onClick={() => navigate('/admin/settings')}
+            title="Settings"
+          >
+            <SettingsIcon size={18} />
           </button>
-          
-          <button className="control-btn theme-switcher">
-            <Sun size={18} className="sun-icon" />
+
+          {/* ACTIVITY LOG */}
+          <button
+            className="control-btn"
+            onClick={() => navigate('/admin/activity-log')}
+            title="Activity Log"
+          >
+            <History size={18} />
           </button>
-          
+
           <button className="header-logout-action" onClick={handleLogoutClick}>
             <LogOut size={16} />
             <span>Logout</span>

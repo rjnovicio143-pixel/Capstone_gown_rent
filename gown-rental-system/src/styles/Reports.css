@@ -7,6 +7,11 @@
 
 .reports-hero {
   margin-bottom: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
 .reports-hero h1 {
@@ -19,6 +24,24 @@
   color: #777;
   font-size: 14px;
 }
+
+.btn-export-excel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #1d8348, #27ae60);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(39, 174, 96, 0.25);
+  transition: transform 0.2s, opacity 0.2s;
+  white-space: nowrap;
+}
+.btn-export-excel:hover { transform: translateY(-2px); opacity: 0.95; }
 
 /* Stats Cards */
 .reports-stats-grid {
@@ -62,6 +85,8 @@
 .orange-bg { background: linear-gradient(135deg, #ff8c00, #ffae00); }
 .gold-bg { background: linear-gradient(135deg, #ffd000, #f09800); } /* Golden Gradient */
 .red-bg { background: linear-gradient(135deg, #ff4b2b, #ff416c); }
+.blue-bg { background: linear-gradient(135deg, #2193b0, #6dd5ed); }
+.gray-bg { background: linear-gradient(135deg, #757f9a, #d7dde8); }
 
 .report-stat-content span {
   font-size: 12px;
@@ -192,6 +217,7 @@
 .color-red { color: #ff416c; font-weight: 600; }
 .color-orange { color: #ff8c00; font-weight: 600; }
 .color-blue { color: #2193b0; font-weight: 600; }
+.color-gray { color: #757f9a; font-weight: 600; }
 
 /* Legend */
 .rep-legend {
@@ -218,3 +244,67 @@
 .dot-gold { background: linear-gradient(135deg, #d4af37, #ffb700); }
 .dot-red { background: linear-gradient(135deg, #ff4b2b, #ff416c); }
 .dot-blue { background: linear-gradient(135deg, #2193b0, #6dd5ed); }
+
+/* --- Summary Lists (Active Reservations / Penalty Summary / Out of Stock) --- */
+.reports-summary-layout {
+  grid-template-columns: 1fr 1fr;
+}
+
+.rep-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.rep-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fafafa;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.rep-summary-left,
+.rep-summary-right {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rep-summary-right { align-items: flex-end; }
+
+.rep-summary-name { font-size: 13px; font-weight: 700; color: #333; }
+.rep-summary-sub { font-size: 11px; color: #999; }
+.rep-summary-amount { font-size: 13px; font-weight: 700; color: #333; }
+
+.rep-empty-text {
+  font-size: 13px;
+  color: #aaa;
+  font-style: italic;
+  padding: 10px 0;
+}
+
+/* --- Status badges --- */
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.03em;
+}
+.badge-reserved { background: #fff4e0; color: #f09800; }
+.badge-claimed { background: #e6f7ff; color: #1890ff; }
+.badge-settled { background: #e6f9ee; color: #1d8348; }
+.badge-pending { background: #fff0f0; color: #ff416c; }
+.badge-out { background: #fff0f0; color: #ff416c; }
+
+@media (max-width: 1100px) {
+  .reports-main-layout,
+  .reports-summary-layout {
+    grid-template-columns: 1fr;
+  }
+}

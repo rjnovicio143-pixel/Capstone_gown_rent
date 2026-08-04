@@ -1,0 +1,264 @@
+.settings-container {
+  padding: 30px;
+  margin-left: 70px;
+  background-color: #f8f9fa;
+  min-height: 100vh;
+}
+
+.settings-hero h1 { font-size: 24px; font-weight: 700; color: #1a1a1a; margin-bottom: 5px; }
+.settings-hero p { color: #888; font-size: 14px; margin-bottom: 25px; }
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .settings-grid { grid-template-columns: 1fr; }
+}
+
+.settings-card {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #eaeaea;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  padding: 25px;
+}
+
+.settings-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.settings-card-header h3 { margin: 0; font-size: 16px; color: #333; }
+
+.settings-loading-text {
+  text-align: center;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 30px 0;
+}
+
+/* Account Info Form (editable name/email) */
+.account-form { display: flex; flex-direction: column; gap: 4px; }
+.account-form label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.account-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  outline: none;
+  font-size: 14px;
+}
+.account-form input:focus { border-color: #b8860b; }
+
+.account-info-row.readonly {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  margin-top: 6px;
+  border-top: 1px solid #f4f4f4;
+}
+.account-info-row.readonly span { font-size: 11px; color: #999; text-transform: uppercase; font-weight: 700; display: block; }
+.account-info-row.readonly p { margin: 2px 0 0 0; font-size: 14px; color: #333; font-weight: 600; }
+
+/* Account Info */
+.account-info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f4f4f4;
+}
+.account-info-row:last-of-type { border-bottom: none; }
+
+.info-icon { color: #b8860b; margin-top: 2px; flex-shrink: 0; }
+
+.account-info-row span { font-size: 11px; color: #999; text-transform: uppercase; font-weight: 700; display: block; }
+.account-info-row p { margin: 2px 0 0 0; font-size: 14px; color: #333; font-weight: 600; }
+
+.btn-logout-all {
+  width: 100%;
+  margin-top: 20px;
+  background: #fef2f2;
+  color: #ef4444;
+  border: 1px solid #fee2e2;
+  padding: 12px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: 0.2s;
+}
+.btn-logout-all:hover { background: #ef4444; color: white; }
+
+/* Password Form */
+.password-form { display: flex; flex-direction: column; gap: 4px; }
+.password-form label { font-size: 12px; font-weight: 600; color: #555; margin-top: 12px; }
+
+.password-input-wrapper input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  outline: none;
+  font-size: 14px;
+}
+.password-input-wrapper input:focus { border-color: #b8860b; }
+
+.toggle-visibility-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-top: 10px;
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+}
+.toggle-visibility-btn:hover { color: #b8860b; }
+
+.form-feedback { font-size: 13px; margin-top: 12px; padding: 8px 12px; border-radius: 8px; }
+.form-feedback.error { background: #fef2f2; color: #ef4444; }
+.form-feedback.success { background: #f0fdf4; color: #22c55e; }
+
+.btn-update-password {
+  margin-top: 18px;
+  width: 100%;
+  padding: 13px;
+  background: linear-gradient(135deg, #ffd000, #f09800);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.btn-update-password:hover { opacity: 0.9; }
+.btn-update-password:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.account-form label .locked-tag {
+  font-weight: 500;
+  color: #aaa;
+  text-transform: none;
+  font-size: 11px;
+}
+
+.account-form input:disabled {
+  background: #f4f4f4;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.google-auth-note {
+  font-size: 13px;
+  color: #666;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  line-height: 1.5;
+}
+
+/* --- Login Method Card (Connect/Disconnect Google) --- */
+.login-method-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.method-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 20px;
+  width: fit-content;
+}
+.method-badge.google { background: #eff6ff; color: #2563eb; }
+.method-badge.password { background: #f1f5f9; color: #475569; }
+
+.method-desc {
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.btn-connect-google {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #333;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.btn-connect-google:hover { background: #f8fafc; border-color: #2563eb; color: #2563eb; }
+
+.btn-disconnect-google {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #fee2e2;
+  background: #fef2f2;
+  color: #ef4444;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.btn-disconnect-google:hover { background: #ef4444; color: white; }
+
+/* --- Inline login-method badge sa sulod sa card header --- */
+.settings-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.settings-card-header h3 { margin: 0; flex: 1; }
+
+.method-badge.inline {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.field-note {
+  display: block;
+  font-size: 11.5px;
+  color: #999;
+  margin-top: 4px;
+  line-height: 1.4;
+}

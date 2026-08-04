@@ -1,20 +1,15 @@
 import { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { 
-  collection, onSnapshot, query, orderBy, 
-  addDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment 
-} from "firebase/firestore";
-import { 
-  Search, Plus, X, Trash2, FileText, CheckCircle, AlertTriangle,
-  Download, User, Tag, Calendar, Clock, DollarSign, Briefcase, 
-  CheckCircle2, HandHelping, BookmarkCheck, Banknote, CreditCard, Mail, Globe, ShieldAlert, MessageSquare
+import { supabase } from '../supabaseClient';
+import { logActivity } from '../utils/activityLogger';
+import * as XLSX from 'xlsx';
+import {
+  Search, Plus, X, Trash2, CheckCircle, AlertTriangle,
+  User, Calendar, DollarSign, Briefcase,
+  CheckCircle2, HandHelping, Banknote, CreditCard, Mail, ShieldAlert, MessageSquare,
+  Download, Link2, Shirt
 } from 'lucide-react';
 import Header from '../components/Header';
 import '../styles/Customers.css';
-
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 
 const Customers = () => {
   const [customers, setCustomers] = useState([]);
@@ -23,10 +18,9 @@ const Customers = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
-  
+
   const [partialPayAmt, setPartialPayAmt] = useState("");
-  
-  // Updated States for confirming Online Hold with more fields
+
   const [isConfirmingHold, setIsConfirmingHold] = useState(false);
   const [holdUpdateData, setHoldUpdateData] = useState({
     downpayment: 0,
@@ -42,47 +36,87 @@ const Customers = () => {
   const [newCustomer, setNewCustomer] = useState({
     name: '', contact: '', gmail: '', facebook: '', gownId: '', gownName: '', petticoat: 'No',
     bookingDate: '', reservationDate: '', returnDate: '',
-    rentalPrice: 0, down: 0, deposit: 0, assistedBy: '', 
+    rentalPrice: 0, down: 0, deposit: 0, assistedBy: '',
     commissions: 0, claimedStatus: 'unclaimed', returnStatus: 'pending',
-    penaltyRate: 500, 
-    cancelPenaltyAmt: 200, 
+    penaltyRate: 500,
+    cancelPenaltyAmt: 200,
     penalty: 0,
     penaltyPaid: 0,
     isPenaltySettled: false,
-    isOnlineHold: false, 
+    isOnlineHold: false,
     holdExpiresAt: "No Expiry (Admin Booking)",
-    customerMessage: "" 
+    customerMessage: ""
   });
 
-  useEffect(() => {
-    const q = query(collection(db, "bookings"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setCustomers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsubscribe();
-  }, []);
+  // --- DB ROW (snake_case) -> JS STATE (camelCase) ---
+  const mapBookingFromDb = (row) => ({
+    id: row.id,
+    name: row.name,
+    contact: row.contact,
+    gmail: row.gmail,
+    facebook: row.facebook,
+    gownId: row.gown_id,
+    gownName: row.gown_name,
+    petticoat: row.petticoat,
+    bookingDate: row.booking_date,
+    reservationDate: row.reservation_date,
+    returnDate: row.return_date,
+    rentalPrice: row.rental_price,
+    down: row.down,
+    deposit: row.deposit,
+    assistedBy: row.assisted_by,
+    commissions: row.commissions,
+    claimedStatus: row.claimed_status,
+    returnStatus: row.return_status,
+    penaltyRate: row.penalty_rate,
+    cancelPenaltyAmt: row.cancel_penalty_amt,
+    penalty: row.penalty,
+    penaltyPaid: row.penalty_paid,
+    isPenaltySettled: row.is_penalty_settled,
+    isOnlineHold: row.is_online_hold,
+    holdExpiresAt: row.hold_expires_at,
+    customerMessage: row.customer_message,
+    totalRent: row.total_rent,
+    balance: row.balance,
+    createdAt: row.created_at,
+  });
+
+  // --- FETCH ---
+  const fetchBookings = async () => {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) console.error("Error fetching bookings:", error);
+    else setCustomers(data.map(mapBookingFromDb));
+  };
+
+  const fetchGowns = async () => {
+    const { data, error } = await supabase.from('gowns').select('*');
+    if (error) console.error("Error fetching gowns:", error);
+    else setGowns(data);
+  };
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "gowns"), (snapshot) => {
-      setGowns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsubscribe();
+    fetchBookings();
+    fetchGowns();
   }, []);
 
   const calculatePenalty = (booking) => {
     if (!booking || booking.isPenaltySettled || booking.returnStatus === 'returned' || booking.returnStatus === 'cancelled') {
-        return booking.penalty || 0;
+      return booking.penalty || 0;
     }
-    const today = new Date(); today.setHours(0,0,0,0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
     const rate = Number(booking.penaltyRate) || 500;
-    
+
     if (booking.returnStatus === 'claimed' && booking.returnDate) {
-      const dueDate = new Date(booking.returnDate); dueDate.setHours(0,0,0,0);
+      const dueDate = new Date(booking.returnDate); dueDate.setHours(0, 0, 0, 0);
       if (today > dueDate) {
         const diffDays = Math.ceil((today - dueDate) / (1000 * 60 * 60 * 24));
         let totalPenalty = 0;
         for (let i = 1; i <= diffDays; i++) {
-          if (i > 3) { totalPenalty += (rate * 2); } 
+          if (i > 3) { totalPenalty += (rate * 2); }
           else { totalPenalty += rate; }
         }
         return totalPenalty;
@@ -91,106 +125,181 @@ const Customers = () => {
     return 0;
   };
 
+  // --- STOCK HELPER ---
+  // delta = -1 (taking out a gown) or +1 (returning a gown).
+  // Blocks the action (returns false) if stock would go below 0.
+  const adjustGownStock = async (gownId, delta) => {
+    if (!gownId) return true;
+
+    const gown = gowns.find(g => g.id === gownId);
+    if (!gown) return true; // gown record missing/deleted, nothing to adjust
+
+    const newStock = (gown.stock || 0) + delta;
+    if (newStock < 0) {
+      alert(`Wala nay stock ang "${gown.name}". Dili na ma-book pa kini.`);
+      return false;
+    }
+
+    const { error } = await supabase
+      .from('gowns')
+      .update({
+        stock: newStock,
+        status: newStock > 0 ? "Available" : "Out of Stock"
+      })
+      .eq('id', gownId);
+
+    if (error) {
+      console.error("Stock update error:", error);
+      alert("Naay sayop sa pag-update sa stock: " + error.message);
+      return false;
+    }
+
+    return true;
+  };
+
   const handleUpdatePayment = async (booking) => {
     const payAmt = Number(partialPayAmt);
     if (!payAmt || payAmt <= 0) return alert("Please enter a valid amount.");
     if (payAmt > booking.balance) return alert("Payment is more than the remaining balance.");
+    if (!window.confirm(`Confirm payment of ₱${payAmt}?`)) return;
 
     try {
-      if(window.confirm(`Confirm payment of ₱${payAmt}?`)) {
-        const bookingRef = doc(db, "bookings", booking.id);
-        await updateDoc(bookingRef, {
-          down: increment(payAmt), 
-          balance: increment(-payAmt) 
-        });
-        setPartialPayAmt(""); 
-        setSelectedBooking(null); 
-      }
-    } catch (err) { console.error("Payment error:", err); }
+      const { error } = await supabase
+        .from('bookings')
+        .update({
+          down: Number(booking.down) + payAmt,
+          balance: Number(booking.balance) - payAmt,
+        })
+        .eq('id', booking.id);
+
+      if (error) throw error;
+
+      await logActivity('payment_received', `Payment of ₱${payAmt} received from ${booking.name} (${booking.gownName})`);
+
+      setPartialPayAmt("");
+      setSelectedBooking(null);
+      fetchBookings();
+    } catch (err) {
+      console.error("Payment error:", err);
+      alert("Naay sayop sa pag-bayad: " + err.message);
+    }
   };
 
   const handlePayPenalty = async (booking) => {
     const currentPenalty = booking.penalty || calculatePenalty(booking);
     if (currentPenalty <= 0) return alert("No penalty to pay.");
+    if (!window.confirm(`Confirm payment of ₱${currentPenalty} penalty?`)) return;
 
     try {
-      if(window.confirm(`Confirm payment of ₱${currentPenalty} penalty?`)) {
-        await updateDoc(doc(db, "bookings", booking.id), {
+      const { error } = await supabase
+        .from('bookings')
+        .update({
           penalty: 0,
-          penaltyPaid: currentPenalty,
-          isPenaltySettled: true 
-        });
-        setSelectedBooking(null);
-      }
-    } catch (err) { console.error("Error paying penalty:", err); }
+          penalty_paid: currentPenalty,
+          is_penalty_settled: true
+        })
+        .eq('id', booking.id);
+
+      if (error) throw error;
+
+      await logActivity('penalty_paid', `Penalty of ₱${currentPenalty} paid by ${booking.name} (${booking.gownName})`);
+
+      setSelectedBooking(null);
+      fetchBookings();
+    } catch (err) {
+      console.error("Error paying penalty:", err);
+      alert("Naay sayop: " + err.message);
+    }
   };
 
   const handleProcessAction = async (booking, newStatus) => {
     try {
-      const bookingRef = doc(db, "bookings", booking.id);
-      const gownRef = doc(db, "gowns", booking.gownId);
-
+      // Taking the gown out of the rack
       if ((newStatus === 'claimed' || newStatus === 'reserved') && booking.returnStatus === 'pending') {
-        if(booking.gownId) await updateDoc(gownRef, { stock: increment(-1) });
+        const ok = await adjustGownStock(booking.gownId, -1);
+        if (!ok) return;
       }
+
+      // Putting the gown back in the rack
       if ((newStatus === 'returned' || newStatus === 'cancelled') && (booking.returnStatus === 'claimed' || booking.returnStatus === 'reserved')) {
-        if(booking.gownId) await updateDoc(gownRef, { stock: increment(1) });
+        await adjustGownStock(booking.gownId, 1);
       }
 
       let finalPenalty = calculatePenalty(booking);
       if (newStatus === 'cancelled' && booking.returnStatus === 'reserved') {
-        finalPenalty = Number(booking.cancelPenaltyAmt) || 200; 
+        finalPenalty = Number(booking.cancelPenaltyAmt) || 200;
       }
 
-      await updateDoc(bookingRef, { 
-        returnStatus: newStatus,
-        penalty: finalPenalty,
-        claimedStatus: newStatus === 'claimed' ? 'claimed' : (newStatus === 'returned' ? 'claimed' : booking.claimedStatus)
-      });
+      const { error } = await supabase
+        .from('bookings')
+        .update({
+          return_status: newStatus,
+          penalty: finalPenalty,
+          claimed_status: newStatus === 'claimed' ? 'claimed' : (newStatus === 'returned' ? 'claimed' : booking.claimedStatus)
+        })
+        .eq('id', booking.id);
+
+      if (error) throw error;
+
+      await logActivity('booking_updated', `${booking.name}'s booking for "${booking.gownName}" marked as ${newStatus}`);
+
       setSelectedBooking(null);
-    } catch (err) { console.error("Error:", err); }
+      fetchBookings();
+      fetchGowns();
+    } catch (err) {
+      console.error("Error:", err);
+      alert("Naay sayop: " + err.message);
+    }
   };
 
-  // UPDATED: Logic to finalize Online Hold into a real Booking with all missing fields
   const handleConfirmOnlineHold = async () => {
-    if(!holdUpdateData.downpayment || holdUpdateData.downpayment <= 0) {
+    if (!holdUpdateData.downpayment || holdUpdateData.downpayment <= 0) {
       return alert("Please enter downpayment to confirm.");
     }
-    if(!holdUpdateData.returnDate) {
+    if (!holdUpdateData.returnDate) {
       return alert("Please select a returning date.");
     }
 
     try {
-      const bookingRef = doc(db, "bookings", selectedBooking.id);
       const rental = Number(selectedBooking.rentalPrice);
       const newDown = Number(holdUpdateData.downpayment);
-      
-      await updateDoc(bookingRef, {
-        isOnlineHold: false,
-        holdExpiresAt: "Confirmed",
-        down: newDown,
-        balance: rental - newDown,
-        reservationDate: holdUpdateData.reservationDate,
-        returnDate: holdUpdateData.returnDate, // Added
-        deposit: Number(holdUpdateData.deposit), // Added
-        petticoat: holdUpdateData.petticoat, // Added
-        penaltyRate: Number(holdUpdateData.penaltyRate), // Added
-        cancelPenaltyAmt: Number(holdUpdateData.cancelPenaltyAmt), // Added
-        assistedBy: holdUpdateData.assistedBy,
-        returnStatus: holdUpdateData.reservationDate ? 'reserved' : 'pending'
-      });
+      const willReserve = !!holdUpdateData.reservationDate;
 
-      // Deduct stock if it becomes reserved
-      if (holdUpdateData.reservationDate && selectedBooking.gownId) {
-        const gownRef = doc(db, "gowns", selectedBooking.gownId);
-        await updateDoc(gownRef, { stock: increment(-1) });
+      if (willReserve) {
+        const ok = await adjustGownStock(selectedBooking.gownId, -1);
+        if (!ok) return;
       }
+
+      const { error } = await supabase
+        .from('bookings')
+        .update({
+          is_online_hold: false,
+          hold_expires_at: "Confirmed",
+          down: newDown,
+          balance: rental - newDown,
+          reservation_date: holdUpdateData.reservationDate || null,
+          return_date: holdUpdateData.returnDate,
+          deposit: Number(holdUpdateData.deposit),
+          petticoat: holdUpdateData.petticoat,
+          penalty_rate: Number(holdUpdateData.penaltyRate),
+          cancel_penalty_amt: Number(holdUpdateData.cancelPenaltyAmt),
+          assisted_by: holdUpdateData.assistedBy,
+          return_status: willReserve ? 'reserved' : 'pending'
+        })
+        .eq('id', selectedBooking.id);
+
+      if (error) throw error;
+
+      await logActivity('hold_confirmed', `Online hold confirmed for ${selectedBooking.name} (${selectedBooking.gownName})`);
 
       alert("Online hold confirmed and updated!");
       setIsConfirmingHold(false);
       setSelectedBooking(null);
+      fetchBookings();
+      fetchGowns();
     } catch (err) {
       console.error("Error confirming hold:", err);
+      alert("Naay sayop: " + err.message);
     }
   };
 
@@ -203,29 +312,82 @@ const Customers = () => {
       const totalRent = rental + Number(newCustomer.deposit);
       const initialStatus = newCustomer.reservationDate ? 'reserved' : 'pending';
 
-      if (initialStatus === 'reserved' && newCustomer.gownId) {
-        const gownRef = doc(db, "gowns", newCustomer.gownId);
-        await updateDoc(gownRef, { stock: increment(-1) });
+      if (initialStatus === 'reserved') {
+        const ok = await adjustGownStock(newCustomer.gownId, -1);
+        if (!ok) return;
       }
 
-      await addDoc(collection(db, "bookings"), { 
-        ...newCustomer, 
-        returnStatus: initialStatus,
-        totalRent, 
-        balance, 
-        createdAt: serverTimestamp() 
-      });
-      
+      const { error } = await supabase.from('bookings').insert([{
+        name: newCustomer.name,
+        contact: newCustomer.contact,
+        gmail: newCustomer.gmail,
+        facebook: newCustomer.facebook,
+        gown_id: newCustomer.gownId,
+        gown_name: newCustomer.gownName,
+        petticoat: newCustomer.petticoat,
+        booking_date: newCustomer.bookingDate,
+        reservation_date: newCustomer.reservationDate || null,
+        return_date: newCustomer.returnDate || null,
+        rental_price: rental,
+        down,
+        deposit: Number(newCustomer.deposit),
+        assisted_by: newCustomer.assistedBy,
+        commissions: Number(newCustomer.commissions),
+        claimed_status: newCustomer.claimedStatus,
+        return_status: initialStatus,
+        penalty_rate: Number(newCustomer.penaltyRate),
+        cancel_penalty_amt: Number(newCustomer.cancelPenaltyAmt),
+        penalty: 0,
+        penalty_paid: 0,
+        is_penalty_settled: false,
+        is_online_hold: false,
+        hold_expires_at: newCustomer.holdExpiresAt,
+        customer_message: newCustomer.customerMessage,
+        total_rent: totalRent,
+        balance,
+      }]);
+
+      if (error) throw error;
+
+      await logActivity('booking_created', `New booking: ${newCustomer.name} rented ${newCustomer.gownName}`);
+
+      fetchBookings();
+      fetchGowns();
       setIsModalOpen(false);
       resetForm();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      alert("Naay sayop sa pag-save sa booking: " + err.message);
+    }
+  };
+
+  const handleDeleteBooking = async (booking) => {
+    if (!window.confirm("Delete record?")) return;
+    try {
+      // Return the gown to stock if it was currently held by this booking
+      if (booking.returnStatus === 'claimed' || booking.returnStatus === 'reserved') {
+        await adjustGownStock(booking.gownId, 1);
+      }
+
+      const { error } = await supabase.from('bookings').delete().eq('id', booking.id);
+      if (error) throw error;
+
+      await logActivity('booking_deleted', `Deleted booking record: ${booking.name} (${booking.gownName})`);
+
+      setSelectedBooking(null);
+      fetchBookings();
+      fetchGowns();
+    } catch (err) {
+      console.error(err);
+      alert("Naay sayop sa pag-delete: " + err.message);
+    }
   };
 
   const resetForm = () => {
     setNewCustomer({
       name: '', contact: '', gmail: '', facebook: '', gownId: '', gownName: '', petticoat: 'No',
       bookingDate: '', reservationDate: '', returnDate: '',
-      rentalPrice: 0, down: 0, deposit: 0, assistedBy: '', 
+      rentalPrice: 0, down: 0, deposit: 0, assistedBy: '',
       commissions: 0, claimedStatus: 'unclaimed', returnStatus: 'pending',
       penaltyRate: 500, cancelPenaltyAmt: 200, penaltyPaid: 0, isPenaltySettled: false,
       isOnlineHold: false,
@@ -240,6 +402,42 @@ const Customers = () => {
     return matchesSearch && matchesTab;
   });
 
+  // --- EXPORT TO EXCEL (gigamit ang kasamtangan nga filter/search) ---
+  const handleExportExcel = () => {
+    const sheetData = filtered.map(c => ({
+      Name: c.name,
+      Contact: c.contact,
+      Gmail: c.gmail || '',
+      Facebook: c.facebook || '',
+      Gown: c.gownName,
+      Petticoat: c.petticoat,
+      Status: c.returnStatus,
+      'Booking Date': c.bookingDate || '',
+      'Reservation Date': c.reservationDate || '',
+      'Return Date': c.returnDate || '',
+      'Rental Price': c.rentalPrice,
+      Deposit: c.deposit,
+      Downpayment: c.down,
+      Balance: c.balance,
+      'Penalty Rate': c.penaltyRate,
+      'Cancel Penalty': c.cancelPenaltyAmt,
+      Penalty: c.penalty,
+      'Penalty Paid': c.penaltyPaid,
+      'Penalty Settled': c.isPenaltySettled ? 'Yes' : 'No',
+      Commission: c.commissions,
+      'Assisted By': c.assistedBy || '',
+      'Online Hold': c.isOnlineHold ? 'Yes' : 'No',
+      Notes: c.customerMessage || '',
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(sheetData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Customers');
+
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `Customer_Bookings_${today}.xlsx`);
+  };
+
   return (
     <>
     <Header />
@@ -249,7 +447,10 @@ const Customers = () => {
           <h1>Customer Records</h1>
           <p>Track rentals, payments, and commissions</p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} className="btn-new-entry"><Plus size={18} /> New Rental Entry</button>
+        <div className="top-bar-actions">
+          <button onClick={handleExportExcel} className="btn-export-sheet"><Download size={18} /> Export to Sheet</button>
+          <button onClick={() => setIsModalOpen(true)} className="btn-new-entry"><Plus size={18} /> New Rental Entry</button>
+        </div>
       </div>
 
       <div className="search-filter-row-container">
@@ -293,10 +494,10 @@ const Customers = () => {
         <div className="luxury-modal-overlay" onClick={() => { setSelectedBooking(null); setIsConfirmingHold(false); }}>
           <div className="luxury-modal-box" onClick={e => e.stopPropagation()}>
             <div className="modal-top-header">
-              <h3><Briefcase size={20} color="#b8860b"/> Rental Full Details</h3>
-              <button className="close-x" onClick={() => { setSelectedBooking(null); setIsConfirmingHold(false); }}><X/></button>
+              <h3><span className="modal-header-icon"><Briefcase size={18} color="#fff"/></span> Rental Full Details</h3>
+              <button className="close-x" onClick={() => { setSelectedBooking(null); setIsConfirmingHold(false); }}><X size={16}/></button>
             </div>
-            
+
             <div className="modal-info-grid">
               <div className="info-block">
                 <label><User size={14}/> Customer & Contact</label>
@@ -315,7 +516,7 @@ const Customers = () => {
                   <p><strong>Online Holding:</strong> {selectedBooking.isOnlineHold ? "YES" : "NO"}</p>
                   <p><strong>Expiration:</strong> {selectedBooking.holdExpiresAt}</p>
                   <p><strong>Message:</strong> {selectedBooking.customerMessage || "No message provided."}</p>
-                  
+
                   {selectedBooking.isOnlineHold && !isConfirmingHold && (
                     <button className="btn-confirm-hold-trigger" onClick={() => setIsConfirmingHold(true)}>
                       Confirm & Finalize Booking
@@ -324,7 +525,6 @@ const Customers = () => {
                 </div>
               </div>
 
-              {/* UPDATED: Complete Edit Form for Online Hold with all missing fields */}
               {isConfirmingHold ? (
                 <div className="info-block confirm-hold-area gold-border">
                   <label><CheckCircle2 size={14}/> Complete Information</label>
@@ -386,12 +586,12 @@ const Customers = () => {
                   <p>Security Deposit: ₱{selectedBooking.deposit || 0}</p>
                   <p>Paid (Collected): ₱{selectedBooking.down}</p>
                   <p className="balance-highlighted"><strong>Balance: ₱{selectedBooking.balance}</strong></p>
-                  
+
                   {selectedBooking.balance > 0 && (
                     <div className="partial-pay-input-grp">
-                      <input 
-                        type="number" 
-                        placeholder="Amt" 
+                      <input
+                        type="number"
+                        placeholder="Amt"
                         value={partialPayAmt}
                         onChange={(e) => setPartialPayAmt(e.target.value)}
                         style={{width: '80px'}}
@@ -413,7 +613,7 @@ const Customers = () => {
             </div>
 
             <div className="modal-action-footer-btns">
-                {(selectedBooking.returnStatus === 'returned' || selectedBooking.returnStatus === 'cancelled') && 
+                {(selectedBooking.returnStatus === 'returned' || selectedBooking.returnStatus === 'cancelled') &&
                  calculatePenalty(selectedBooking) > 0 && !selectedBooking.isPenaltySettled && (
                   <button className="act-btn btn-pay-penalty" onClick={() => handlePayPenalty(selectedBooking)}>
                      <Banknote size={16}/> Pay Penalty
@@ -437,9 +637,9 @@ const Customers = () => {
                   </button>
                 )}
 
-                <button className="act-btn btn-delete-full" onClick={() => {
-                  if(window.confirm("Delete record?")) { deleteDoc(doc(db, "bookings", selectedBooking.id)); setSelectedBooking(null); }
-                }}><Trash2 size={16}/> Delete Record</button>
+                <button className="act-btn btn-delete-full" onClick={() => handleDeleteBooking(selectedBooking)}>
+                  <Trash2 size={16}/> Delete Record
+                </button>
             </div>
           </div>
         </div>
@@ -449,70 +649,83 @@ const Customers = () => {
         <div className="luxury-modal-overlay">
           <div className="luxury-modal-box wide-form">
             <div className="modal-top-header">
-              <h3><CheckCircle2 size={20} color="#b8860b"/> New Rental Entry</h3>
-              <button onClick={() => setIsModalOpen(false)}><X /></button>
+              <h3><span className="modal-header-icon"><CheckCircle2 size={18} color="#fff"/></span> New Rental Entry</h3>
+              <button className="close-x" onClick={() => setIsModalOpen(false)}><X /></button>
             </div>
             <form onSubmit={handleAddCustomer} className="luxury-form">
-              <div className="form-grid-2">
-                <div className="input-grp"><label>Customer Name</label><input type="text" required onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} /></div>
-                <div className="input-grp"><label>Contact No.</label><input type="text" required onChange={e => setNewCustomer({...newCustomer, contact: e.target.value})} /></div>
-              </div>
-              
-              <div className="form-grid-2">
-                <div className="input-grp"><label><Mail size={12}/> Gmail</label><input type="email" placeholder="example@gmail.com" onChange={e => setNewCustomer({...newCustomer, gmail: e.target.value})} /></div>
-                <div className="input-grp"><label> Facebook Profile/Link</label><input type="text" placeholder="fb.com/username" onChange={e => setNewCustomer({...newCustomer, facebook: e.target.value})} /></div>
-              </div>
 
-              <div className="form-grid-2">
-                <div className="input-grp">
-                  <label>Gown Selection</label>
-                  <select required onChange={e => {
-                    const g = gowns.find(x => x.id === e.target.value);
-                    if(g) setNewCustomer({...newCustomer, gownId: g.id, gownName: g.name, rentalPrice: g.price});
-                  }}>
-                    <option value="">-- Choose Gown --</option>
-                    {gowns.filter(g => g.stock > 0).map(g => (<option key={g.id} value={g.id}>{g.name}</option>))}
-                  </select>
+              <div className="form-section">
+                <h4 className="form-section-title"><User size={14}/> Customer Information</h4>
+                <div className="form-grid-2">
+                  <div className="input-grp"><label>Customer Name</label><input type="text" required onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} /></div>
+                  <div className="input-grp"><label>Contact No.</label><input type="text" required onChange={e => setNewCustomer({...newCustomer, contact: e.target.value})} /></div>
                 </div>
-                <div className="input-grp"><label>Petticoat</label>
-                  <select onChange={e => setNewCustomer({...newCustomer, petticoat: e.target.value})}>
-                    <option value="No">No</option><option value="Yes">Yes</option>
-                  </select>
+
+                <div className="form-grid-2">
+                  <div className="input-grp"><label><Mail size={12}/> Gmail</label><input type="email" placeholder="example@gmail.com" onChange={e => setNewCustomer({...newCustomer, gmail: e.target.value})} /></div>
+                  <div className="input-grp"><label><Link2 size={12}/> Facebook Profile/Link</label><input type="text" placeholder="fb.com/username" onChange={e => setNewCustomer({...newCustomer, facebook: e.target.value})} /></div>
                 </div>
               </div>
 
-              <div className="form-grid-3">
-                <div className="input-grp"><label>Booking Date</label><input type="date" required onChange={e => setNewCustomer({...newCustomer, bookingDate: e.target.value})} /></div>
-                <div className="input-grp"><label>Return Date</label><input type="date" required onChange={e => setNewCustomer({...newCustomer, returnDate: e.target.value})} /></div>
-                <div className="input-grp"><label>Reservation Date (Optional)</label><input type="date" onChange={e => setNewCustomer({...newCustomer, reservationDate: e.target.value})} /></div>
-              </div>
+              <div className="form-section">
+                <h4 className="form-section-title"><Shirt size={14}/> Gown & Schedule</h4>
+                <div className="form-grid-2">
+                  <div className="input-grp">
+                    <label>Gown Selection</label>
+                    <select required value={newCustomer.gownId} onChange={e => {
+                      const g = gowns.find(x => String(x.id) === e.target.value);
+                      if(g) setNewCustomer({...newCustomer, gownId: g.id, gownName: g.name, rentalPrice: g.price});
+                    }}>
+                      <option value="">-- Choose Gown --</option>
+                      {gowns.filter(g => g.stock > 0).map(g => (<option key={g.id} value={String(g.id)}>{g.name} ({g.stock} left)</option>))}
+                    </select>
+                  </div>
+                  <div className="input-grp"><label>Petticoat</label>
+                    <select onChange={e => setNewCustomer({...newCustomer, petticoat: e.target.value})}>
+                      <option value="No">No</option><option value="Yes">Yes</option>
+                    </select>
+                  </div>
+                </div>
 
-              <div className="form-grid-3">
-                <div className="input-grp"><label>Rent Price</label><input type="number" value={newCustomer.rentalPrice} readOnly /></div>
-                <div className="input-grp"><label>Security Deposit</label><input type="number" onChange={e => setNewCustomer({...newCustomer, deposit: e.target.value})} /></div>
-                <div className="input-grp"><label>Downpayment</label><input type="number" required onChange={e => setNewCustomer({...newCustomer, down: e.target.value})} /></div>
-              </div>
-
-              <div className="form-grid-1">
-                <div className="input-grp">
-                   <label><MessageSquare size={12}/> Customer Message/Note</label>
-                   <textarea 
-                     rows="2" 
-                     placeholder="Additional instructions or notes..." 
-                     onChange={e => setNewCustomer({...newCustomer, customerMessage: e.target.value})}
-                   ></textarea>
+                <div className="form-grid-3">
+                  <div className="input-grp"><label>Booking Date</label><input type="date" required onChange={e => setNewCustomer({...newCustomer, bookingDate: e.target.value})} /></div>
+                  <div className="input-grp"><label>Return Date</label><input type="date" required onChange={e => setNewCustomer({...newCustomer, returnDate: e.target.value})} /></div>
+                  <div className="input-grp"><label>Reservation Date (Optional)</label><input type="date" onChange={e => setNewCustomer({...newCustomer, reservationDate: e.target.value})} /></div>
                 </div>
               </div>
 
-              <div className="form-grid-3">
-                <div className="input-grp"><label>Daily Penalty Rate</label><input type="number" value={newCustomer.penaltyRate} onChange={e => setNewCustomer({...newCustomer, penaltyRate: e.target.value})} /></div>
-                <div className="input-grp"><label>Cancel Penalty</label><input type="number" value={newCustomer.cancelPenaltyAmt} onChange={e => setNewCustomer({...newCustomer, cancelPenaltyAmt: e.target.value})} /></div>
-                <div className="input-grp"><label>Staff Commission</label><input type="number" onChange={e => setNewCustomer({...newCustomer, commissions: e.target.value})} /></div>
+              <div className="form-section form-section-gold">
+                <h4 className="form-section-title"><DollarSign size={14}/> Financial Details</h4>
+                <div className="form-grid-3">
+                  <div className="input-grp"><label>Rent Price</label><input type="number" value={newCustomer.rentalPrice} readOnly /></div>
+                  <div className="input-grp"><label>Security Deposit</label><input type="number" onChange={e => setNewCustomer({...newCustomer, deposit: e.target.value})} /></div>
+                  <div className="input-grp"><label>Downpayment</label><input type="number" required onChange={e => setNewCustomer({...newCustomer, down: e.target.value})} /></div>
+                </div>
+
+                <div className="form-grid-3">
+                  <div className="input-grp"><label>Daily Penalty Rate</label><input type="number" value={newCustomer.penaltyRate} onChange={e => setNewCustomer({...newCustomer, penaltyRate: e.target.value})} /></div>
+                  <div className="input-grp"><label>Cancel Penalty</label><input type="number" value={newCustomer.cancelPenaltyAmt} onChange={e => setNewCustomer({...newCustomer, cancelPenaltyAmt: e.target.value})} /></div>
+                  <div className="input-grp"><label>Staff Commission</label><input type="number" onChange={e => setNewCustomer({...newCustomer, commissions: e.target.value})} /></div>
+                </div>
               </div>
 
-              <div className="form-grid-1">
-                <div className="input-grp"><label>Assisted By</label><input type="text" onChange={e => setNewCustomer({...newCustomer, assistedBy: e.target.value})} /></div>
+              <div className="form-section">
+                <h4 className="form-section-title"><MessageSquare size={14}/> Notes & Staff</h4>
+                <div className="form-grid-1">
+                  <div className="input-grp">
+                     <label>Customer Message/Note</label>
+                     <textarea
+                       rows="2"
+                       placeholder="Additional instructions or notes..."
+                       onChange={e => setNewCustomer({...newCustomer, customerMessage: e.target.value})}
+                     ></textarea>
+                  </div>
+                </div>
+                <div className="form-grid-1">
+                  <div className="input-grp"><label>Assisted By</label><input type="text" onChange={e => setNewCustomer({...newCustomer, assistedBy: e.target.value})} /></div>
+                </div>
               </div>
+
               <button type="submit" className="btn-confirm-gold-large">Confirm Rental</button>
             </form>
           </div>

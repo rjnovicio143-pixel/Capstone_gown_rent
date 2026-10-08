@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Bell, UserCircle, Settings as SettingsIcon, History, AlertTriangle, Clock4 } from 'lucide-react';
+import {
+  LogOut, Bell, Settings as SettingsIcon, History,
+  AlertTriangle, Clock4, ChevronDown, ShieldCheck,
+} from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import '../styles/Header.css';
 
@@ -8,41 +11,28 @@ const Header = () => {
   const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
   const [adminName, setAdminName] = useState('Loading...');
-  const [authMethod, setAuthMethod] = useState(null); // 'google' o 'password'
+  const [adminEmail, setAdminEmail] = useState('');
 
   const [notifications, setNotifications] = useState([]);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const notifPanelRef = useRef(null);
+  const profileMenuRef = useRef(null);
 
-  // 1. Digital Clock Timer Hook
+  // 1. Digital clock
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // 2. Kuhaon ang naka-login nga admin — pwede Google OAuth (Supabase Auth session)
-  //    o pwede custom "admins" table login (gi-store sa Login.jsx sa localStorage).
-  //    Sa duha ka paagi, ang "admins" table ang source of truth sa name/role,
-  //    gi-match pinaagi sa email.
+  // 2. Kuhaon ang naka-login nga admin (userToken = admins.id)
   useEffect(() => {
     const loadAdmin = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        let email = null;
+        const userToken = localStorage.getItem('userToken');
+        const userRole = localStorage.getItem('userRole');
 
-        if (session?.user) {
-          email = session.user.email; // Google login
-          setAuthMethod('google');
-        } else {
-          const stored = localStorage.getItem('admin');
-          if (stored) {
-            const localAdmin = JSON.parse(stored);
-            email = localAdmin?.email;
-          }
-          setAuthMethod('password');
-        }
-
-        if (!email) {
+        if (userRole !== 'admin' || !userToken) {
           setAdminName('Admin Account');
           return;
         }
@@ -50,24 +40,24 @@ const Header = () => {
         const { data, error } = await supabase
           .from('admins')
           .select('name, email')
-          .eq('email', email)
+          .eq('id', userToken)
           .single();
 
         if (!error && data) {
           setAdminName(data.name || data.email);
+          setAdminEmail(data.email || '');
         } else {
-          setAdminName(email);
+          setAdminName('Admin Account');
         }
       } catch (err) {
-        console.error("Error loading admin session:", err);
+        console.error('Error loading admin session:', err);
         setAdminName('Admin Account');
       }
     };
     loadAdmin();
   }, []);
 
-  // 3. NOTIFICATIONS: due tomorrow + overdue nga mga "claimed" booking
-  // (claimed = gown naa pa sa customer, wala pa na-return)
+  // 3. Notifications: due tomorrow + overdue nga "claimed" bookings
   const buildNotifications = (bookings) => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
@@ -95,7 +85,6 @@ const Header = () => {
       }
     });
 
-    // Overdue una, unya due-tomorrow
     return notifs.sort((a, b) => (a.type === b.type ? 0 : a.type === 'overdue' ? -1 : 1));
   };
 
@@ -106,7 +95,7 @@ const Header = () => {
       .eq('return_status', 'claimed');
 
     if (error) {
-      console.error("Error fetching notifications:", error);
+      console.error('Error fetching notifications:', error);
       return;
     }
     setNotifications(buildNotifications(data));
@@ -114,40 +103,59 @@ const Header = () => {
 
   useEffect(() => {
     fetchNotifications();
-    // I-refresh ang notifications kada 5 minutos samtang naa sa app
     const interval = setInterval(fetchNotifications, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Close ang dropdown kung mag-click sa gawas niini
+  // Close dropdowns kung mag-click sa gawas o mag-Escape
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (notifPanelRef.current && !notifPanelRef.current.contains(e.target)) {
         setShowNotifPanel(false);
       }
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setShowProfileMenu(false);
+      }
+    };
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        setShowNotifPanel(false);
+        setShowProfileMenu(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, []);
 
+  const goTo = (path) => {
+    setShowProfileMenu(false);
+    navigate(path);
+  };
+
   const handleLogoutClick = async () => {
-    const confirmLogout = window.confirm("Sigurado ka nga gusto ka mo-logout?");
+    setShowProfileMenu(false);
+    const confirmLogout = window.confirm('Sigurado ka nga gusto ka mo-logout?');
     if (!confirmLogout) return;
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        await supabase.auth.signOut(); // Google OAuth session, kinahanglan i-terminate sa Supabase
+        await supabase.auth.signOut(); // Google OAuth session
       }
     } catch (error) {
-      console.error("Error sa pag-logout:", error);
+      console.error('Error sa pag-logout:', error);
     }
 
-    localStorage.removeItem('admin');
     localStorage.clear();
     sessionStorage.clear();
     window.location.href = '/login';
   };
+
+  const initial = (adminName || 'A').trim().charAt(0).toUpperCase();
 
   return (
     <header className="app-header-modern">
@@ -162,78 +170,100 @@ const Header = () => {
 
         <div className="header-v-divider"></div>
 
-        <div className="admin-status-badge">
-          <span className="badge-icon">👑</span>
-          <span className="badge-label">Admin</span>
-        </div>
+        {/* NOTIFICATIONS */}
+        <div className="notif-wrapper" ref={notifPanelRef}>
+          <button
+            className={`control-btn notif-trigger ${showNotifPanel ? 'active' : ''}`}
+            onClick={() => {
+              setShowNotifPanel(!showNotifPanel);
+              setShowProfileMenu(false);
+            }}
+            title="Notifications"
+            aria-label="Notifications"
+          >
+            <Bell size={18} />
+            {notifications.length > 0 && (
+              <span className="notif-count-badge">{notifications.length}</span>
+            )}
+          </button>
 
-        <div className="user-profile-compact">
-          <UserCircle size={30} className="profile-avatar-icon" />
-          <div className="profile-meta">
-            <span className="profile-name">{adminName}</span>
-            <span className="profile-role">Super Admin</span>
-          </div>
-        </div>
-
-        <div className="header-control-group">
-          {/* NOTIFICATIONS */}
-          <div className="notif-wrapper" ref={notifPanelRef}>
-            <button
-              className="control-btn notif-trigger"
-              onClick={() => setShowNotifPanel(!showNotifPanel)}
-            >
-              <Bell size={18} />
-              {notifications.length > 0 && (
-                <span className="notif-count-badge">{notifications.length}</span>
-              )}
-            </button>
-
-            {showNotifPanel && (
-              <div className="notif-dropdown-panel">
-                <div className="notif-panel-header">
-                  <span>Notifications</span>
-                  <span className="notif-panel-count">{notifications.length}</span>
-                </div>
-                <div className="notif-panel-list">
-                  {notifications.length > 0 ? (
-                    notifications.map((n) => (
-                      <div key={n.id} className={`notif-item ${n.type}`}>
-                        <div className="notif-item-icon">
-                          {n.type === 'overdue' ? <AlertTriangle size={16} /> : <Clock4 size={16} />}
-                        </div>
-                        <p>{n.message}</p>
+          {showNotifPanel && (
+            <div className="notif-dropdown-panel">
+              <div className="notif-panel-header">
+                <span>Notifications</span>
+                <span className="notif-panel-count">{notifications.length}</span>
+              </div>
+              <div className="notif-panel-list">
+                {notifications.length > 0 ? (
+                  notifications.map((n) => (
+                    <div key={n.id} className={`notif-item ${n.type}`}>
+                      <div className="notif-item-icon">
+                        {n.type === 'overdue' ? <AlertTriangle size={16} /> : <Clock4 size={16} />}
                       </div>
-                    ))
-                  ) : (
-                    <p className="notif-empty-text">Walay bag-ong notification.</p>
-                  )}
+                      <p>{n.message}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="notif-empty-text">Walay bag-ong notification.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* PROFILE DROPDOWN */}
+        <div className="profile-wrapper" ref={profileMenuRef}>
+          <button
+            className={`profile-trigger ${showProfileMenu ? 'open' : ''}`}
+            onClick={() => {
+              setShowProfileMenu(!showProfileMenu);
+              setShowNotifPanel(false);
+            }}
+            aria-haspopup="menu"
+            aria-expanded={showProfileMenu}
+          >
+            <span className="profile-avatar">{initial}</span>
+            <span className="profile-meta">
+              <span className="profile-name">{adminName}</span>
+              <span className="profile-role">Super Admin</span>
+            </span>
+            <ChevronDown size={16} className="profile-chevron" />
+          </button>
+
+          {showProfileMenu && (
+            <div className="profile-dropdown-panel" role="menu">
+              <div className="profile-card">
+                <span className="profile-avatar large">{initial}</span>
+                <div className="profile-card-info">
+                  <span className="profile-card-name">{adminName}</span>
+                  {adminEmail && <span className="profile-card-email">{adminEmail}</span>}
+                  <span className="profile-card-badge">
+                    <ShieldCheck size={12} /> Admin
+                  </span>
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* SETTINGS */}
-          <button
-            className="control-btn"
-            onClick={() => navigate('/admin/settings')}
-            title="Settings"
-          >
-            <SettingsIcon size={18} />
-          </button>
+              <div className="profile-menu-list">
+                <button className="profile-menu-item" role="menuitem" onClick={() => goTo('/admin/settings')}>
+                  <SettingsIcon size={16} />
+                  <span>Settings</span>
+                </button>
+                <button className="profile-menu-item" role="menuitem" onClick={() => goTo('/admin/activity-log')}>
+                  <History size={16} />
+                  <span>Activity Log</span>
+                </button>
+              </div>
 
-          {/* ACTIVITY LOG */}
-          <button
-            className="control-btn"
-            onClick={() => navigate('/admin/activity-log')}
-            title="Activity Log"
-          >
-            <History size={18} />
-          </button>
+              <div className="profile-menu-divider"></div>
 
-          <button className="header-logout-action" onClick={handleLogoutClick}>
-            <LogOut size={16} />
-            <span>Logout</span>
-          </button>
+              <div className="profile-menu-list">
+                <button className="profile-menu-item danger" role="menuitem" onClick={handleLogoutClick}>
+                  <LogOut size={16} />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

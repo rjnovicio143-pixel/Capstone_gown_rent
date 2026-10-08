@@ -1,226 +1,252 @@
-import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { 
-  Shirt, 
-  Info, 
-  Home, 
-  Layers, 
-  Eye, 
-  MessageSquare,
-  User, 
-  LogOut, 
-  ShieldCheck 
+import React, { useState, useEffect, useRef } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import {
+  Shirt, Info, Home, Layers, Eye, MessageSquare,
+  User, LogOut, ShieldCheck, LogIn, LayoutDashboard,
+  Menu, X, ChevronDown,
 } from 'lucide-react';
-import { supabase } from '../supabaseClient'; 
+import { supabase } from '../supabaseClient';
 import '../styles-public/PublicNavbar.css';
+
+const NAV_LINKS = [
+  { to: '/', label: 'Home', icon: Home },
+  { to: '/gown-suit', label: 'Gown & Suit', icon: Layers },
+  { to: '/3d-mannequin', label: '3D Mannequin', icon: Eye },
+  { to: '/about', label: 'About Us', icon: Info },
+  { to: '/contact', label: 'Contact', icon: MessageSquare },
+];
 
 const PublicNavbar = () => {
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userDisplayName, setUserDisplayName] = useState('');
-  const [userRole, setUserRole] = useState(null);
+  const location = useLocation();
 
-  // ================= HYBRID AUTH SEGMENT PROCESSING LAYER =================
-  const checkNavbarAuthenticationState = async () => {
-    const localToken = localStorage.getItem('userToken');
-    const localRole = localStorage.getItem('userRole');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminName, setAdminName] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
 
-    // 1. KUNG MAO NI ANG DEVELOPER / ADMIN BYPASS
-    if (localRole === 'admin' || localRole === 'Admin') {
-      setIsLoggedIn(true);
-      setUserRole('admin');
-      setUserDisplayName('rjnovicio143@gmail.com');
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const accountRef = useRef(null);
+  const mobileRef = useRef(null);
+
+  // ================= ADMIN SESSION CHECK =================
+  // Admin ra ang naka-login, mao nga walay customer logic.
+  const checkAdminSession = async () => {
+    const userToken = localStorage.getItem('userToken');
+    const userRole = (localStorage.getItem('userRole') || '').toLowerCase();
+
+    if (userRole !== 'admin' || !userToken) {
+      setIsAdmin(false);
+      setAdminName('');
+      setAdminEmail('');
       return;
     }
 
-    // 2. KUNG CUSTOMER DATA PACKET ANG NAA SA STORAGE UNIT
-    if (localToken && localRole === 'customer') {
-      setIsLoggedIn(true);
-      setUserRole('customer');
+    setIsAdmin(true);
+    setAdminName('Admin Account');
 
-      try {
-        // I-fetch ang tinuod nga pangalan sa customer gikan sa database cluster
-        const { data: customerData } = await supabase
-          .from('customers')
-          .select('name')
-          .eq('id', localToken)
-          .single();
+    try {
+      const { data, error } = await supabase
+        .from('admins')
+        .select('name, email')
+        .eq('id', userToken)
+        .single();
 
-        if (customerData?.name) {
-          setUserDisplayName(customerData.name);
-        } else {
-          // Fallback metadata mapping configuration
-          const { data: { session } } = await supabase.auth.getSession();
-          const googleName = session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name;
-          setUserDisplayName(googleName || 'Valued Customer');
-        }
-      } catch (err) {
-        setUserDisplayName('Valued Customer');
+      if (!error && data) {
+        setAdminName(data.name || data.email);
+        setAdminEmail(data.email || '');
       }
-      return;
+    } catch (err) {
+      console.error('Error loading admin session:', err);
     }
-
-    // 3. SECURE FALLBACK LOGICAL REVERT
-    setIsLoggedIn(false);
-    setUserRole(null);
-    setUserDisplayName('');
   };
 
   useEffect(() => {
-    // Pagdalagan sa identity evaluation checking inisyal load
-    checkNavbarAuthenticationState();
+    checkAdminSession();
 
-    // Live Sync Listener para sa Supabase Core Third Party Triggers (Google Login)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
-        await checkNavbarAuthenticationState();
+        checkAdminSession();
       } else if (event === 'SIGNED_OUT') {
-        setIsLoggedIn(false);
-        setUserRole(null);
-        setUserDisplayName('');
+        setIsAdmin(false);
+        setAdminName('');
+        setAdminEmail('');
       }
     });
 
-    // Custom browser layout channel event connection for manual registration/login hooks
-    const handleManualAuthSync = () => {
-      checkNavbarAuthenticationState();
-    };
-
-    window.addEventListener('storage', handleManualAuthSync);
-    window.addEventListener('local-login-success', handleManualAuthSync);
+    const handleAuthSync = () => checkAdminSession();
+    window.addEventListener('storage', handleAuthSync);
+    window.addEventListener('local-login-success', handleAuthSync);
 
     return () => {
       subscription?.unsubscribe();
-      window.removeEventListener('storage', handleManualAuthSync);
-      window.removeEventListener('local-login-success', handleManualAuthSync);
+      window.removeEventListener('storage', handleAuthSync);
+      window.removeEventListener('local-login-success', handleAuthSync);
     };
   }, []);
 
-  // ================= SECURE DE-PROVISIONING (LOGOUT) ACTION =================
-  const handleLogoutAction = async () => {
-    try {
-      // 1. I-clear ang third-party connection system parameter
-      await supabase.auth.signOut();
-      
-      // 2. I-wipe out ang custom session state attributes sa framework
-      localStorage.clear();
-      
-      // 3. Reset state indicators
-      setIsLoggedIn(false);
-      setUserRole(null);
-      setUserDisplayName('');
+  // Close menus kung mo-change ang page
+  useEffect(() => {
+    setShowAccountMenu(false);
+    setShowMobileMenu(false);
+  }, [location.pathname]);
 
-      alert("Naka-logout na ka nga luwas gikan sa portal framework.");
-      navigate('/');
+  // Close kung mag-click sa gawas / Escape
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (accountRef.current && !accountRef.current.contains(e.target)) setShowAccountMenu(false);
+      if (mobileRef.current && !mobileRef.current.contains(e.target)) setShowMobileMenu(false);
+    };
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        setShowAccountMenu(false);
+        setShowMobileMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  // Dili ma-scroll ang page sa luyo kung bukas ang mobile menu
+  useEffect(() => {
+    document.body.style.overflow = showMobileMenu ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [showMobileMenu]);
+
+  // ================= LOGOUT =================
+  const handleLogoutAction = async () => {
+    setShowAccountMenu(false);
+    setShowMobileMenu(false);
+
+    if (!window.confirm('Sigurado ka nga gusto ka mo-logout?')) return;
+
+    try {
+      await supabase.auth.signOut();
     } catch (error) {
-      console.error("Logout verification system failure:", error);
+      console.error('Logout error:', error);
     }
+
+    localStorage.clear();
+    sessionStorage.clear();
+    setIsAdmin(false);
+    setAdminName('');
+    setAdminEmail('');
+    navigate('/');
   };
+
+  const initial = (adminName || 'A').trim().charAt(0).toUpperCase();
+
+  // Sulod sa account section (gigamit sa desktop dropdown ug mobile menu)
+  const renderAccountItems = () =>
+    isAdmin ? (
+      <>
+        <div className="pn-account-card">
+          <span className="pn-avatar">{initial}</span>
+          <div className="pn-account-info">
+            <span className="pn-account-name">{adminName}</span>
+            {adminEmail && <span className="pn-account-email">{adminEmail}</span>}
+            <span className="pn-admin-badge"><ShieldCheck size={12} /> Admin</span>
+          </div>
+        </div>
+        <button className="pn-menu-item" onClick={() => navigate('/admin/dashboard')}>
+          <LayoutDashboard size={16} />
+          <span>Admin Dashboard</span>
+        </button>
+        <div className="pn-divider" />
+        <button className="pn-menu-item danger" onClick={handleLogoutAction}>
+          <LogOut size={16} />
+          <span>Logout</span>
+        </button>
+      </>
+    ) : (
+      <button className="pn-menu-item" onClick={() => navigate('/login')}>
+        <LogIn size={16} />
+        <span>Admin Login</span>
+      </button>
+    );
 
   return (
     <nav className="public-navbar">
-      {/* Brand Logo Section */}
-      <div className="nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div className="logo-icon-wrapper" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <Shirt size={30} className="logo-icon" style={{ color: 'var(--accent-gold)' }} />
-          <span style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', fontSize: '12px' }}>👑</span>
+      {/* Brand */}
+      <div className="nav-logo" onClick={() => navigate('/')}>
+        <div className="logo-icon-wrapper">
+          <Shirt size={28} className="logo-icon" />
+          <span className="logo-crown">👑</span>
         </div>
-        
-        <div className="brand-typography" style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.1' }}>
-          <span className="logo-text" style={{ fontSize: '20px', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.5px' }}>
-            Mrs. G <span style={{ color: 'var(--accent-gold)', fontWeight: '300', fontSize: '16px' }}>GOWN RENTAL</span>
+        <div className="brand-typography">
+          <span className="logo-text">
+            Mrs. G <span className="logo-accent">GOWN RENTAL</span>
           </span>
-          <span className="logo-subtext" style={{ fontSize: '10px', fontWeight: '600', color: '#64748b', letterSpacing: '2px', textTransform: 'uppercase' }}>
-            Villanueva
-          </span>
+          <span className="logo-subtext">Villanueva</span>
         </div>
       </div>
 
-      {/* Center Navigation Menu Links */}
+      {/* Desktop links */}
       <ul className="nav-links">
-        <li>
-          <NavLink to="/" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <Home size={16} />
-            <span>Home</span>
-          </NavLink>
-        </li>
-        <li>
-          <NavLink to="/gown-suit" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <Layers size={16} />
-            <span>Gown & Suit</span>
-          </NavLink>
-        </li>
-        <li>
-          <NavLink to="/3d-mannequin" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <Eye size={16} />
-            <span>3D Mannequin</span>
-          </NavLink>
-        </li>
-        <li>
-          <NavLink to="/about" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <Info size={16} />
-            <span>About Us</span>
-          </NavLink>
-        </li>
-        <li>
-          <NavLink to="/contact" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <MessageSquare size={16} />
-            <span>Contact</span>
-          </NavLink>
-        </li>
+        {NAV_LINKS.map(({ to, label, icon: Icon }) => (
+          <li key={to}>
+            <NavLink to={to} className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
+              <Icon size={16} />
+              <span>{label}</span>
+            </NavLink>
+          </li>
+        ))}
       </ul>
 
-      {/* Dynamic Action Control Cluster (Conditional Sign-In/Profile View UI) */}
       <div className="nav-actions">
-        {isLoggedIn ? (
-          // ================= RENDER CONDITIONAL: USER VALIDATION GRANTED =================
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            
-            {/* Elegant Profile Badge Indicator Box */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '10px', 
-              padding: '6px 14px', 
-              background: '#f8fafc', 
-              border: '1px solid #e2e8f0', 
-              borderRadius: '30px'
-            }}>
-              {userRole === 'admin' ? (
-                <ShieldCheck size={16} style={{ color: '#f59e0b' }} /> 
-              ) : (
-                <User size={16} style={{ color: '#64748b' }} /> 
-              )}
-              
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: '1.2' }}>
-                <span style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>
-                  {userDisplayName}
-                </span>
-                <span style={{ fontSize: '10px', fontWeight: '600', color: userRole === 'admin' ? '#f59e0b' : '#94a3b8', textTransform: 'uppercase' }}>
-                  {userRole}
-                </span>
-              </div>
-            </div>
-
-            {/* Logout Action Layout Button */}
-            <button 
-              className="logout-action-btn" 
-              onClick={handleLogoutAction}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: '1px solid #fee2e2', background: '#fef2f2', color: '#ef4444', fontWeight: '600', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'
-              }}
-            >
-              <LogOut size={14} />
-              <span>Logout</span>
-            </button>
-          </div>
-        ) : (
-          // ================= RENDER CONDITIONAL: ANONYMOUS DISPLAY ACCESS =================
-          <button className="login-admin-btn" onClick={() => navigate('/login')}>
-            <User size={16} />
-            <span>Login</span>
+        {/* Desktop account dropdown (walay Login button) */}
+        <div className="pn-account-wrapper" ref={accountRef}>
+          <button
+            className={`pn-account-trigger ${showAccountMenu ? 'open' : ''} ${isAdmin ? 'is-admin' : ''}`}
+            onClick={() => setShowAccountMenu(!showAccountMenu)}
+            aria-haspopup="menu"
+            aria-expanded={showAccountMenu}
+            aria-label="Account menu"
+          >
+            {isAdmin ? <span className="pn-avatar small">{initial}</span> : <User size={18} />}
+            <ChevronDown size={14} className="pn-chevron" />
           </button>
-        )}
+
+          {showAccountMenu && (
+            <div className="pn-dropdown" role="menu">{renderAccountItems()}</div>
+          )}
+        </div>
+
+        {/* Mobile menu button */}
+        <div className="pn-mobile-wrapper" ref={mobileRef}>
+          <button
+            className="pn-mobile-trigger"
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+            aria-expanded={showMobileMenu}
+          >
+            {showMobileMenu ? <X size={22} /> : <Menu size={22} />}
+          </button>
+
+          {showMobileMenu && (
+            <div className="pn-mobile-panel">
+              <ul className="pn-mobile-links">
+                {NAV_LINKS.map(({ to, label, icon: Icon }) => (
+                  <li key={to}>
+                    <NavLink
+                      to={to}
+                      className={({ isActive }) => (isActive ? 'pn-mobile-link active' : 'pn-mobile-link')}
+                    >
+                      <Icon size={18} />
+                      <span>{label}</span>
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+              <div className="pn-divider" />
+              <div className="pn-mobile-account">{renderAccountItems()}</div>
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   );

@@ -2,7 +2,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 60px;
+  padding: 14px 60px;
   background-color: #ffffff;
   border-bottom: 1px solid var(--border-color, #e2e8f0);
   position: sticky;
@@ -11,33 +11,66 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
-/* Logo Styling */
+/* ---------- Brand ---------- */
 .nav-logo {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  cursor: pointer;
+  min-width: 0;
 }
 
-.logo-icon {
-  color: var(--accent-gold, #d4a72c);
+.logo-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.logo-icon { color: var(--accent-gold, #d4a72c); }
+
+.logo-crown {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+}
+
+.brand-typography {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  min-width: 0;
 }
 
 .logo-text {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 800;
   color: #1e293b;
   letter-spacing: -0.5px;
+  white-space: nowrap;
 }
 
 .logo-accent {
   color: var(--accent-gold, #d4a72c);
+  font-weight: 300;
+  font-size: 16px;
 }
 
-/* Nav Links Styling */
+.logo-subtext {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+/* ---------- Desktop links ---------- */
 .nav-links {
   display: flex;
   list-style: none;
-  gap: 15px;
+  gap: 12px;
   margin: 0;
   padding: 0;
   align-items: center;
@@ -48,79 +81,269 @@
   align-items: center;
   gap: 8px;
   text-decoration: none;
-  color: #64748b; /* Slate gray para sa inactive state */
+  color: #64748b;
   font-weight: 500;
   font-size: 14.5px;
   padding: 8px 14px;
   border-radius: 8px;
-  transition: all 0.25s ease;
+  transition: color 0.25s ease, background-color 0.25s ease;
 }
 
-/* Hover State sa Normal links */
 .nav-item:hover {
   color: var(--accent-gold, #d4a72c);
   background-color: #f8fafc;
 }
 
-/* Active State sa Normal links */
 .nav-item.active {
   color: var(--accent-gold, #d4a72c);
   font-weight: 600;
-  background-color: #fef9c3; /* Soft very light gold bg */
-}
-
-/* Premium Style para sa Virtual Try-On link */
-.nav-item.tryon-link {
-  color: var(--accent-gold, #d4a72c);
   background-color: #fef9c3;
-  border: 1px dashed #fde047;
-  font-weight: 600;
 }
 
-.nav-item.tryon-link:hover {
-  background-color: #fef08a;
-  border-color: var(--accent-gold, #d4a72c);
-}
-
-.nav-item.tryon-link.active {
-  background-color: var(--accent-gold, #d4a72c);
-  color: #ffffff;
-  border-style: solid;
-}
-
-/* Login Admin Button */
-.login-admin-btn {
+/* ---------- Right side ---------- */
+.nav-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  background-color: var(--accent-gold, #d4a72c);
-  color: #ffffff;
-  border: none;
-  padding: 10px 18px;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 14px;
+}
+
+/* ---------- Account dropdown (desktop) ---------- */
+.pn-account-wrapper { position: relative; }
+
+.pn-account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  color: #64748b;
+  font-family: inherit;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 6px -1px rgba(212, 167, 44, 0.15);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 
-.login-admin-btn:hover {
-  background-color: #b8860b; /* Goldenrod shadow hover */
-  transform: translateY(-1px);
-  box-shadow: 0 6px 12px -1px rgba(212, 167, 44, 0.25);
+.pn-account-trigger:hover,
+.pn-account-trigger.open {
+  background: #fffbeb;
+  border-color: var(--accent-gold, #d4a72c);
+  color: var(--accent-gold, #d4a72c);
 }
 
-.login-admin-btn:active {
-  transform: translateY(0);
+.pn-account-trigger.is-admin { padding-left: 4px; }
+
+.pn-chevron { transition: transform 0.2s; }
+.pn-account-trigger.open .pn-chevron { transform: rotate(180deg); }
+
+.pn-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 270px;
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
+  animation: pn-pop 0.14s ease-out;
 }
 
-/* Responsive Styles */
+/* ---------- Shared menu pieces ---------- */
+.pn-avatar {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f0b60a 0%, #b8860b 100%);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.pn-avatar.small {
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+}
+
+.pn-account-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 4px;
+  background: #fffbeb;
+  border-radius: 10px;
+}
+
+.pn-account-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pn-account-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pn-account-email {
+  font-size: 11.5px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pn-admin-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  background: #ffffff;
+  border: 1px solid var(--accent-gold, #d4a72c);
+  border-radius: 999px;
+  color: #92700c;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.pn-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #334155;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pn-menu-item:hover { background: #f1f5f9; }
+
+.pn-menu-item.danger { color: #ef4444; }
+.pn-menu-item.danger:hover { background: #fef2f2; }
+
+.pn-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 6px 4px;
+}
+
+/* ---------- Mobile menu (hidden sa desktop) ---------- */
+.pn-mobile-wrapper { display: none; }
+
+.pn-mobile-trigger {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  color: #334155;
+  cursor: pointer;
+}
+
+.pn-mobile-trigger:active { background: #fffbeb; }
+
+.pn-mobile-panel {
+  position: fixed;
+  top: 66px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  overflow-y: auto;
+  animation: pn-pop 0.16s ease-out;
+}
+
+.pn-mobile-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pn-mobile-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 12px;
+  border-radius: 10px;
+  color: #475569;
+  font-size: 16px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.pn-mobile-link.active {
+  background: #fef9c3;
+  color: var(--accent-gold, #d4a72c);
+  font-weight: 600;
+}
+
+.pn-mobile-account .pn-menu-item { padding: 14px 12px; font-size: 16px; }
+
+/* ---------- Focus + motion ---------- */
+.nav-item:focus-visible,
+.pn-account-trigger:focus-visible,
+.pn-mobile-trigger:focus-visible,
+.pn-menu-item:focus-visible,
+.pn-mobile-link:focus-visible {
+  outline: 2px solid var(--accent-gold, #d4a72c);
+  outline-offset: 2px;
+}
+
+@keyframes pn-pop {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pn-dropdown, .pn-mobile-panel { animation: none; }
+}
+
+/* ---------- Tablet: icons ra ang links ---------- */
 @media (max-width: 992px) {
-  .public-navbar {
-    padding: 16px 24px;
-  }
-  .nav-item span {
-    display: none; /* Icon nlng kung gamay ang screen */
-  }
+  .public-navbar { padding: 14px 24px; }
+  .nav-item span { display: none; }
+}
+
+/* ---------- Mobile: hamburger menu ---------- */
+@media (max-width: 768px) {
+  .public-navbar { padding: 12px 16px; }
+
+  .nav-links,
+  .pn-account-wrapper { display: none; }
+
+  .pn-mobile-wrapper { display: block; }
+
+  .logo-text { font-size: 17px; }
+  .logo-accent { font-size: 13px; }
+}
+
+@media (max-width: 360px) {
+  .logo-accent { display: none; }
 }

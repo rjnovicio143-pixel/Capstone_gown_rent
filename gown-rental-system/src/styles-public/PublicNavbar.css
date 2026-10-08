@@ -107,6 +107,39 @@
   gap: 8px;
 }
 
+/* ---------- Book Now ---------- */
+.book-now-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  background: var(--accent-gold, #d4a72c);
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(212, 167, 44, 0.25);
+  transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.book-now-btn:hover {
+  background: #b8860b;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(212, 167, 44, 0.35);
+}
+
+.book-now-btn:active { transform: translateY(0); }
+
+.book-now-btn:focus-visible {
+  outline: 2px solid #1e293b;
+  outline-offset: 2px;
+}
+
 /* ---------- Account dropdown (desktop) ---------- */
 .pn-account-wrapper { position: relative; }
 
@@ -234,6 +267,7 @@
   font-size: 14px;
   font-weight: 500;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
@@ -342,8 +376,13 @@
 
   .logo-text { font-size: 17px; }
   .logo-accent { font-size: 13px; }
+
+  /* Book Now nagpabilin sa navbar, mas gamay lang */
+  .book-now-btn { height: 40px; padding: 0 14px; font-size: 13px; }
 }
 
-@media (max-width: 360px) {
+@media (max-width: 400px) {
   .logo-accent { display: none; }
+  .book-now-btn { padding: 0 12px; }
+  .book-now-btn svg { display: none; }
 }

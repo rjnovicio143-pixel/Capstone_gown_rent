@@ -3,10 +3,20 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Shirt, Info, Home, Layers, Eye, MessageSquare,
   User, LogOut, ShieldCheck, LogIn, LayoutDashboard,
-  Menu, X, ChevronDown,
+  Menu, X, ChevronDown, CalendarCheck,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import '../styles-public/PublicNavbar.css';
+
+// Inline SVG (wala na ang brand icons sa bag-ong lucide-react versions)
+const FacebookIcon = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M22 12a10 10 0 1 0-11.56 9.88v-6.99H7.9V12h2.54V9.8c0-2.5 1.49-3.89 3.78-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56V12h2.78l-.44 2.89h-2.34v6.99A10 10 0 0 0 22 12z" />
+  </svg>
+);
+
+// I-ilis ni sa tinuod nga Facebook page link sa shop
+const FACEBOOK_URL = 'https://www.facebook.com/Mrs.GGownRental';
 
 const NAV_LINKS = [
   { to: '/', label: 'Home', icon: Home },
@@ -140,10 +150,10 @@ const PublicNavbar = () => {
 
   const initial = (adminName || 'A').trim().charAt(0).toUpperCase();
 
-  // Sulod sa account section (gigamit sa desktop dropdown ug mobile menu)
-  const renderAccountItems = () =>
-    isAdmin ? (
-      <>
+  // Sulod sa dropdown (gigamit sa desktop dropdown ug mobile menu)
+  const renderAccountItems = () => (
+    <>
+      {isAdmin && (
         <div className="pn-account-card">
           <span className="pn-avatar">{initial}</span>
           <div className="pn-account-info">
@@ -152,22 +162,39 @@ const PublicNavbar = () => {
             <span className="pn-admin-badge"><ShieldCheck size={12} /> Admin</span>
           </div>
         </div>
-        <button className="pn-menu-item" onClick={() => navigate('/admin/dashboard')}>
-          <LayoutDashboard size={16} />
-          <span>Admin Dashboard</span>
-        </button>
-        <div className="pn-divider" />
-        <button className="pn-menu-item danger" onClick={handleLogoutAction}>
-          <LogOut size={16} />
-          <span>Logout</span>
-        </button>
-      </>
-    ) : (
-      <button className="pn-menu-item" onClick={() => navigate('/login')}>
-        <LogIn size={16} />
-        <span>Admin Login</span>
+      )}
+
+      <a
+        className="pn-menu-item"
+        href={FACEBOOK_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        role="menuitem"
+      >
+        <FacebookIcon size={16} />
+        <span>Facebook Page</span>
+      </a>
+
+      <button
+        className="pn-menu-item"
+        role="menuitem"
+        onClick={() => navigate(isAdmin ? '/admin/dashboard' : '/login')}
+      >
+        <LayoutDashboard size={16} />
+        <span>Admin Panel</span>
       </button>
-    );
+
+      {isAdmin && (
+        <>
+          <div className="pn-divider" />
+          <button className="pn-menu-item danger" role="menuitem" onClick={handleLogoutAction}>
+            <LogOut size={16} />
+            <span>Logout</span>
+          </button>
+        </>
+      )}
+    </>
+  );
 
   return (
     <nav className="public-navbar">
@@ -198,7 +225,13 @@ const PublicNavbar = () => {
       </ul>
 
       <div className="nav-actions">
-        {/* Desktop account dropdown (walay Login button) */}
+        {/* BOOK NOW -> Gown & Suit page */}
+        <button className="book-now-btn" onClick={() => navigate('/gown-suit')}>
+          <CalendarCheck size={16} />
+          <span>Book Now</span>
+        </button>
+
+        {/* Account dropdown (walay Login button) */}
         <div className="pn-account-wrapper" ref={accountRef}>
           <button
             className={`pn-account-trigger ${showAccountMenu ? 'open' : ''} ${isAdmin ? 'is-admin' : ''}`}

@@ -1,202 +1,402 @@
-/* Container para sa tibuok page */
-.reservation-page {
-  background-color: #f8fafc;
+/* =========================================
+   PAGE
+========================================= */
+.rf-page {
   min-height: 100vh;
-  padding: 40px 20px;
-  font-family: 'Inter', sans-serif;
-}
-
-.res-container {
-  max-width: 1000px;
+  background: #f8fafc;
+  padding: 24px;
+  max-width: 1100px;
   margin: 0 auto;
 }
 
-/* Back Button Styling */
-.back-btn {
-  display: flex;
+/* =========================================
+   BACK BUTTON
+========================================= */
+.rf-back {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   background: none;
   border: none;
   color: #64748b;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  margin-bottom: 25px;
-  transition: all 0.2s ease;
+  margin-bottom: 28px;
+  padding: 8px 0;
+  transition: color 0.2s;
 }
+.rf-back:hover { color: #f59e0b; }
 
-.back-btn:hover {
-  color: #d4a72c;
-  transform: translateX(-5px);
-}
-
-/* Grid Layout: Left (Gown Info) | Right (Form) */
-.res-grid {
+/* =========================================
+   GRID LAYOUT
+========================================= */
+.rf-grid {
   display: grid;
-  grid-template-columns: 350px 1fr;
-  gap: 30px;
+  grid-template-columns: 340px 1fr;
+  gap: 24px;
+  align-items: start;
 }
 
-/* Left Side: Gown Summary Card */
-.res-summary-card {
-  background: white;
-  padding: 25px;
+/* =========================================
+   LEFT — GOWN SUMMARY
+========================================= */
+.rf-summary {
+  background: #fff;
   border-radius: 20px;
-  border: 1px solid #e2e8f0;
-  text-align: center;
-  height: fit-content;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  overflow: hidden;
   position: sticky;
-  top: 20px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  top: 24px;
 }
 
-.res-gown-img {
+.rf-gown-img-wrap {
+  height: 260px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+.rf-gown-img-wrap img {
   width: 100%;
-  height: 380px;
-  object-fit: contain;
-  border-radius: 12px;
-  margin-bottom: 20px;
-  background-color: #fcfcfc;
+  height: 100%;
+  object-fit: cover;
+}
+.rf-no-img {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 64px;
+  background: #f1f5f9;
 }
 
-.res-summary-card h2 {
-  font-size: 20px;
-  color: #1e293b;
-  margin-bottom: 10px;
+.rf-gown-details {
+  padding: 20px 20px 16px;
 }
-
-.res-price {
-  color: #d4a72c;
-  font-size: 26px;
-  font-weight: 800;
-  margin-bottom: 15px;
-}
-
-.res-badge {
+.rf-gown-cat {
   display: inline-block;
-  background: #fefce8;
-  color: #a16207;
-  padding: 6px 15px;
-  border-radius: 20px;
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 700;
-  border: 1px solid #fef08a;
-}
-
-/* Right Side: Form Card */
-.res-form-card {
-  background: white;
-  padding: 45px;
-  border-radius: 24px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.03);
-}
-
-.res-form-card h1 {
-  color: #1e293b;
-  font-size: 28px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 4px 12px;
+  border-radius: 20px;
   margin-bottom: 10px;
+}
+.rf-gown-name {
+  font-size: 18px;
   font-weight: 800;
+  color: #1e293b;
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+}
+.rf-gown-price {
+  font-size: 22px;
+  font-weight: 800;
+  color: #f59e0b;
+  margin: 0 0 6px 0;
+}
+.rf-gown-size {
+  font-size: 13px;
+  color: #94a3b8;
+  margin: 0;
 }
 
-.actual-form {
-  margin-top: 30px;
+.rf-hold-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 20px 20px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 14px;
+  color: #15803d;
+}
+.rf-hold-notice svg { flex-shrink: 0; margin-top: 2px; }
+.rf-hold-notice div { display: flex; flex-direction: column; gap: 3px; }
+.rf-hold-notice strong { font-size: 13px; font-weight: 700; }
+.rf-hold-notice span  { font-size: 12px; line-height: 1.4; }
+
+/* =========================================
+   RIGHT — FORM CARD
+========================================= */
+.rf-form-card {
+  background: #fff;
+  border-radius: 20px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  padding: 32px;
 }
 
-/* Input Group Styling */
-.input-group {
-  margin-bottom: 22px;
+.rf-form-header {
+  margin-bottom: 28px;
+}
+.rf-form-header h1 {
+  font-size: 22px;
+  font-weight: 800;
+  color: #1e293b;
+  margin: 0 0 6px 0;
+}
+.rf-form-header p {
+  font-size: 14px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+/* =========================================
+   FORM FIELDS
+========================================= */
+.rf-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.rf-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.rf-field {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.input-group label {
+.rf-field label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 600;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
   color: #475569;
-  font-size: 14px;
 }
 
-.input-group input, 
-.input-group textarea {
-  padding: 14px 16px;
+.rf-optional {
+  font-weight: 400;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.rf-field input,
+.rf-field textarea {
+  width: 100%;
+  padding: 13px 15px;
   border: 1.5px solid #e2e8f0;
   border-radius: 12px;
-  font-size: 15px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #1e293b;
+  background: #fff;
   outline: none;
-  transition: all 0.2s ease;
-  background-color: #fbfbfb;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
 }
-
-.input-group input:focus, 
-.input-group textarea:focus {
-  border-color: #d4a72c;
-  background-color: #ffffff;
-  box-shadow: 0 0 0 4px rgba(212, 167, 44, 0.1);
+.rf-field input:focus,
+.rf-field textarea:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245,158,11,0.12);
 }
-
-.input-group textarea {
+.rf-field input::placeholder,
+.rf-field textarea::placeholder { color: #cbd5e1; }
+.rf-field textarea {
   resize: vertical;
-  min-height: 100px;
+  min-height: 110px;
+  line-height: 1.6;
 }
 
-/* Two columns para sa Phone ug Date */
-.input-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-
-/* Submit Button (Gold Theme) */
-.submit-reservation-btn {
-  width: 100%;
-  background: linear-gradient(135deg, #d4a72c 0%, #b8860b 100%);
-  color: white;
-  border: none;
-  padding: 18px;
-  border-radius: 14px;
-  font-weight: 700;
-  font-size: 16px;
-  cursor: pointer;
+/* =========================================
+   SUBMIT BUTTON
+========================================= */
+.rf-submit {
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: 12px;
-  margin-top: 30px;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(212, 167, 44, 0.3);
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(245,158,11,0.35);
+  transition: transform 0.2s, opacity 0.2s;
+  margin-top: 4px;
+}
+.rf-submit:hover    { transform: translateY(-2px); }
+.rf-submit:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+
+/* Spinner inside submit button */
+.rf-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: rfspin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes rfspin { to { transform: rotate(360deg); } }
+
+/* =========================================
+   SUCCESS SCREEN
+========================================= */
+.rf-success-page {
+  min-height: 100vh;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
 }
 
-.submit-reservation-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(212, 167, 44, 0.4);
-  filter: brightness(1.1);
+.rf-success-card {
+  background: #fff;
+  border-radius: 24px;
+  padding: 48px 36px;
+  max-width: 460px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+  border: 1px solid #f1f5f9;
 }
 
-.submit-reservation-btn:active {
-  transform: translateY(0);
+.rf-success-icon {
+  width: 80px;
+  height: 80px;
+  background: #f0fdf4;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  border: 2px solid #bbf7d0;
 }
 
-/* Responsive design para sa mobile */
-@media (max-width: 850px) {
-  .res-grid {
+.rf-success-card h2 {
+  font-size: 22px;
+  font-weight: 800;
+  color: #1e293b;
+  margin: 0 0 12px 0;
+}
+
+.rf-success-card p {
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.6;
+  margin: 0 0 20px 0;
+}
+
+.rf-success-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fef3c7;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 13px;
+  color: #92400e;
+  text-align: left;
+  margin-bottom: 28px;
+  line-height: 1.5;
+}
+.rf-success-note svg { flex-shrink: 0; margin-top: 1px; color: #f59e0b; }
+
+.rf-back-btn-success {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(245,158,11,0.3);
+  transition: transform 0.2s;
+}
+.rf-back-btn-success:hover { transform: translateY(-2px); }
+
+/* =========================================
+   NO GOWN FALLBACK
+========================================= */
+.rf-no-gown {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #94a3b8;
+  font-size: 15px;
+}
+.rf-no-gown button {
+  padding: 10px 22px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+}
+
+/* =========================================
+   RESPONSIVE
+========================================= */
+@media (max-width: 900px) {
+  .rf-grid {
     grid-template-columns: 1fr;
   }
-  
-  .res-summary-card {
-    position: relative;
-    top: 0;
+  .rf-summary {
+    position: static;
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    grid-template-rows: auto auto;
+  }
+  .rf-gown-img-wrap {
+    height: 100%;
+    min-height: 160px;
+    grid-row: span 2;
+    border-radius: 20px 0 0 20px;
+  }
+  .rf-gown-details { padding: 16px 16px 8px; }
+  .rf-hold-notice  { margin: 0 16px 16px; grid-column: 2; }
+}
+
+@media (max-width: 600px) {
+  .rf-page { padding: 14px; }
+  .rf-back  { margin-bottom: 20px; }
+
+  .rf-summary {
+    display: block;
+  }
+  .rf-gown-img-wrap {
+    height: 200px;
+    border-radius: 20px 20px 0 0;
   }
 
-  .input-row {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
-  
-  .res-form-card {
-    padding: 30px 20px;
-  }
+  .rf-form-card { padding: 22px 18px; }
+  .rf-form-header h1 { font-size: 19px; }
+
+  .rf-row { grid-template-columns: 1fr; gap: 16px; }
+
+  .rf-field input,
+  .rf-field textarea { padding: 12px 14px; font-size: 14px; }
+
+  .rf-submit { padding: 14px; font-size: 14px; }
+
+  .rf-success-card { padding: 36px 22px; }
+}
+
+@media (max-width: 400px) {
+  .rf-page { padding: 12px; }
+  .rf-form-card { padding: 18px 14px; }
 }

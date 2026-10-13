@@ -31,7 +31,8 @@ const GownSuit = () => {
 
       const { data, error } = await supabase
         .from('gowns')
-        .select('id, name, price, stock, category, desc, size, image, status')
+        .select('id, name, price, stock, category, desc, size, image, status, petticoat_layer, included_accessories')
+        .eq('is_posted', true)   // posted lang ang makita sa customers
         .gt('price', 0)
         .order('created_at', { ascending: false });
 
@@ -252,7 +253,24 @@ const GownSuit = () => {
                       : '✗ Rented Out'
                     }
                   </span>
+                  {selectedGown.petticoat_layer && (
+                    <span className="gs-tag gs-tag-purple">
+                      🩱 Petticoat Layer {selectedGown.petticoat_layer}
+                    </span>
+                  )}
                 </div>
+
+                {/* Included accessories */}
+                {selectedGown.included_accessories?.length > 0 && (
+                  <div className="gs-included-section">
+                    <p className="gs-included-label">✨ Included in this package:</p>
+                    <div className="gs-included-chips">
+                      {selectedGown.included_accessories.map((name, i) => (
+                        <span key={i} className="gs-included-chip">👑 {name}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {selectedGown.desc && (
                   <p className="gs-modal-desc">{selectedGown.desc}</p>

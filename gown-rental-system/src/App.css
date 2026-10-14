@@ -6,25 +6,48 @@
 
 .main-wrapper {
   flex: 1;
-  /* Transition para dungan sa sidebar animation */
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
 }
 
-/* Mao ni ang mo-adjust sa margin depende sa state */
-.main-wrapper.sidebar-open {
-  margin-left: 220px; /* Match sa imong original sidebar width */
-}
+.main-wrapper.sidebar-open   { margin-left: 220px; }
+.main-wrapper.sidebar-closed { margin-left: 80px;  }
 
-.main-wrapper.sidebar-closed {
-  margin-left: 80px; /* Match sa imong collapsed sidebar width */
-}
+.page-content  { padding: 30px; }
+.content-area  { width: 100%; }
 
-.page-content {
-  padding: 30px;
-}
+/* =========================================
+   MOBILE — bottom nav, no sidebar
+========================================= */
+@media (max-width: 768px) {
 
-.content-area {
-  width: 100%;
+  /* Remove ALL left margin — sidebar is hidden, bottom nav is used instead */
+  .main-wrapper.sidebar-open,
+  .main-wrapper.sidebar-closed {
+    margin-left: 0 !important;
+  }
+
+  /* Add bottom padding so content doesn't hide behind the bottom nav */
+  .main-wrapper {
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Header full width */
+  .app-header-modern {
+    width: 100% !important;
+    left: 0 !important;
+  }
+
+  /* Individual page containers — reset any leftover margin */
+  .white-dashboard,
+  .inventory-container,
+  .inv-container,
+  .customers-luxury-container,
+  .avail-page-container,
+  .reports-wrapper,
+  .settings-container,
+  .activity-log-container {
+    margin-left: 0 !important;
+  }
 }

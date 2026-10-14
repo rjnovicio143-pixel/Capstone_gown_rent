@@ -1,24 +1,28 @@
-/* Sidebar Main Container */
+/* =========================================
+   DESKTOP SIDEBAR
+========================================= */
 .sidebar {
-  width: 220px; /* Imong original width */
-  background: linear-gradient(180deg, #1e1e1e 0%, #121212 100%); 
+  width: 220px;
+  background: linear-gradient(180deg, #1e1e1e 0%, #121212 100%);
   height: 100vh;
   display: flex;
   flex-direction: column;
   padding: 24px 16px;
   border-right: 1px solid rgba(255, 255, 255, 0.1);
   position: fixed;
+  top: 0;
+  left: 0;
   color: white;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); /* Para hapsay ang pag-close */
-  z-index: 1000;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 200;
 }
 
-/* KINI ANG KUNG COLLAPSED NA (Close) */
 .sidebar.collapsed {
   width: 80px;
-  padding: 24px 10px; /* Gamay nga padding para sa icons */
+  padding: 24px 10px;
 }
 
+/* Logo */
 .sidebar-logo {
   display: flex;
   align-items: center;
@@ -28,23 +32,32 @@
   position: relative;
 }
 
-/* Logo icon G (Gi-adjust gamay para sa collapse) */
 .logo-icon-g {
   font-size: 36px;
   font-weight: 900;
-  color: white; 
+  color: white;
   background: linear-gradient(135deg, #ffd700, #b8860b);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-stroke: 4px transparent;
-  flex-shrink: 0; /* Dili mapit-os ang letra */
+  flex-shrink: 0;
 }
 
-/* Toggle Button - Ang pislitanan para mo close/open */
+.logos-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity 0.15s ease;
+}
+.accent-gold-text { color: #ffd700; }
+
+/* Toggle button */
 .sidebar-toggle {
   position: absolute;
-  right: 5px; /* Naa sa gawas gamay sa sidebar */
-  top: 10px;
+  right: -12px;
+  top: 28px;
   background: #ffd700;
   color: #121212;
   border: none;
@@ -57,34 +70,26 @@
   cursor: pointer;
   box-shadow: 0 2px 5px rgba(0,0,0,0.3);
   transition: transform 0.3s ease;
+  z-index: 10;
 }
+.sidebar.collapsed .sidebar-toggle { transform: rotate(180deg); }
 
-.sidebar.collapsed .sidebar-toggle {
-  transform: rotate(180deg); /* Tuyok ang arrow kon close */
-}
-
-/* Hide text animations */
-.nav-text, .logos-text {
-  white-space: nowrap;
-  opacity: 1;
-  transition: opacity 1.5s ease;
-}
-
-.sidebar.collapsed .nav-text, 
+/* Collapsed hides text */
+.sidebar.collapsed .nav-text,
 .sidebar.collapsed .logos-text {
   opacity: 0;
   pointer-events: none;
-  display: none; /* Tangtangon ang text kon close */
+  display: none;
 }
 
-/* Sidebar Nav links */
+/* Nav links */
 .sidebar-nav ul {
   list-style: none;
   padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .sidebar-nav a {
@@ -95,11 +100,11 @@
   text-decoration: none;
   color: #a3a3a3;
   font-weight: 500;
+  font-size: 14px;
   border-radius: 8px;
   transition: all 0.2s ease;
 }
 
-/* Kung close, i-center ang icons */
 .sidebar.collapsed .sidebar-nav a {
   justify-content: center;
   padding: 12px 0;
@@ -108,24 +113,105 @@
 .nav-icon {
   flex-shrink: 0;
   color: #a3a3a3;
-  margin-left: 10px;
+  margin-left: 2px;
 }
+.nav-text { white-space: nowrap; }
 
-.sidebar-nav a:hover, .sidebar-nav a.active {
+.sidebar-nav a:hover,
+.sidebar-nav a.active {
   background-color: rgba(254, 249, 195, 0.1);
   color: #ffd700;
 }
+.sidebar-nav a:hover .nav-icon,
+.sidebar-nav a.active .nav-icon { color: #ffd700; }
 
-.sidebar-nav a:hover .nav-icon, .sidebar-nav a.active .nav-icon {
-  color: #ffd700;
+/* =========================================
+   MOBILE BOTTOM NAV
+   Hidden on desktop, shown on mobile
+========================================= */
+.mobile-bottom-nav {
+  display: none; /* Hidden on desktop */
 }
 
-.sidebar-footer {
-  margin-top: auto;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+/* =========================================
+   RESPONSIVE — switch to bottom nav
+========================================= */
+@media (max-width: 768px) {
+
+  /* Hide the desktop sidebar entirely */
+  .sidebar { display: none; }
+
+  /* Show bottom nav */
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background: linear-gradient(180deg, #1e1e1e 0%, #121212 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 8px 0;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    justify-content: space-around;
+    align-items: center;
+  }
+
+  .mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+    color: #a3a3a3;
+    flex: 1;
+    padding: 6px 4px;
+    border-radius: 10px;
+    transition: color 0.2s;
+  }
+
+  .mobile-nav-item:hover,
+  .mobile-nav-active {
+    color: #ffd700;
+  }
+
+  .mobile-nav-active .mobile-nav-icon { color: #ffd700; }
+
+  .mobile-nav-icon { color: #a3a3a3; transition: color 0.2s; }
+
+  .mobile-nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 62px;
+  }
+
+  .mobile-nav-active .mobile-nav-label { color: #ffd700; }
+
+  /* Active item background highlight */
+  .mobile-nav-active {
+    position: relative;
+  }
+  .mobile-nav-active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 44px;
+    height: 100%;
+    background: rgba(255, 215, 0, 0.08);
+    border-radius: 10px;
+    z-index: -1;
+  }
 }
 
-.sidebar.collapsed .logout-btn {
-  justify-content: center;
+/* Very small screens — hide labels, icons only */
+@media (max-width: 360px) {
+  .mobile-nav-label { display: none; }
+  .mobile-nav-item  { padding: 10px 4px; }
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Calendar, Star, Shield, Clock, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Calendar, ArrowRight, Sparkles, Tag } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import '../styles-public/Home.css';
 
@@ -10,26 +10,25 @@ const Home = () => {
   const [allGowns, setAllGowns]   = useState([]);
   const [current, setCurrent]     = useState(0);
   const [loading, setLoading]     = useState(true);
+  const [activeFilter, setActiveFilter] = useState('All');
 
   useEffect(() => {
     const fetchGowns = async () => {
-      // Top 3 pinaka-mahal for hero
       const { data: top } = await supabase
         .from('gowns')
-        .select('id, name, price, category, desc, size, image, petticoat_layer, included_accessories')
+        .select('id, name, price, category, desc, size, image, stock')
         .eq('is_posted', true)
         .gt('price', 0)
         .order('price', { ascending: false })
         .limit(3);
 
-      // All posted for the featured strip
       const { data: all } = await supabase
         .from('gowns')
-        .select('id, name, price, category, image, stock')
+        .select('id, name, price, category, image, stock, size')
         .eq('is_posted', true)
         .gt('price', 0)
         .order('created_at', { ascending: false })
-        .limit(6);
+        .limit(8);
 
       if (top) setTopGowns(top);
       if (all) setAllGowns(all);
@@ -38,7 +37,7 @@ const Home = () => {
     fetchGowns();
   }, []);
 
-  // Auto-advance hero
+  // Auto-advance
   useEffect(() => {
     if (topGowns.length <= 1) return;
     const t = setInterval(() => setCurrent(c => (c + 1) % topGowns.length), 5000);
@@ -50,219 +49,179 @@ const Home = () => {
 
   const g = topGowns[current];
 
+  const categories = ['All', ...new Set(allGowns.map(g => g.category).filter(Boolean))];
+  const filtered = activeFilter === 'All'
+    ? allGowns
+    : allGowns.filter(g => g.category === activeFilter);
+
   return (
     <div className="hp-page">
 
-      {/* ════════════════════════════════
-          HERO
-      ════════════════════════════════ */}
+      {/* ── HERO ── */}
       <section className="hp-hero">
-        <div className="hp-hero-inner">
-
-          {/* LEFT */}
-          <div className="hp-hero-left">
-            <span className="hp-hero-eyebrow">
-              <Sparkles size={13} /> Premium Gown Rental
-            </span>
-
-            {loading ? (
-              <div className="hp-hero-skeleton">
-                <div className="hp-skel hp-skel-title" />
-                <div className="hp-skel hp-skel-sub"  />
-                <div className="hp-skel hp-skel-price" />
-              </div>
-            ) : g ? (
-              <div className="hp-hero-text" key={g.id}>
-                <span className="hp-hero-cat">{g.category}</span>
-                <h1 className="hp-hero-title">{g.name}</h1>
-                {g.desc && <p className="hp-hero-desc">{g.desc}</p>}
-                <div className="hp-hero-chips">
-                  {g.size && <span className="hp-chip">📐 {g.size}</span>}
-                  {g.petticoat_layer && <span className="hp-chip">🩱 Layer {g.petticoat_layer}</span>}
-                  {(g.included_accessories || []).slice(0, 2).map((a, i) => (
-                    <span key={i} className="hp-chip">👑 {a}</span>
-                  ))}
-                </div>
-                <p className="hp-hero-price">₱{Number(g.price).toLocaleString()}</p>
-              </div>
-            ) : (
-              <h1 className="hp-hero-title">Your Dream Gown Awaits</h1>
-            )}
-
-            <div className="hp-hero-actions">
-              <button className="hp-btn-primary" onClick={() => navigate('/gown-suit')}>
-                <Calendar size={16} /> Reserve Now
-              </button>
-              <button className="hp-btn-outline" onClick={() => navigate('/gown-suit')}>
-                Browse Collection
-              </button>
-            </div>
-
-            {/* Dots nav */}
-            {topGowns.length > 1 && (
-              <div className="hp-hero-nav">
-                <button className="hp-nav-arrow" onClick={prev}><ChevronLeft size={16} /></button>
-                <div className="hp-hero-dots">
-                  {topGowns.map((_, i) => (
-                    <button
-                      key={i}
-                      className={`hp-dot ${i === current ? 'active' : ''}`}
-                      onClick={() => setCurrent(i)}
-                    />
-                  ))}
-                </div>
-                <button className="hp-nav-arrow" onClick={next}><ChevronRight size={16} /></button>
-                <span className="hp-nav-count">{current + 1}/{topGowns.length}</span>
-              </div>
-            )}
+        <div className="hp-hero-top">
+          <div className="hp-greeting">
+            <h1>Find Your <span>Dream Gown</span></h1>
+            <p>Premium gown rentals for your special day</p>
           </div>
-
-          {/* RIGHT — Image card */}
-          <div className="hp-hero-right">
-            {loading ? (
-              <div className="hp-img-card hp-img-loading"><div className="hp-spinner" /></div>
-            ) : g?.image ? (
-              <div className="hp-img-card" key={g.id}>
-                <img src={g.image} alt={g.name} className="hp-img-main" />
-                <div className="hp-img-bottom">
-                  <span className="hp-img-name">{g.name}</span>
-                  <span className="hp-img-price">₱{Number(g.price).toLocaleString()}</span>
-                </div>
-                {/* Decorative floating elements */}
-                <div className="hp-float-tag hp-float-top">✨ Featured</div>
-              </div>
-            ) : (
-              <div className="hp-img-card hp-img-empty">👗</div>
-            )}
-          </div>
+          <button className="hp-search-btn" onClick={() => navigate('/gown-suit')}>
+            <Search size={16} /> Search gowns...
+          </button>
         </div>
 
-        {/* Decorative background shape */}
-        <div className="hp-hero-shape" />
+        {/* Featured Carousel Card */}
+        <div className="hp-featured-card-wrap">
+          {loading ? (
+            <div className="hp-hero-card hp-hero-card-loading">
+              <div className="hp-spinner" />
+            </div>
+          ) : g ? (
+            <div className="hp-hero-card" key={g.id}>
+              {/* BG Image */}
+              {g.image
+                ? <img src={g.image} alt={g.name} className="hp-hero-card-img" />
+                : <div className="hp-hero-card-noimg">👗</div>
+              }
+              <div className="hp-hero-card-overlay" />
+
+              {/* Top badges */}
+              <div className="hp-hero-card-top">
+                <span className="hp-badge-featured"><Sparkles size={11} /> Featured</span>
+                <span className="hp-badge-price">₱{Number(g.price).toLocaleString()}</span>
+              </div>
+
+              {/* Bottom info */}
+              <div className="hp-hero-card-bottom">
+                <div className="hp-hero-card-info">
+                  <span className="hp-hero-card-cat">{g.category}</span>
+                  <h2 className="hp-hero-card-name">{g.name}</h2>
+                  {g.desc && <p className="hp-hero-card-desc">{g.desc}</p>}
+                </div>
+                <button className="hp-hero-reserve-btn" onClick={() => navigate('/gown-suit')}>
+                  <Calendar size={15} /> Reserve
+                </button>
+              </div>
+
+              {/* Arrows */}
+              {topGowns.length > 1 && (
+                <>
+                  <button className="hp-card-arrow hp-card-arrow-l" onClick={prev}><ChevronLeft size={18} /></button>
+                  <button className="hp-card-arrow hp-card-arrow-r" onClick={next}><ChevronRight size={18} /></button>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="hp-hero-card hp-hero-card-empty">
+              <p>No featured gowns yet.</p>
+            </div>
+          )}
+
+          {/* Dots */}
+          {topGowns.length > 1 && (
+            <div className="hp-hero-dots">
+              {topGowns.map((_, i) => (
+                <button key={i} className={`hp-dot ${i === current ? 'active' : ''}`} onClick={() => setCurrent(i)} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Quick stats row */}
+        <div className="hp-quick-stats">
+          <div className="hp-qstat">
+            <strong>{allGowns.length}+</strong>
+            <span>Gowns</span>
+          </div>
+          <div className="hp-qstat-sep" />
+          <div className="hp-qstat">
+            <strong>Free</strong>
+            <span>Hold</span>
+          </div>
+          <div className="hp-qstat-sep" />
+          <div className="hp-qstat">
+            <strong>Fast</strong>
+            <span>Confirm</span>
+          </div>
+        </div>
       </section>
 
-      {/* ════════════════════════════════
-          STATS BAR
-      ════════════════════════════════ */}
-      <div className="hp-stats-bar">
-        <div className="hp-stat">
-          <strong>{allGowns.length}+</strong>
-          <span>Gowns Available</span>
-        </div>
-        <div className="hp-stat-divider" />
-        <div className="hp-stat">
-          <strong>100%</strong>
-          <span>Admin Confirmed</span>
-        </div>
-        <div className="hp-stat-divider" />
-        <div className="hp-stat">
-          <strong>Free</strong>
-          <span>Reservation Hold</span>
-        </div>
-        <div className="hp-stat-divider" />
-        <div className="hp-stat">
-          <strong>Fast</strong>
-          <span>Easy Booking</span>
-        </div>
-      </div>
-
-      {/* ════════════════════════════════
-          FEATURED GOWNS STRIP
-      ════════════════════════════════ */}
-      {allGowns.length > 0 && (
-        <section className="hp-featured">
-          <div className="hp-section-header">
-            <span className="hp-section-eyebrow">Our Collection</span>
-            <h2>Featured Gowns</h2>
-            <p>Hand-picked premium gowns for your special occasion</p>
+      {/* ── EXPLORE MORE ── */}
+      <section className="hp-explore">
+        <div className="hp-section-row">
+          <div>
+            <span className="hp-eyebrow"><Tag size={12} /> Collection</span>
+            <h2 className="hp-section-title">Explore More <span>✨</span></h2>
           </div>
+          <button className="hp-see-all" onClick={() => navigate('/gown-suit')}>
+            See All <ArrowRight size={14} />
+          </button>
+        </div>
 
+        {/* Category filter pills */}
+        <div className="hp-filter-pills">
+          {categories.map(cat => (
+            <button
+              key={cat}
+              className={`hp-pill ${activeFilter === cat ? 'active' : ''}`}
+              onClick={() => setActiveFilter(cat)}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Gown grid */}
+        {loading ? (
+          <div className="hp-grid-skeleton">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="hp-skel-card">
+                <div className="hp-skel hp-skel-img" />
+                <div className="hp-skel hp-skel-text" />
+                <div className="hp-skel hp-skel-price" />
+              </div>
+            ))}
+          </div>
+        ) : (
           <div className="hp-gown-grid">
-            {allGowns.map(gown => (
-              <div
-                key={gown.id}
-                className="hp-gown-card"
-                onClick={() => navigate('/gown-suit')}
-              >
-                <div className="hp-gown-img">
+            {filtered.map(gown => (
+              <div key={gown.id} className="hp-gown-card" onClick={() => navigate('/gown-suit')}>
+                <div className="hp-gown-img-wrap">
                   {gown.image
                     ? <img src={gown.image} alt={gown.name} />
                     : <div className="hp-gown-noimg">👗</div>
                   }
-                  <span className={`hp-gown-status ${gown.stock > 0 ? 'avail' : 'out'}`}>
+                  <span className={`hp-gown-avail ${gown.stock > 0 ? 'in' : 'out'}`}>
                     {gown.stock > 0 ? 'Available' : 'Rented'}
                   </span>
                 </div>
                 <div className="hp-gown-info">
                   <span className="hp-gown-cat">{gown.category}</span>
                   <h3 className="hp-gown-name">{gown.name}</h3>
-                  <p className="hp-gown-price">₱{Number(gown.price).toLocaleString()}</p>
+                  <div className="hp-gown-foot">
+                    <span className="hp-gown-price">₱{Number(gown.price).toLocaleString()}</span>
+                    {gown.size && <span className="hp-gown-size">{gown.size}</span>}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
+        )}
 
-          <div className="hp-featured-cta">
-            <button onClick={() => navigate('/gown-suit')}>
-              View All Gowns →
-            </button>
-          </div>
-        </section>
-      )}
-
-      {/* ════════════════════════════════
-          HOW IT WORKS
-      ════════════════════════════════ */}
-      <section className="hp-how">
-        <div className="hp-section-header">
-          <span className="hp-section-eyebrow">Simple Process</span>
-          <h2>How It Works</h2>
-          <p>Reserve your dream gown in just a few easy steps</p>
-        </div>
-
-        <div className="hp-steps">
-          <div className="hp-step">
-            <div className="hp-step-num">01</div>
-            <div className="hp-step-icon"><Star size={22} /></div>
-            <h3>Browse & Choose</h3>
-            <p>Browse our collection and pick the gown that matches your dream look.</p>
-          </div>
-          <div className="hp-step-arrow">→</div>
-          <div className="hp-step">
-            <div className="hp-step-num">02</div>
-            <div className="hp-step-icon"><Calendar size={22} /></div>
-            <h3>Reserve Online</h3>
-            <p>Fill in your details and submit your reservation request — no payment needed yet.</p>
-          </div>
-          <div className="hp-step-arrow">→</div>
-          <div className="hp-step">
-            <div className="hp-step-num">03</div>
-            <div className="hp-step-icon"><Shield size={22} /></div>
-            <h3>Admin Confirms</h3>
-            <p>Our admin reviews and confirms your booking then reaches out to finalize.</p>
-          </div>
-          <div className="hp-step-arrow">→</div>
-          <div className="hp-step">
-            <div className="hp-step-num">04</div>
-            <div className="hp-step-icon"><Clock size={22} /></div>
-            <h3>Pick Up & Enjoy</h3>
-            <p>Pick up your gown on your scheduled date and look stunning on your special day!</p>
-          </div>
-        </div>
+        {filtered.length === 0 && !loading && (
+          <div className="hp-no-results">No gowns in this category yet.</div>
+        )}
       </section>
 
-      {/* ════════════════════════════════
-          FINAL CTA
-      ════════════════════════════════ */}
-      <section className="hp-cta">
-        <div className="hp-cta-inner">
-          <Sparkles size={28} color="#f59e0b" />
-          <h2>Ready to Find Your Perfect Gown?</h2>
-          <p>Browse our full collection and reserve your gown today — free of charge.</p>
+      {/* ── CTA BANNER ── */}
+      <section className="hp-cta-banner">
+        <div className="hp-cta-content">
+          <h2>Ready to Reserve?</h2>
+          <p>No login needed — just fill in your details and our admin will confirm your booking.</p>
           <button onClick={() => navigate('/gown-suit')}>
-            <Calendar size={16} /> Reserve a Gown Now
+            <Calendar size={16} /> Browse & Reserve Now
           </button>
         </div>
+        <div className="hp-cta-deco">👗</div>
       </section>
 
     </div>

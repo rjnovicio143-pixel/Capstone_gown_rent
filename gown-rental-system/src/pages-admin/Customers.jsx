@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import {
   Search, Plus, X, Trash2, CheckCircle, AlertTriangle,
   User, Calendar, DollarSign, Briefcase, CheckCircle2,
-  HandHelping, Banknote, CreditCard, ShieldAlert,
+  HandHelping, CreditCard, ShieldAlert,
   MessageSquare, Download, RefreshCw, Layers, Crown, Edit3, Tag, Save, Package
 } from 'lucide-react';
 import Header from '../components/Header';
@@ -19,6 +19,38 @@ const netTotal = (b) => Math.max(0, grossTotal(b) - (Number(b.discount) || 0));
 
 const formatCurrency = (amt) => `₱${Number(amt || 0).toLocaleString()}`;
 
+// An online hold that is still waiting for a downpayment has no balance yet
+const isAwaiting = (b) => !!b?.isOnlineHold && b?.returnStatus === 'pending';
+
+/* ---------- PENALTY HELPERS ----------
+   While a gown is claimed and late, the penalty grows every day:
+   days 1 to 3 cost the daily rate, every day after that costs double.
+   The amount already paid is always subtracted, so nothing is charged twice. */
+const accruedPenalty = (b) => {
+  if (!b || b.returnStatus !== 'claimed' || !b.returnDate) return 0;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const due = new Date(b.returnDate); due.setHours(0, 0, 0, 0);
+  if (today <= due) return 0;
+
+  const rate = Number(b.penaltyRate) || 500;
+  const days = Math.ceil((today - due) / 86400000);
+  let total = 0;
+  for (let i = 1; i <= days; i++) total += i > 3 ? rate * 2 : rate;
+  return total;
+};
+
+// Penalty that is still unpaid
+const calculatePenalty = (b) => {
+  if (!b) return 0;
+  if (b.returnStatus === 'claimed') {
+    if (b.isPenaltySettled) return 0; // older records
+    return Math.max(0, accruedPenalty(b) - (Number(b.penaltyPaid) || 0));
+  }
+  return Number(b.penalty) || 0; // returned or cancelled: the stored unpaid amount
+};
+
+const isOverdue = (b) => b?.returnStatus === 'claimed' && accruedPenalty(b) > 0;
+
 const Customers = () => {
   const [customers, setCustomers]               = useState([]);
   const [gowns, setGowns]                       = useState([]);
@@ -29,6 +61,7 @@ const Customers = () => {
   const [isModalOpen, setIsModalOpen]           = useState(false);
   const [selectedBooking, setSelectedBooking]   = useState(null);
   const [partialPayAmt, setPartialPayAmt]       = useState('');
+  const [penaltyPayAmt, setPenaltyPayAmt]       = useState('');
   const [isConfirmingHold, setIsConfirmingHold] = useState(false);
   const [isSwapMode, setIsSwapMode]             = useState(false); // add-ons panel
   const [isEditMode, setIsEditMode]             = useState(false); // edit booking
@@ -72,6 +105,7 @@ const Customers = () => {
     petticoatId: row.petticoat_id, petticoatPrice: row.petticoat_price || 0,
     addons: row.addons || [], swapCharges: row.swap_charges || 0,
     discount: row.discount || 0, discountNote: row.discount_note || '',
+    cancelReason: row.cancel_reason || '',
   });
 
   // ── FETCH ──
@@ -103,11 +137,13 @@ const Customers = () => {
     setIsConfirmingHold(false);
     setEditForm(null);
     setPartialPayAmt('');
+    setPenaltyPayAmt('');
   };
 
   /* ---------- GOWN PACKAGE HELPERS ----------
      A gown can include a petticoat layer and some accessories.
-     Included items cost 0. Only upgrades or extras are charged. */
+     Included items cost 0. Only upgrades or extras are charged.
+     IDs are compared as strings so "1" and 1 still match. */
   const gownById = (id) => gowns.find(g => String(g.id) === String(id));
 
   const includedPettiOf = (gown) =>
@@ -115,8 +151,10 @@ const Customers = () => {
       ? petticoats.find(p => Number(p.layer) === Number(gown.petticoat_layer)) || null
       : null;
 
-  const includedAccsOf = (gown) =>
-    accessories.filter(a => (gown?.included_accessories || []).includes(a.id));
+  const includedAccsOf = (gown) => {
+    const ids = (gown?.included_accessories || []).map(String);
+    return accessories.filter(a => ids.includes(String(a.id)));
+  };
 
   // Price of a petticoat for a gown: only the difference from the included layer is charged
   const pettiPriceFor = (gown, petti) => {
@@ -142,31 +180,57 @@ const Customers = () => {
   };
   const computeGross = (form) => computeTotal({ ...form, discount: 0 });
 
-  const calculatePenalty = (booking) => {
-    if (!booking || booking.isPenaltySettled || booking.returnStatus === 'returned' || booking.returnStatus === 'cancelled') return booking?.penalty || 0;
-    const today = new Date(); today.setHours(0,0,0,0);
-    const rate = Number(booking.penaltyRate) || 500;
-    if (booking.returnStatus === 'claimed' && booking.returnDate) {
-      const due = new Date(booking.returnDate); due.setHours(0,0,0,0);
-      if (today > due) {
-        const days = Math.ceil((today - due) / 86400000);
-        let total = 0;
-        for (let i = 1; i <= days; i++) total += i > 3 ? rate * 2 : rate;
-        return total;
-      }
-    }
-    return 0;
-  };
+  /* ---------- STOCK + FIRST-DOWNPAYMENT RULE ----------
+     Online holds never take stock and never expire.
+     The gown is secured when a downpayment is confirmed (stock goes down).
+     When the stock reaches 0, all other online holds for that gown are cancelled. */
 
+  // Reads the latest stock from the database so two admins cannot oversell a gown
   const adjustStock = async (gownId, delta) => {
     if (!gownId) return true;
-    const gown = gowns.find(g => g.id === gownId);
-    if (!gown) return true;
-    const newStock = (gown.stock || 0) + delta;
+
+    const { data: gown, error: readError } = await supabase
+      .from('gowns').select('name, stock').eq('id', gownId).single();
+    if (readError || !gown) return true;
+
+    const newStock = (Number(gown.stock) || 0) + delta;
     if (newStock < 0) { alert(`No stock left for "${gown.name}".`); return false; }
-    const { error } = await supabase.from('gowns').update({ stock: newStock, status: newStock > 0 ? 'Available' : 'Out of Stock' }).eq('id', gownId);
+
+    const { error } = await supabase
+      .from('gowns')
+      .update({ stock: newStock, status: newStock > 0 ? 'Available' : 'Out of Stock' })
+      .eq('id', gownId);
     if (error) { alert('Stock update error: ' + error.message); return false; }
     return true;
+  };
+
+  const cancelCompetingHolds = async (gownId) => {
+    if (!gownId) return 0;
+
+    const { data: gown, error } = await supabase
+      .from('gowns').select('stock').eq('id', gownId).single();
+    if (error || !gown || Number(gown.stock) > 0) return 0;
+
+    const { data, error: updateError } = await supabase
+      .from('bookings')
+      .update({
+        return_status: 'cancelled',
+        is_online_hold: false,
+        cancel_reason: 'The gown was taken by a customer who paid the downpayment first.',
+      })
+      .eq('gown_id', gownId)
+      .eq('is_online_hold', true)
+      .eq('return_status', 'pending')
+      .select('id');
+
+    if (updateError) { console.error(updateError); return 0; }
+    return data?.length || 0;
+  };
+
+  const notifyCancelled = (count) => {
+    if (count > 0) {
+      alert(`${count} other online hold${count === 1 ? ' was' : 's were'} cancelled because this gown is now taken.`);
+    }
   };
 
   // ── NEW RENTAL: pick a gown and auto-apply its package ──
@@ -247,13 +311,24 @@ const Customers = () => {
       swap_charges: 0,
       discount, discount_note: newCustomer.discountNote || null,
     }]);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) {
+      alert('Error: ' + error.message);
+      if (initialStatus === 'reserved') await adjustStock(newCustomer.gownId, 1); // undo the stock change
+      return;
+    }
+
+    // A reserved booking takes the stock, so other online holds may have to be cancelled
+    let cancelledHolds = 0;
+    if (initialStatus === 'reserved') cancelledHolds = await cancelCompetingHolds(newCustomer.gownId);
+
     await logActivity('booking_created', `New booking: ${newCustomer.name} rented ${newCustomer.gownName}${discount > 0 ? ` (discount ₱${discount})` : ''}`);
+    notifyCancelled(cancelledHolds);
     fetchAll(); setIsModalOpen(false); resetForm();
   };
 
   // ── EDIT EXISTING BOOKING ──
   const startEdit = (b) => {
+    if (b.returnStatus === 'cancelled') return; // cancelled bookings are locked
     setEditForm({
       name: b.name || '', contact: b.contact || '', gmail: b.gmail || '',
       reservationDate: b.reservationDate || '', returnDate: b.returnDate || '',
@@ -353,10 +428,10 @@ const Customers = () => {
     const gown = gownById(booking.gownId);
     const included = includedAccsOf(gown).some(a => a.id === acc.id);
     const current = booking.addons || [];
-    const exists = current.find(a => a.id === acc.id);
+    const exists = current.find(a => String(a.id) === String(acc.id));
 
     const newAddons = exists
-      ? current.filter(a => a.id !== acc.id)
+      ? current.filter(a => String(a.id) !== String(acc.id))
       : [...current, toAddon(acc, included)];
     const swapFeeAdd = !exists && !included ? Number(acc.swap_fee || 0) : 0;
 
@@ -382,7 +457,7 @@ const Customers = () => {
 
     const current = booking.addons || [];
     const missing = incAccs
-      .filter(a => !current.some(c => c.id === a.id))
+      .filter(a => !current.some(c => String(c.id) === String(a.id)))
       .map(a => toAddon(a, true));
     const newAddons = [...current, ...missing];
 
@@ -407,7 +482,7 @@ const Customers = () => {
     await refreshSelected(booking.id);
   };
 
-  // ── PAYMENT ──
+  // ── PAYMENT (balance of a confirmed booking) ──
   const handleUpdatePayment = async (booking) => {
     const payAmt = Number(partialPayAmt);
     if (!payAmt || payAmt <= 0) return alert('Please enter a valid amount.');
@@ -421,41 +496,88 @@ const Customers = () => {
     await refreshSelected(booking.id);
   };
 
+  // ── PENALTY PAYMENT (full or partial, while claimed or after return/cancel) ──
   const handlePayPenalty = async (booking) => {
-    const pen = booking.penalty || calculatePenalty(booking);
-    if (pen <= 0) return alert('No penalty.');
-    if (!window.confirm(`Confirm penalty payment of ₱${pen}?`)) return;
-    const { error } = await supabase.from('bookings').update({ penalty: 0, penalty_paid: pen, is_penalty_settled: true }).eq('id', booking.id);
+    const owed = calculatePenalty(booking);
+    const payAmt = Number(penaltyPayAmt);
+
+    if (owed <= 0) return alert('There is no unpaid penalty.');
+    if (!payAmt || payAmt <= 0) return alert('Please enter a valid amount.');
+    if (payAmt > owed) return alert(`The amount is more than the unpaid penalty (${formatCurrency(owed)}).`);
+    if (!window.confirm(`Confirm penalty payment of ${formatCurrency(payAmt)}?`)) return;
+
+    const stillClaimed = booking.returnStatus === 'claimed';
+    const remaining = owed - payAmt;
+
+    const { error } = await supabase.from('bookings').update({
+      penalty_paid: (Number(booking.penaltyPaid) || 0) + payAmt,
+      // While claimed, the penalty is calculated live, so only returned or cancelled bookings keep a stored amount
+      penalty: stillClaimed ? 0 : remaining,
+      is_penalty_settled: stillClaimed ? false : remaining <= 0,
+    }).eq('id', booking.id);
     if (error) { alert(error.message); return; }
-    await logActivity('penalty_paid', `₱${pen} penalty by ${booking.name}`);
-    closeDetails(); fetchAll();
+
+    await logActivity('penalty_paid', `₱${payAmt} penalty from ${booking.name}${remaining > 0 ? ` (₱${remaining} still unpaid)` : ''}`);
+    setPenaltyPayAmt('');
+    fetchAll();
+    await refreshSelected(booking.id);
   };
 
   const handleProcessAction = async (booking, newStatus) => {
-    if ((newStatus === 'claimed' || newStatus === 'reserved') && booking.returnStatus === 'pending') {
+    // Warn before returning a gown that still has an unpaid penalty
+    if (newStatus === 'returned') {
+      const owed = calculatePenalty(booking);
+      if (owed > 0 && !window.confirm(
+        `This booking has an unpaid penalty of ${formatCurrency(owed)}.\n\nMark it as returned anyway? You can still collect the penalty afterwards.`
+      )) return;
+    }
+
+    const takesStock =
+      (newStatus === 'claimed' || newStatus === 'reserved') && booking.returnStatus === 'pending';
+
+    if (takesStock) {
       const ok = await adjustStock(booking.gownId, -1); if (!ok) return;
     }
     if ((newStatus === 'returned' || newStatus === 'cancelled') && (booking.returnStatus === 'claimed' || booking.returnStatus === 'reserved')) {
       await adjustStock(booking.gownId, 1);
     }
+
+    // Unpaid penalty at this moment (computed from the old status, before it changes)
     let finalPenalty = calculatePenalty(booking);
     if (newStatus === 'cancelled' && booking.returnStatus === 'reserved') finalPenalty = Number(booking.cancelPenaltyAmt) || 200;
+
+    const fullyPaid = finalPenalty <= 0 && Number(booking.penaltyPaid) > 0;
+
     const { error } = await supabase.from('bookings').update({
-      return_status: newStatus, penalty: finalPenalty,
+      return_status: newStatus,
+      penalty: finalPenalty,
+      is_penalty_settled: fullyPaid || booking.isPenaltySettled,
       claimed_status: newStatus === 'claimed' ? 'claimed' : (newStatus === 'returned' ? 'claimed' : booking.claimedStatus)
     }).eq('id', booking.id);
     if (error) { alert(error.message); return; }
+
+    // A pending booking that is now claimed or reserved took the stock
+    let cancelledHolds = 0;
+    if (takesStock) cancelledHolds = await cancelCompetingHolds(booking.gownId);
+
     await logActivity('booking_updated', `${booking.name} booking marked as ${newStatus}`);
+    notifyCancelled(cancelledHolds);
     closeDetails(); fetchAll();
   };
 
+  // ── CONFIRM AN ONLINE HOLD (the first downpayment gets the gown) ──
   const handleConfirmOnlineHold = async () => {
-    if (!holdData.downpayment || holdData.downpayment <= 0) return alert('Enter downpayment.');
-    if (!holdData.returnDate) return alert('Select return date.');
+    if (!holdData.downpayment || Number(holdData.downpayment) <= 0) return alert('Enter the downpayment.');
+    if (!holdData.returnDate) return alert('Select the return date.');
+
     const total = netTotal(selectedBooking) || Number(selectedBooking.rentalPrice);
     const newDown = Number(holdData.downpayment);
-    const willReserve = !!holdData.reservationDate;
-    if (willReserve) { const ok = await adjustStock(selectedBooking.gownId, -1); if (!ok) return; }
+    if (newDown > total) return alert('The downpayment cannot be greater than the total.');
+
+    // Paying the downpayment secures the gown
+    const ok = await adjustStock(selectedBooking.gownId, -1);
+    if (!ok) return;
+
     const { error } = await supabase.from('bookings').update({
       is_online_hold: false, hold_expires_at: 'Confirmed',
       down: newDown, balance: total - newDown,
@@ -465,10 +587,21 @@ const Customers = () => {
       penalty_rate: Number(holdData.penaltyRate),
       cancel_penalty_amt: Number(holdData.cancelPenaltyAmt),
       assisted_by: holdData.assistedBy,
-      return_status: willReserve ? 'reserved' : 'pending'
+      return_status: 'reserved',
     }).eq('id', selectedBooking.id);
-    if (error) { alert(error.message); return; }
-    await logActivity('hold_confirmed', `Hold confirmed for ${selectedBooking.name}`);
+
+    if (error) {
+      alert(error.message);
+      await adjustStock(selectedBooking.gownId, 1); // undo the stock change
+      return;
+    }
+
+    const cancelled = await cancelCompetingHolds(selectedBooking.gownId);
+    await logActivity(
+      'hold_confirmed',
+      `Hold confirmed for ${selectedBooking.name}${cancelled > 0 ? ` (${cancelled} other hold${cancelled === 1 ? '' : 's'} cancelled)` : ''}`
+    );
+    notifyCancelled(cancelled);
     closeDetails(); fetchAll();
   };
 
@@ -487,17 +620,22 @@ const Customers = () => {
       const pettiLabel = c.petticoatId
         ? `${petti ? `Layer ${petti.layer}` : 'Yes'}${c.petticoatPrice > 0 ? ` (+₱${c.petticoatPrice})` : ' (included)'}`
         : 'None';
+      const noBalance = isAwaiting(c) || c.returnStatus === 'cancelled';
       return {
         Name: c.name, Contact: c.contact, Gmail: c.gmail || '',
-        Gown: c.gownName, Status: c.returnStatus,
+        Gown: c.gownName, Status: isAwaiting(c) ? 'pending (awaiting downpayment)' : c.returnStatus,
         'Booking Date': c.bookingDate, 'Return Date': c.returnDate || '',
         'Rental Price': c.rentalPrice, Petticoat: pettiLabel,
-        Accessories: (c.addons || []).map(a => `${a.name}${Number(a.price) > 0 ? ` (+₱${a.price})` : ''}`).join(', ') || 'None',
+        Accessories: (c.addons || []).map(a => `${a.name}${Number(a.price) > 0 ? ` (+₱${a.price})` : ' (included)'}`).join(', ') || 'None',
         'Swap Charges': c.swapCharges || 0,
         Discount: c.discount || 0, 'Discount Note': c.discountNote || '',
         'Total (after discount)': netTotal(c),
-        Downpayment: c.down, Deposit: c.deposit, Balance: c.balance,
-        Penalty: c.penaltyPaid || 0, Commission: c.commissions,
+        Downpayment: c.down, Deposit: c.deposit,
+        Balance: noBalance ? '' : c.balance,
+        'Penalty Paid': c.penaltyPaid || 0,
+        'Penalty Unpaid': calculatePenalty(c),
+        Commission: c.commissions,
+        'Cancel Reason': c.cancelReason || '',
       };
     });
     const wb = XLSX.utils.book_new();
@@ -516,9 +654,21 @@ const Customers = () => {
   /* ---------- DERIVED VALUES ---------- */
   const sb = selectedBooking;
   const sbPenalty = sb ? calculatePenalty(sb) : 0;
+  const sbOverdue = isOverdue(sb);
   const sbNet = sb ? netTotal(sb) : 0;
   const sbBalance = sb ? Number(sb.balance) || 0 : 0;
+  const sbAwaiting = isAwaiting(sb);
+  const sbCancelled = sb?.returnStatus === 'cancelled';
   const preview = sb && editForm ? editPreview(sb, editForm) : null;
+
+  // Other customers still holding the same gown (online holds waiting for a downpayment)
+  const sbCompetitors = sb && sbAwaiting
+    ? customers.filter(c =>
+        isAwaiting(c) &&
+        String(c.gownId) === String(sb.gownId) &&
+        c.id !== sb.id
+      ).length
+    : 0;
 
   // Package of the gown in the opened booking
   const sbGown = sb ? gownById(sb.gownId) : null;
@@ -527,7 +677,7 @@ const Customers = () => {
   const sbHasPackage = !!sbIncPetti || sbIncAccs.length > 0;
   const sbPackageMissing = sb && sbHasPackage && (
     (!!sbIncPetti && !sb.petticoatId) ||
-    sbIncAccs.some(a => !(sb.addons || []).some(x => x.id === a.id))
+    sbIncAccs.some(a => !(sb.addons || []).some(x => String(x.id) === String(a.id)))
   );
   const sbPetti = sb ? petticoats.find(p => p.id === sb.petticoatId) : null;
 
@@ -573,6 +723,9 @@ const Customers = () => {
           {filtered.map(c => {
             const p = calculatePenalty(c);
             const hasAddons = (c.addons || []).length > 0 || !!c.petticoatId;
+            const awaiting = isAwaiting(c);
+            const cancelled = c.returnStatus === 'cancelled';
+            const overdue = isOverdue(c);
             return (
               <div key={c.id} className="booking-mini-card" onClick={() => { setSelectedBooking(c); setIsSwapMode(false); setIsEditMode(false); setIsConfirmingHold(false); }}>
                 <div className="card-top-section">
@@ -589,19 +742,33 @@ const Customers = () => {
                     )}
                   </div>
                   <div className="status-badges-column">
-                    <div className={`badge-status ${p > 0 && c.returnStatus === 'claimed' ? 'overdue' : c.returnStatus}`}>
-                      {p > 0 && c.returnStatus === 'claimed' ? 'OVERDUE' : c.returnStatus}
+                    <div className={`badge-status ${overdue ? 'overdue' : c.returnStatus}`}>
+                      {overdue ? 'OVERDUE' : c.returnStatus}
                     </div>
                     {c.isOnlineHold && <div className="badge-hold">HOLDING</div>}
                   </div>
                 </div>
+
                 <div className="card-bottom-row">
-                  <div className="stat-box">
-                    <label>{Number(c.balance) < 0 ? 'Refund' : 'Balance'}</label>
-                    <span className={Number(c.balance) > 0 ? 'text-danger' : Number(c.balance) < 0 ? 'text-success' : ''}>
-                      {formatCurrency(Math.abs(c.balance))}
-                    </span>
-                  </div>
+                  {awaiting ? (
+                    <div className="stat-box">
+                      <label>Total</label>
+                      <span>{formatCurrency(netTotal(c))}</span>
+                      <small className="stat-sub">Awaiting downpayment</small>
+                    </div>
+                  ) : cancelled ? (
+                    <div className="stat-box">
+                      <label>Paid</label>
+                      <span className="text-muted">{Number(c.down) > 0 ? formatCurrency(c.down) : 'No payment'}</span>
+                    </div>
+                  ) : (
+                    <div className="stat-box">
+                      <label>{Number(c.balance) < 0 ? 'Refund' : 'Balance'}</label>
+                      <span className={Number(c.balance) > 0 ? 'text-danger' : Number(c.balance) < 0 ? 'text-success' : ''}>
+                        {formatCurrency(Math.abs(c.balance))}
+                      </span>
+                    </div>
+                  )}
                   <div className="card-mini-badges">
                     {c.discount > 0 && <div className="discount-mini-badge">−{formatCurrency(c.discount)}</div>}
                     {p > 0 && <div className="penalty-mini-badge">Penalty: {formatCurrency(p)}</div>}
@@ -628,10 +795,10 @@ const Customers = () => {
                   <h3>{sb.name}</h3>
                   <span>{sb.gownName}</span>
                 </div>
-                <div className={`badge-status ${sbPenalty > 0 && sb.returnStatus === 'claimed' ? 'overdue' : sb.returnStatus}`}>
-                  {sbPenalty > 0 && sb.returnStatus === 'claimed' ? 'OVERDUE' : sb.returnStatus}
+                <div className={`badge-status ${sbOverdue ? 'overdue' : sb.returnStatus}`}>
+                  {sbOverdue ? 'OVERDUE' : sb.returnStatus}
                 </div>
-                {!isEditMode && (
+                {!isEditMode && !sbCancelled && (
                   <button className="head-icon-btn" title="Edit booking" onClick={() => startEdit(sb)}>
                     <Edit3 size={15} />
                   </button>
@@ -647,15 +814,32 @@ const Customers = () => {
                 </div>
                 <div className="sum-box">
                   <label>Paid</label>
-                  <span className="text-success">{formatCurrency(sb.down)}</span>
+                  <span className={Number(sb.down) > 0 ? 'text-success' : 'text-muted'}>{formatCurrency(sb.down)}</span>
                 </div>
-                <div className={`sum-box ${sbBalance > 0 ? 'sum-danger' : sbBalance < 0 ? 'sum-refund' : ''}`}>
-                  <label>{sbBalance < 0 ? 'Refund' : 'Balance'}</label>
-                  <span>{formatCurrency(Math.abs(sbBalance))}</span>
-                </div>
+                {sbAwaiting ? (
+                  <div className="sum-box sum-wait">
+                    <label>Status</label>
+                    <span>Awaiting downpayment</span>
+                  </div>
+                ) : sbCancelled ? (
+                  <div className="sum-box">
+                    <label>Status</label>
+                    <span className="text-muted">Cancelled</span>
+                  </div>
+                ) : (
+                  <div className={`sum-box ${sbBalance > 0 ? 'sum-danger' : sbBalance < 0 ? 'sum-refund' : 'sum-refund'}`}>
+                    <label>{sbBalance < 0 ? 'Refund' : sbBalance === 0 ? 'Status' : 'Balance'}</label>
+                    <span>{sbBalance === 0 ? 'Fully paid' : formatCurrency(Math.abs(sbBalance))}</span>
+                  </div>
+                )}
               </div>
 
               <div className="detail-body">
+
+                {/* Why this booking was cancelled */}
+                {sbCancelled && sb.cancelReason && (
+                  <p className="cancel-note">{sb.cancelReason}</p>
+                )}
 
                 {/* ========== EDIT MODE ========== */}
                 {isEditMode && editForm && preview && (
@@ -711,11 +895,15 @@ const Customers = () => {
                         <div className="prev-row minus"><span>Discount</span><span>−{formatCurrency(preview.discount)}</span></div>
                       )}
                       <div className="prev-row strong"><span>New total</span><span>{formatCurrency(preview.net)}</span></div>
-                      <div className="prev-row"><span>Already paid</span><span>{formatCurrency(preview.paid)}</span></div>
-                      <div className={`prev-row strong ${preview.balance < 0 ? 'refund' : preview.balance > 0 ? 'owe' : ''}`}>
-                        <span>{preview.balance < 0 ? 'Refund to customer' : 'New balance'}</span>
-                        <span>{formatCurrency(Math.abs(preview.balance))}</span>
-                      </div>
+                      {!sbAwaiting && (
+                        <>
+                          <div className="prev-row"><span>Already paid</span><span>{formatCurrency(preview.paid)}</span></div>
+                          <div className={`prev-row strong ${preview.balance < 0 ? 'refund' : preview.balance > 0 ? 'owe' : ''}`}>
+                            <span>{preview.balance < 0 ? 'Refund to customer' : 'New balance'}</span>
+                            <span>{formatCurrency(Math.abs(preview.balance))}</span>
+                          </div>
+                        </>
+                      )}
                       {preview.diff !== 0 && (
                         <p className={`prev-diff ${preview.diff < 0 ? 'down' : 'up'}`}>
                           {preview.diff < 0
@@ -790,29 +978,77 @@ const Customers = () => {
                         )}
 
                         <div className="receipt-row total"><span>Total</span><span>{formatCurrency(sbNet)}</span></div>
-                        <div className="receipt-row"><span>Already paid</span><span className="text-success">{formatCurrency(sb.down)}</span></div>
-                        <div className={`receipt-row balance ${sbBalance < 0 ? 'refund' : ''}`}>
-                          <span>{sbBalance < 0 ? 'Refund to customer' : 'Balance'}</span>
-                          <span>{formatCurrency(Math.abs(sbBalance))}</span>
-                        </div>
+
+                        {sbAwaiting ? (
+                          <div className="receipt-wait">
+                            Awaiting downpayment. The balance will show after the downpayment is confirmed.
+                          </div>
+                        ) : (
+                          <>
+                            <div className="receipt-row"><span>Already paid</span><span className="text-success">{formatCurrency(sb.down)}</span></div>
+                            {!sbCancelled && (
+                              <div className={`receipt-row balance ${sbBalance < 0 ? 'refund' : sbBalance === 0 ? 'paid' : ''}`}>
+                                <span>{sbBalance < 0 ? 'Refund to customer' : sbBalance === 0 ? 'Fully paid' : 'Balance'}</span>
+                                <span>{formatCurrency(Math.abs(sbBalance))}</span>
+                              </div>
+                            )}
+                          </>
+                        )}
 
                         <div className="receipt-row muted"><span>Security deposit (separate)</span><span>{formatCurrency(sb.deposit)}</span></div>
                         {sb.swapCharges > 0 && (
                           <div className="receipt-row muted"><span>🔄 Swap charges (separate)</span><span>{formatCurrency(sb.swapCharges)}</span></div>
                         )}
+                        {Number(sb.penaltyPaid) > 0 && (
+                          <div className="receipt-row muted"><span>Penalty paid</span><span className="text-success">{formatCurrency(sb.penaltyPaid)}</span></div>
+                        )}
                         {sbPenalty > 0 && (
-                          <div className="receipt-row penalty"><span>⚠️ Penalty</span><span>{formatCurrency(sbPenalty)}</span></div>
+                          <div className="receipt-row penalty"><span>⚠️ Penalty (unpaid)</span><span>{formatCurrency(sbPenalty)}</span></div>
                         )}
                       </div>
 
-                      {sbBalance > 0 && (
-                        <div className="partial-pay-input-grp">
-                          <input type="number" placeholder="Amount to pay" value={partialPayAmt} onChange={e => setPartialPayAmt(e.target.value)} />
-                          <button className="btn-pay-small" onClick={() => handleUpdatePayment(sb)}><CreditCard size={13} /> Pay</button>
+                      {/* Balance payment: only after the downpayment is confirmed */}
+                      {sbBalance > 0 && !sbAwaiting && !sbCancelled && (
+                        <div className="pay-box">
+                          <p className="pay-box-label">Pay balance</p>
+                          <div className="partial-pay-input-grp">
+                            <input type="number" min="0" placeholder="Amount to pay" value={partialPayAmt} onChange={e => setPartialPayAmt(e.target.value)} />
+                            <button className="btn-pay-small" onClick={() => handleUpdatePayment(sb)}><CreditCard size={13} /> Pay</button>
+                          </div>
                         </div>
                       )}
-                      {sbBalance < 0 && (
+                      {sbBalance < 0 && !sbCancelled && (
                         <p className="refund-note">The amount paid exceeds the new total. Give {formatCurrency(Math.abs(sbBalance))} back to the customer.</p>
+                      )}
+
+                      {/* Penalty payment: while claimed (late) or after the gown is returned or cancelled */}
+                      {sbPenalty > 0 && !sbAwaiting && (
+                        <div className="pay-box penalty-box">
+                          <div className="pay-box-head">
+                            <p className="pay-box-label">Pay penalty</p>
+                            <strong>{formatCurrency(sbPenalty)} unpaid</strong>
+                          </div>
+                          <div className="partial-pay-input-grp">
+                            <input
+                              type="number"
+                              min="0"
+                              placeholder="Amount to pay"
+                              value={penaltyPayAmt}
+                              onChange={e => setPenaltyPayAmt(e.target.value)}
+                            />
+                            <button className="btn-pay-small btn-pay-penalty-small" onClick={() => handlePayPenalty(sb)}>
+                              <CreditCard size={13} /> Pay
+                            </button>
+                          </div>
+                          <div className="penalty-actions">
+                            <button type="button" className="quick-chip" onClick={() => setPenaltyPayAmt(String(sbPenalty))}>
+                              Fill full amount
+                            </button>
+                            {sb.returnStatus === 'claimed' && (
+                              <span className="penalty-hint">Late penalty grows every day until the gown is returned.</span>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
 
@@ -820,24 +1056,24 @@ const Customers = () => {
                     <div className="info-block">
                       <div className="addon-head">
                         <label><RefreshCw size={13} /> Add-ons & Swap</label>
-                        <button className="manage-btn" onClick={() => setIsSwapMode(!isSwapMode)}>
-                          {isSwapMode ? 'Close' : 'Manage'}
-                        </button>
+                        {!sbCancelled && (
+                          <button className="manage-btn" onClick={() => setIsSwapMode(!isSwapMode)}>
+                            {isSwapMode ? 'Close' : 'Manage'}
+                          </button>
+                        )}
                       </div>
 
-                      {/* Package included with the gown */}
-                      {sbHasPackage && (
+                      {/* Shown only when the booking is missing part of the gown package */}
+                      {sbPackageMissing && !sbCancelled && (
                         <div className="included-box">
                           <p className="included-title"><Package size={13} /> Included with this gown</p>
                           <div className="addon-summary">
                             {sbIncPetti && <span className="addon-chip chip-petti">🩱 Layer {sbIncPetti.layer}</span>}
                             {sbIncAccs.map(a => <span key={a.id} className="addon-chip chip-acc">👑 {a.name}</span>)}
                           </div>
-                          {sbPackageMissing && (
-                            <button className="btn-apply-package" onClick={() => handleApplyPackage(sb)}>
-                              Apply included package
-                            </button>
-                          )}
+                          <button className="btn-apply-package" onClick={() => handleApplyPackage(sb)}>
+                            Apply included package
+                          </button>
                         </div>
                       )}
 
@@ -852,13 +1088,13 @@ const Customers = () => {
                             ? <span className="addon-chip chip-more">No accessories</span>
                             : sb.addons.map((a, i) => (
                                 <span key={i} className="addon-chip chip-acc">
-                                  👑 {a.name}{Number(a.price) > 0 ? ` · ₱${a.price}` : ''}
+                                  👑 {a.name}{Number(a.price) > 0 ? ` · ₱${a.price}` : ' · Included'}
                                 </span>
                               ))}
                         </div>
                       )}
 
-                      {isSwapMode && (
+                      {isSwapMode && !sbCancelled && (
                         <div className="addon-panel">
                           <p className="addon-group-title">🩱 Petticoat</p>
                           <div className="addon-swap-btns">
@@ -893,7 +1129,7 @@ const Customers = () => {
                           <div className="addon-swap-btns">
                             {accessories.length === 0 && <span className="empty-inline">No accessories in inventory yet.</span>}
                             {accessories.map(acc => {
-                              const has = (sb.addons || []).find(a => a.id === acc.id);
+                              const has = (sb.addons || []).find(a => String(a.id) === String(acc.id));
                               const isIncluded = sbIncAccs.some(a => a.id === acc.id);
                               return (
                                 <button
@@ -914,12 +1150,17 @@ const Customers = () => {
                       )}
                     </div>
 
-                    {/* ONLINE HOLD */}
-                    {sb.isOnlineHold && !isConfirmingHold && (
+                    {/* ONLINE HOLD (the only place where the downpayment is entered) */}
+                    {sbAwaiting && !isConfirmingHold && (
                       <div className="info-block hold-block">
                         <label><ShieldAlert size={13} /> Online Hold</label>
                         <div className="data-field">
                           <p>{sb.customerMessage || 'No message.'}</p>
+                          <p className="hold-compete">
+                            {sbCompetitors > 0
+                              ? `${sbCompetitors} other customer${sbCompetitors === 1 ? ' is' : 's are'} also holding this gown. The first downpayment gets it.`
+                              : 'No other customer is holding this gown.'}
+                          </p>
                           <button className="btn-confirm-hold-trigger" onClick={() => setIsConfirmingHold(true)}>Confirm & Finalize</button>
                         </div>
                       </div>
@@ -929,8 +1170,8 @@ const Customers = () => {
                       <div className="info-block confirm-hold-area">
                         <label><CheckCircle2 size={13} /> Complete Information</label>
                         <div className="hold-edit-fields">
-                          <div className="input-grp"><label>Downpayment</label><input type="number" onChange={e => setHoldData({...holdData, downpayment: e.target.value})} /></div>
-                          <div className="input-grp"><label>Deposit</label><input type="number" onChange={e => setHoldData({...holdData, deposit: e.target.value})} /></div>
+                          <div className="input-grp"><label>Downpayment</label><input type="number" min="0" onChange={e => setHoldData({...holdData, downpayment: e.target.value})} /></div>
+                          <div className="input-grp"><label>Deposit</label><input type="number" min="0" onChange={e => setHoldData({...holdData, deposit: e.target.value})} /></div>
                           <div className="input-grp"><label>Reservation Date</label><input type="date" onChange={e => setHoldData({...holdData, reservationDate: e.target.value})} /></div>
                           <div className="input-grp"><label>Return Date</label><input type="date" required onChange={e => setHoldData({...holdData, returnDate: e.target.value})} /></div>
                           <div className="input-grp"><label>Penalty Rate</label><input type="number" defaultValue="500" onChange={e => setHoldData({...holdData, penaltyRate: e.target.value})} /></div>
@@ -946,10 +1187,6 @@ const Customers = () => {
               {/* ACTION BUTTONS */}
               {!isEditMode && (
                 <div className="modal-action-footer-btns">
-                  {sbPenalty > 0 && !sb.isPenaltySettled &&
-                   (sb.returnStatus === 'returned' || sb.returnStatus === 'cancelled') && (
-                    <button className="act-btn btn-pay-penalty" onClick={() => handlePayPenalty(sb)}><Banknote size={15} /> Pay Penalty</button>
-                  )}
                   {sb.returnStatus === 'pending' && !sb.isOnlineHold && (
                     <button className="act-btn btn-claim" onClick={() => handleProcessAction(sb, 'claimed')}><HandHelping size={15} /> Claim Gown</button>
                   )}

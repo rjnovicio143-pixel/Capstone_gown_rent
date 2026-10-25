@@ -2,6 +2,7 @@
    DESKTOP SIDEBAR
 ========================================= */
 .sidebar {
+  box-sizing: border-box;   /* ← gidugang: mao ni ang nag-ayo sa gilapdon */
   width: 220px;
   background: linear-gradient(180deg, #1e1e1e 0%, #121212 100%);
   height: 100vh;
@@ -165,6 +166,7 @@
     text-decoration: none;
     color: #a3a3a3;
     flex: 1;
+    min-width: 0;            /* ← gidugang: para dili mo-sobra kung 6 ka items */
     padding: 6px 4px;
     border-radius: 10px;
     transition: color 0.2s;

@@ -6,6 +6,7 @@
 
 .main-wrapper {
   flex: 1;
+  min-width: 0;            /* ← IMPORTANTE: dili mo-blowout ang layout */
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
@@ -15,7 +16,7 @@
 .main-wrapper.sidebar-closed { margin-left: 80px;  }
 
 .page-content  { padding: 30px; }
-.content-area  { width: 100%; }
+.content-area  { width: 100%; min-width: 0; }   /* ← gidugang ang min-width */
 
 /* =========================================
    MOBILE — bottom nav, no sidebar
@@ -47,7 +48,8 @@
   .avail-page-container,
   .reports-wrapper,
   .settings-container,
-  .activity-log-container {
+  .activity-log-container,
+  .am-page-container {            /* ← gidugang ang AdminMannequin */
     margin-left: 0 !important;
   }
 }

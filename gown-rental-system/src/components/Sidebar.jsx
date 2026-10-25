@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Shirt, CalendarCheck, Users,
-  FileBarChart, ChevronLeft
+  FileBarChart, ChevronLeft, Box
 } from 'lucide-react';
 import '../styles/Sidebar.css';
 
@@ -12,6 +12,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
     { name: 'Gown Inventory', icon: Shirt,            path: '/admin/inventory'   },
     { name: 'Availability',   icon: CalendarCheck,    path: '/admin/availability'},
     { name: 'Customers',      icon: Users,            path: '/admin/customers'   },
+    { name: '3D Mannequin',   icon: Box,             path: '/admin/mannequin'    },
     { name: 'Reports',        icon: FileBarChart,     path: '/admin/reports'     },
   ];
 

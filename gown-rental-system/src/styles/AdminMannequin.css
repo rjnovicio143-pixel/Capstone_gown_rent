@@ -1,0 +1,203 @@
+:root {
+  --m3d-bg-card: #ffffff;
+  --m3d-text-dark: #1e293b;
+  --m3d-text-gray: #64748b;
+  --m3d-gold: #d4af37;
+  --m3d-gold-light: #faf5e6;
+  --m3d-border: #e2e8f0;
+  --m3d-shadow: 0 10px 30px rgba(212, 175, 55, 0.04);
+}
+
+/* ================= PAGE ================= */
+.am-page-container {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  padding: 24px;
+  background: #f8f9fa;
+  min-height: 100vh;
+  color: var(--m3d-text-dark);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.am-hero { margin-bottom: 20px; }
+.am-hero h1 { font-size: 24px; font-weight: 700; color: #333; margin: 0; }
+.am-hero p  { font-size: 14px; color: #777; margin: 4px 0 0; }
+
+/* ================= GRID LAYOUT ================= */
+.am-grid-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 280px;
+  gap: 20px;
+}
+.am-grid-layout > * { min-width: 0; }
+
+/* Medium screens: controls + canvas sa taas, gown list sa ubos */
+@media (max-width: 1300px) {
+  .am-grid-layout { grid-template-columns: 260px minmax(0, 1fr); }
+  .am-gown-panel { grid-column: 1 / -1; }
+  .am-gown-panel .gown-grid-selector {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    max-height: none;
+  }
+}
+
+/* Gamay nga screens / mobile */
+@media (max-width: 900px) {
+  .am-grid-layout { grid-template-columns: minmax(0, 1fr); }
+  .am-page-container { padding: 16px 16px 90px; } /* space para sa mobile bottom nav */
+}
+
+/* ================= CARDS ================= */
+.am-section-card {
+  box-sizing: border-box;
+  background: var(--m3d-bg-card);
+  border: 1px solid var(--m3d-border);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: var(--m3d-shadow);
+  margin-bottom: 20px;
+}
+.am-section-card h3 {
+  font-size: 1.05rem; font-weight: 700; margin: 0 0 6px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-subtitle { font-size: 0.85rem; color: var(--m3d-text-gray); margin: 0 0 16px; }
+
+/* ================= GENDER TABS ================= */
+.gender-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.gender-btn {
+  background: #f8fafc; color: var(--m3d-text-gray);
+  border: 1px solid var(--m3d-border); padding: 12px;
+  border-radius: 12px; font-weight: 600; cursor: pointer; transition: all .2s;
+}
+.gender-btn:hover { background: #f1f5f9; }
+.gender-btn.active {
+  background: var(--m3d-gold-light); color: var(--m3d-gold); border-color: var(--m3d-gold);
+}
+
+/* ================= SIZE PRESETS ================= */
+.presets-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.preset-btn {
+  background: #f8fafc; border: 1px solid var(--m3d-border);
+  color: var(--m3d-text-gray); padding: 10px 14px; border-radius: 10px;
+  font-weight: 700; cursor: pointer; transition: all .2s; min-width: 46px;
+}
+.preset-btn:hover { border-color: var(--m3d-gold); color: var(--m3d-gold); }
+.preset-btn.active { background: var(--m3d-gold); border-color: var(--m3d-gold); color: #fff; }
+
+/* ================= SLIDERS ================= */
+.slider-group { margin-bottom: 18px; }
+.slider-group:last-child { margin-bottom: 0; }
+.slider-label {
+  display: flex; justify-content: space-between;
+  font-size: 0.85rem; font-weight: 600; margin-bottom: 6px;
+}
+.slider-group input[type="range"] { width: 100%; accent-color: var(--m3d-gold); cursor: pointer; }
+
+/* ================= 3D CANVAS ================= */
+.am-canvas-panel { min-width: 0; }
+
+.am-canvas-wrapper {
+  box-sizing: border-box;
+  min-width: 0;
+  background: var(--m3d-bg-card);
+  border: 1px solid var(--m3d-border);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: var(--m3d-shadow);
+  display: flex;
+  flex-direction: column;
+  height: clamp(480px, 75vh, 640px);   /* mo-fit sa gamay nga screen */
+}
+
+.canvas-header {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.live-badge { font-size: .85rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.live-dot {
+  width: 8px; height: 8px; background: var(--m3d-gold);
+  border-radius: 50%; box-shadow: 0 0 8px var(--m3d-gold);
+}
+.active-item-tag {
+  background: var(--m3d-gold-light); color: var(--m3d-gold);
+  padding: 6px 14px; border-radius: 30px; font-size: .8rem; font-weight: 700;
+}
+
+.canvas-viewport-container {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background: radial-gradient(circle, #fff 40%, #f7f5ef 100%);
+  border-radius: 16px;
+  border: 1px solid var(--m3d-border);
+}
+.m3d-loading-text { padding: 20px; color: var(--m3d-text-gray); font-size: 13px; }
+
+/* ================= GOWN LIST ================= */
+.am-gown-panel { min-width: 0; }
+
+.am-search { position: relative; margin-bottom: 14px; }
+.am-search-icon { position: absolute; left: 12px; top: 11px; color: #aaa; }
+.am-search input {
+  width: 100%; box-sizing: border-box;
+  padding: 8px 12px 8px 34px; border-radius: 20px;
+  border: 1px solid var(--m3d-border); font-size: 13px;
+}
+.am-search input:focus { outline: none; border-color: var(--m3d-gold); }
+
+.gown-grid-selector {
+  display: grid; grid-template-columns: 1fr; gap: 12px;
+  max-height: 480px; overflow-y: auto; padding-right: 4px;
+}
+.gown-grid-selector::-webkit-scrollbar { width: 4px; }
+.gown-grid-selector::-webkit-scrollbar-thumb { background: var(--m3d-gold); border-radius: 10px; }
+
+.gown-select-card {
+  background: #f8fafc; border: 2px solid transparent; border-radius: 14px;
+  padding: 10px; display: flex; align-items: center; gap: 12px;
+  cursor: pointer; transition: all .2s; min-width: 0;
+}
+.gown-select-card:hover { border-color: rgba(212,175,55,.3); transform: translateY(-1px); }
+.gown-select-card.selected { background: var(--m3d-gold-light); border-color: var(--m3d-gold); }
+
+.gown-thumbnail-wrapper {
+  width: 56px; height: 56px; border-radius: 10px; overflow: hidden;
+  background: #e2e8f0; flex-shrink: 0;
+}
+.gown-thumbnail-wrapper img { width: 100%; height: 100%; object-fit: cover; }
+
+.gown-meta-details { min-width: 0; }
+.gown-meta-details h4 {
+  font-size: .9rem; margin: 0 0 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.size-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.size-badge {
+  background: var(--m3d-gold); color: #fff; padding: 2px 6px;
+  border-radius: 5px; font-size: .7rem; font-weight: 700; text-transform: uppercase;
+}
+
+/* ================= BADGES ================= */
+.stock-badge {
+  padding: 2px 8px; border-radius: 20px; font-size: .68rem; font-weight: 700;
+}
+.stock-badge.in  { background: #e6f9ee; color: #1d8348; }
+.stock-badge.out { background: #fff0f0; color: #ff416c; }
+
+.example-badge {
+  background: #eef2ff; color: #4f46e5;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: .68rem; font-weight: 700;
+}
+.no3d-badge {
+  background: #f1f5f9; color: #64748b;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: .68rem; font-weight: 700;
+}
+
+.am-empty { font-size: 13px; color: #aaa; font-style: italic; }

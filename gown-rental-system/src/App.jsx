@@ -10,6 +10,7 @@ import Customers from './pages-admin/Customers';
 import Reports from './pages-admin/Reports'; 
 import Settings from './pages-admin/Settings';
 import ActivityLog from './pages-admin/ActivityLog';
+import AdminMannequin from './pages-admin/AdminMannequin';
 
 // I-import ang mga Public Pages (Gikan sa imong pages-public folder)
 import Home from './pages-public/Home';
@@ -128,6 +129,7 @@ function App() {
                     <Route path="customers" element={<Customers isCollapsed={isCollapsed} />} />
                     <Route path="reports" element={<Reports isCollapsed={isCollapsed} />} />
                     <Route path="settings" element={<Settings isCollapsed={isCollapsed} />} />
+                    <Route path="mannequin" element={<AdminMannequin isCollapsed={isCollapsed} />} />
                     <Route path="activity-log" element={<ActivityLog isCollapsed={isCollapsed} />} />
                     <Route path="*" element={<Navigate to="dashboard" replace />} />
                   </Routes>

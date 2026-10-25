@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Search, Calendar, ArrowRight, Sparkles, Tag } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, ArrowRight, Tag, Sparkles } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import '../styles-public/Home.css';
 
 const Home = () => {
   const navigate = useNavigate();
-  const [topGowns, setTopGowns]   = useState([]);
-  const [allGowns, setAllGowns]   = useState([]);
-  const [current, setCurrent]     = useState(0);
-  const [loading, setLoading]     = useState(true);
+  const [topGowns, setTopGowns]       = useState([]);
+  const [allGowns, setAllGowns]       = useState([]);
+  const [current, setCurrent]         = useState(0);
+  const [loading, setLoading]         = useState(true);
   const [activeFilter, setActiveFilter] = useState('All');
 
   useEffect(() => {
@@ -17,18 +17,14 @@ const Home = () => {
       const { data: top } = await supabase
         .from('gowns')
         .select('id, name, price, category, desc, size, image, stock')
-        .eq('is_posted', true)
-        .gt('price', 0)
-        .order('price', { ascending: false })
-        .limit(3);
+        .eq('is_posted', true).gt('price', 0)
+        .order('price', { ascending: false }).limit(3);
 
       const { data: all } = await supabase
         .from('gowns')
         .select('id, name, price, category, image, stock, size')
-        .eq('is_posted', true)
-        .gt('price', 0)
-        .order('created_at', { ascending: false })
-        .limit(8);
+        .eq('is_posted', true).gt('price', 0)
+        .order('created_at', { ascending: false }).limit(8);
 
       if (top) setTopGowns(top);
       if (all) setAllGowns(all);
@@ -37,7 +33,6 @@ const Home = () => {
     fetchGowns();
   }, []);
 
-  // Auto-advance
   useEffect(() => {
     if (topGowns.length <= 1) return;
     const t = setInterval(() => setCurrent(c => (c + 1) % topGowns.length), 5000);
@@ -48,77 +43,67 @@ const Home = () => {
   const next = useCallback(() => setCurrent(c => (c + 1) % topGowns.length), [topGowns]);
 
   const g = topGowns[current];
-
   const categories = ['All', ...new Set(allGowns.map(g => g.category).filter(Boolean))];
-  const filtered = activeFilter === 'All'
-    ? allGowns
-    : allGowns.filter(g => g.category === activeFilter);
+  const filtered = activeFilter === 'All' ? allGowns : allGowns.filter(g => g.category === activeFilter);
 
   return (
     <div className="hp-page">
 
       {/* ── HERO ── */}
       <section className="hp-hero">
-        <div className="hp-hero-top">
-          <div className="hp-greeting">
+
+        {/* Greeting */}
+        <div className="hp-greeting">
+          <div>
             <h1>Find Your <span>Dream Gown</span></h1>
             <p>Premium gown rentals for your special day</p>
           </div>
-          <button className="hp-search-btn" onClick={() => navigate('/gown-suit')}>
-            <Search size={16} /> Search gowns...
-          </button>
         </div>
 
-        {/* Featured Carousel Card */}
-        <div className="hp-featured-card-wrap">
+        {/* Featured Carousel */}
+        <div className="hp-carousel-wrap">
           {loading ? (
-            <div className="hp-hero-card hp-hero-card-loading">
-              <div className="hp-spinner" />
-            </div>
+            <div className="hp-card-shell hp-card-loading"><div className="hp-spin" /></div>
           ) : g ? (
-            <div className="hp-hero-card" key={g.id}>
-              {/* BG Image */}
+            <div className="hp-card-shell" key={g.id}>
               {g.image
-                ? <img src={g.image} alt={g.name} className="hp-hero-card-img" />
-                : <div className="hp-hero-card-noimg">👗</div>
+                ? <img src={g.image} alt={g.name} className="hp-card-img" />
+                : <div className="hp-card-noimg">👗</div>
               }
-              <div className="hp-hero-card-overlay" />
+              <div className="hp-card-gradient" />
 
-              {/* Top badges */}
-              <div className="hp-hero-card-top">
-                <span className="hp-badge-featured"><Sparkles size={11} /> Featured</span>
-                <span className="hp-badge-price">₱{Number(g.price).toLocaleString()}</span>
+              {/* Badges */}
+              <div className="hp-card-badges">
+                <span className="hp-badge-feat"><Sparkles size={11} /> Featured</span>
+                <span className="hp-badge-amt">₱{Number(g.price).toLocaleString()}</span>
               </div>
 
-              {/* Bottom info */}
-              <div className="hp-hero-card-bottom">
-                <div className="hp-hero-card-info">
-                  <span className="hp-hero-card-cat">{g.category}</span>
-                  <h2 className="hp-hero-card-name">{g.name}</h2>
-                  {g.desc && <p className="hp-hero-card-desc">{g.desc}</p>}
+              {/* Info + button */}
+              <div className="hp-card-foot">
+                <div className="hp-card-text">
+                  <span className="hp-card-cat">{g.category}</span>
+                  <h2 className="hp-card-name">{g.name}</h2>
+                  {g.desc && <p className="hp-card-desc">{g.desc}</p>}
                 </div>
-                <button className="hp-hero-reserve-btn" onClick={() => navigate('/gown-suit')}>
-                  <Calendar size={15} /> Reserve
+                <button className="hp-card-btn" onClick={() => navigate('/gown-suit')}>
+                  <Calendar size={14} /> Reserve
                 </button>
               </div>
 
               {/* Arrows */}
               {topGowns.length > 1 && (
                 <>
-                  <button className="hp-card-arrow hp-card-arrow-l" onClick={prev}><ChevronLeft size={18} /></button>
-                  <button className="hp-card-arrow hp-card-arrow-r" onClick={next}><ChevronRight size={18} /></button>
+                  <button className="hp-arrow hp-arrow-l" onClick={prev}><ChevronLeft size={18} /></button>
+                  <button className="hp-arrow hp-arrow-r" onClick={next}><ChevronRight size={18} /></button>
                 </>
               )}
             </div>
           ) : (
-            <div className="hp-hero-card hp-hero-card-empty">
-              <p>No featured gowns yet.</p>
-            </div>
+            <div className="hp-card-shell hp-card-empty">No featured gowns yet.</div>
           )}
 
-          {/* Dots */}
           {topGowns.length > 1 && (
-            <div className="hp-hero-dots">
+            <div className="hp-dots">
               {topGowns.map((_, i) => (
                 <button key={i} className={`hp-dot ${i === current ? 'active' : ''}`} onClick={() => setCurrent(i)} />
               ))}
@@ -126,39 +111,30 @@ const Home = () => {
           )}
         </div>
 
-        {/* Quick stats row */}
-        <div className="hp-quick-stats">
-          <div className="hp-qstat">
-            <strong>{allGowns.length}+</strong>
-            <span>Gowns</span>
-          </div>
-          <div className="hp-qstat-sep" />
-          <div className="hp-qstat">
-            <strong>Free</strong>
-            <span>Hold</span>
-          </div>
-          <div className="hp-qstat-sep" />
-          <div className="hp-qstat">
-            <strong>Fast</strong>
-            <span>Confirm</span>
-          </div>
+        {/* Stats */}
+        <div className="hp-stats">
+          <div className="hp-stat"><strong>{allGowns.length}+</strong><span>Gowns</span></div>
+          <div className="hp-stat-div" />
+          <div className="hp-stat"><strong>Free</strong><span>Hold</span></div>
+          <div className="hp-stat-div" />
+          <div className="hp-stat"><strong>Fast</strong><span>Confirm</span></div>
         </div>
       </section>
 
-      {/* ── EXPLORE MORE ── */}
+      {/* ── EXPLORE ── */}
       <section className="hp-explore">
-        <div className="hp-section-row">
+        <div className="hp-row">
           <div>
-            <span className="hp-eyebrow"><Tag size={12} /> Collection</span>
-            <h2 className="hp-section-title">Explore More <span>✨</span></h2>
+            <span className="hp-eyebrow"><Tag size={11} /> Collection</span>
+            <h2 className="hp-sec-title">Explore More <span>✨</span></h2>
           </div>
           <button className="hp-see-all" onClick={() => navigate('/gown-suit')}>
-            See All <ArrowRight size={14} />
+            See All <ArrowRight size={13} />
           </button>
         </div>
 
-        {/* Category filter pills */}
-        <div className="hp-filter-pills">
+        {/* Filter pills */}
+        <div className="hp-pills">
           {categories.map(cat => (
             <button
               key={cat}
@@ -170,58 +146,58 @@ const Home = () => {
           ))}
         </div>
 
-        {/* Gown grid */}
+        {/* Grid */}
         {loading ? (
-          <div className="hp-grid-skeleton">
+          <div className="hp-grid">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="hp-skel-card">
+              <div key={i} className="hp-gown-card">
                 <div className="hp-skel hp-skel-img" />
-                <div className="hp-skel hp-skel-text" />
-                <div className="hp-skel hp-skel-price" />
+                <div className="hp-card-body">
+                  <div className="hp-skel hp-skel-sm" />
+                  <div className="hp-skel hp-skel-md" />
+                  <div className="hp-skel hp-skel-sm" />
+                </div>
               </div>
             ))}
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="hp-empty">No gowns in this category yet.</div>
         ) : (
-          <div className="hp-gown-grid">
+          <div className="hp-grid">
             {filtered.map(gown => (
               <div key={gown.id} className="hp-gown-card" onClick={() => navigate('/gown-suit')}>
-                <div className="hp-gown-img-wrap">
+                <div className="hp-gown-img">
                   {gown.image
                     ? <img src={gown.image} alt={gown.name} />
                     : <div className="hp-gown-noimg">👗</div>
                   }
-                  <span className={`hp-gown-avail ${gown.stock > 0 ? 'in' : 'out'}`}>
+                  <span className={`hp-avail ${gown.stock > 0 ? 'in' : 'out'}`}>
                     {gown.stock > 0 ? 'Available' : 'Rented'}
                   </span>
                 </div>
-                <div className="hp-gown-info">
-                  <span className="hp-gown-cat">{gown.category}</span>
-                  <h3 className="hp-gown-name">{gown.name}</h3>
-                  <div className="hp-gown-foot">
-                    <span className="hp-gown-price">₱{Number(gown.price).toLocaleString()}</span>
-                    {gown.size && <span className="hp-gown-size">{gown.size}</span>}
+                <div className="hp-card-body">
+                  <span className="hp-gcat">{gown.category}</span>
+                  <h3 className="hp-gname">{gown.name}</h3>
+                  <div className="hp-gfoot">
+                    <span className="hp-gprice">₱{Number(gown.price).toLocaleString()}</span>
+                    {gown.size && <span className="hp-gsize">{gown.size}</span>}
                   </div>
                 </div>
               </div>
             ))}
           </div>
         )}
-
-        {filtered.length === 0 && !loading && (
-          <div className="hp-no-results">No gowns in this category yet.</div>
-        )}
       </section>
 
-      {/* ── CTA BANNER ── */}
-      <section className="hp-cta-banner">
-        <div className="hp-cta-content">
+      {/* ── CTA ── */}
+      <section className="hp-cta">
+        <div className="hp-cta-body">
           <h2>Ready to Reserve?</h2>
           <p>No login needed — just fill in your details and our admin will confirm your booking.</p>
           <button onClick={() => navigate('/gown-suit')}>
-            <Calendar size={16} /> Browse & Reserve Now
+            <Calendar size={15} /> Browse & Reserve Now
           </button>
         </div>
-        <div className="hp-cta-deco">👗</div>
       </section>
 
     </div>

@@ -6,10 +6,10 @@ import '../styles-public/Home.css';
 
 const Home = () => {
   const navigate = useNavigate();
-  const [topGowns, setTopGowns]       = useState([]);
-  const [allGowns, setAllGowns]       = useState([]);
-  const [current, setCurrent]         = useState(0);
-  const [loading, setLoading]         = useState(true);
+  const [topGowns, setTopGowns]         = useState([]);
+  const [allGowns, setAllGowns]         = useState([]);
+  const [current, setCurrent]           = useState(0);
+  const [loading, setLoading]           = useState(true);
   const [activeFilter, setActiveFilter] = useState('All');
 
   useEffect(() => {
@@ -43,8 +43,8 @@ const Home = () => {
   const next = useCallback(() => setCurrent(c => (c + 1) % topGowns.length), [topGowns]);
 
   const g = topGowns[current];
-  const categories = ['All', ...new Set(allGowns.map(g => g.category).filter(Boolean))];
-  const filtered = activeFilter === 'All' ? allGowns : allGowns.filter(g => g.category === activeFilter);
+  const categories = ['All', ...new Set(allGowns.map(item => item.category).filter(Boolean))];
+  const filtered = activeFilter === 'All' ? allGowns : allGowns.filter(item => item.category === activeFilter);
 
   return (
     <div className="hp-page">
@@ -54,10 +54,8 @@ const Home = () => {
 
         {/* Greeting */}
         <div className="hp-greeting">
-          <div>
-            <h1>Find Your <span>Dream Gown</span></h1>
-            <p>Premium gown rentals for your special day</p>
-          </div>
+          <h1>Find Your <span>Dream Gown</span></h1>
+          <p>Premium gown rentals for your special day</p>
         </div>
 
         {/* Featured Carousel */}
@@ -66,11 +64,15 @@ const Home = () => {
             <div className="hp-card-shell hp-card-loading"><div className="hp-spin" /></div>
           ) : g ? (
             <div className="hp-card-shell" key={g.id}>
-              {g.image
-                ? <img src={g.image} alt={g.name} className="hp-card-img" />
-                : <div className="hp-card-noimg">👗</div>
-              }
-              <div className="hp-card-gradient" />
+
+              {/* Photo (full background on mobile, right side on desktop) */}
+              <div className="hp-card-media">
+                {g.image
+                  ? <img src={g.image} alt={g.name} className="hp-card-img" />
+                  : <div className="hp-card-noimg">👗</div>
+                }
+                <div className="hp-card-gradient" />
+              </div>
 
               {/* Badges */}
               <div className="hp-card-badges">
@@ -93,8 +95,8 @@ const Home = () => {
               {/* Arrows */}
               {topGowns.length > 1 && (
                 <>
-                  <button className="hp-arrow hp-arrow-l" onClick={prev}><ChevronLeft size={18} /></button>
-                  <button className="hp-arrow hp-arrow-r" onClick={next}><ChevronRight size={18} /></button>
+                  <button className="hp-arrow hp-arrow-l" onClick={prev} aria-label="Previous gown"><ChevronLeft size={18} /></button>
+                  <button className="hp-arrow hp-arrow-r" onClick={next} aria-label="Next gown"><ChevronRight size={18} /></button>
                 </>
               )}
             </div>
@@ -105,7 +107,7 @@ const Home = () => {
           {topGowns.length > 1 && (
             <div className="hp-dots">
               {topGowns.map((_, i) => (
-                <button key={i} className={`hp-dot ${i === current ? 'active' : ''}`} onClick={() => setCurrent(i)} />
+                <button key={i} className={`hp-dot ${i === current ? 'active' : ''}`} onClick={() => setCurrent(i)} aria-label={`Show gown ${i + 1}`} />
               ))}
             </div>
           )}

@@ -6,7 +6,7 @@ import {
   Search, Plus, X, Trash2, CheckCircle, AlertTriangle,
   User, Calendar, DollarSign, Briefcase, CheckCircle2,
   HandHelping, Banknote, CreditCard, ShieldAlert,
-  MessageSquare, Download, RefreshCw, Layers, Crown, Edit3, Tag, Save
+  MessageSquare, Download, RefreshCw, Layers, Crown, Edit3, Tag, Save, Package
 } from 'lucide-react';
 import Header from '../components/Header';
 import '../styles/Customers.css';
@@ -20,20 +20,20 @@ const netTotal = (b) => Math.max(0, grossTotal(b) - (Number(b.discount) || 0));
 const formatCurrency = (amt) => `₱${Number(amt || 0).toLocaleString()}`;
 
 const Customers = () => {
-  const [customers, setCustomers]             = useState([]);
-  const [gowns, setGowns]                     = useState([]);
-  const [petticoats, setPetticoats]           = useState([]);
-  const [accessories, setAccessories]         = useState([]);
-  const [searchTerm, setSearchTerm]           = useState('');
-  const [activeTab, setActiveTab]             = useState('all');
-  const [isModalOpen, setIsModalOpen]         = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState(null);
-  const [partialPayAmt, setPartialPayAmt]     = useState('');
+  const [customers, setCustomers]               = useState([]);
+  const [gowns, setGowns]                       = useState([]);
+  const [petticoats, setPetticoats]             = useState([]);
+  const [accessories, setAccessories]           = useState([]);
+  const [searchTerm, setSearchTerm]             = useState('');
+  const [activeTab, setActiveTab]               = useState('all');
+  const [isModalOpen, setIsModalOpen]           = useState(false);
+  const [selectedBooking, setSelectedBooking]   = useState(null);
+  const [partialPayAmt, setPartialPayAmt]       = useState('');
   const [isConfirmingHold, setIsConfirmingHold] = useState(false);
-  const [isSwapMode, setIsSwapMode]           = useState(false); // add-ons panel
-  const [isEditMode, setIsEditMode]           = useState(false); // edit booking
-  const [editForm, setEditForm]               = useState(null);
-  const [saving, setSaving]                   = useState(false);
+  const [isSwapMode, setIsSwapMode]             = useState(false); // add-ons panel
+  const [isEditMode, setIsEditMode]             = useState(false); // edit booking
+  const [editForm, setEditForm]                 = useState(null);
+  const [saving, setSaving]                     = useState(false);
 
   // ── New booking form state ──
   const emptyForm = {
@@ -41,7 +41,7 @@ const Customers = () => {
     gownId: '', gownName: '', rentalPrice: 0,
     petticoatId: null, petticoatName: '', petticoatPrice: 0,
     selectedAccessories: [],
-    petticoat: 'No', bookingDate: '', reservationDate: '',
+    bookingDate: '', reservationDate: '',
     returnDate: '', down: 0, deposit: 0, assistedBy: '',
     commissions: 0, penaltyRate: 500, cancelPenaltyAmt: 200,
     customerMessage: '', discount: 0, discountNote: '',
@@ -50,7 +50,7 @@ const Customers = () => {
 
   const [holdData, setHoldData] = useState({
     downpayment: 0, reservationDate: '', returnDate: '',
-    deposit: 0, petticoat: 'No', penaltyRate: 500,
+    deposit: 0, penaltyRate: 500,
     cancelPenaltyAmt: 200, assistedBy: ''
   });
 
@@ -90,7 +90,7 @@ const Customers = () => {
 
   useEffect(() => { fetchAll(); }, []);
 
-  // I-reload ang gibuksan nga booking human sa usa ka update
+  // Reload the currently opened booking after an update
   const refreshSelected = async (id) => {
     const { data } = await supabase.from('bookings').select('*').eq('id', id).single();
     if (data) setSelectedBooking(mapBooking(data));
@@ -105,7 +105,35 @@ const Customers = () => {
     setPartialPayAmt('');
   };
 
-  // ── NEW RENTAL TOTAL (net sa discount) ──
+  /* ---------- GOWN PACKAGE HELPERS ----------
+     A gown can include a petticoat layer and some accessories.
+     Included items cost 0. Only upgrades or extras are charged. */
+  const gownById = (id) => gowns.find(g => String(g.id) === String(id));
+
+  const includedPettiOf = (gown) =>
+    gown?.petticoat_layer
+      ? petticoats.find(p => Number(p.layer) === Number(gown.petticoat_layer)) || null
+      : null;
+
+  const includedAccsOf = (gown) =>
+    accessories.filter(a => (gown?.included_accessories || []).includes(a.id));
+
+  // Price of a petticoat for a gown: only the difference from the included layer is charged
+  const pettiPriceFor = (gown, petti) => {
+    if (!petti) return 0;
+    const included = includedPettiOf(gown);
+    return Math.max(0, (Number(petti.price) || 0) - (Number(included?.price) || 0));
+  };
+
+  const toAddon = (acc, included) => ({
+    id: acc.id,
+    name: acc.name,
+    price: included ? 0 : (Number(acc.price) || 0),
+    swap_fee: Number(acc.swap_fee) || 0,
+    included: !!included,
+  });
+
+  // ── NEW RENTAL TOTAL (net of discount) ──
   const computeTotal = (form) => {
     const gown = Number(form.rentalPrice) || 0;
     const petti = Number(form.petticoatPrice) || 0;
@@ -135,10 +163,52 @@ const Customers = () => {
     const gown = gowns.find(g => g.id === gownId);
     if (!gown) return true;
     const newStock = (gown.stock || 0) + delta;
-    if (newStock < 0) { alert(`Wala nay stock ang "${gown.name}".`); return false; }
+    if (newStock < 0) { alert(`No stock left for "${gown.name}".`); return false; }
     const { error } = await supabase.from('gowns').update({ stock: newStock, status: newStock > 0 ? 'Available' : 'Out of Stock' }).eq('id', gownId);
     if (error) { alert('Stock update error: ' + error.message); return false; }
     return true;
+  };
+
+  // ── NEW RENTAL: pick a gown and auto-apply its package ──
+  const handleGownSelect = (e) => {
+    const g = gowns.find(x => String(x.id) === e.target.value);
+    if (!g) return;
+    const petti = includedPettiOf(g);
+    setNewCustomer(prev => ({
+      ...prev,
+      gownId: g.id,
+      gownName: g.name,
+      rentalPrice: g.price,
+      petticoatId: petti?.id || null,
+      petticoatName: petti ? `Layer ${petti.layer}` : '',
+      petticoatPrice: 0,
+      selectedAccessories: includedAccsOf(g).map(a => toAddon(a, true)),
+    }));
+  };
+
+  const handleFormPetticoat = (petti) => {
+    const gown = gownById(newCustomer.gownId);
+    setNewCustomer(prev => ({
+      ...prev,
+      petticoatId: petti?.id || null,
+      petticoatName: petti ? `Layer ${petti.layer}` : '',
+      petticoatPrice: pettiPriceFor(gown, petti),
+    }));
+  };
+
+  const toggleFormAccessory = (acc) => {
+    const gown = gownById(newCustomer.gownId);
+    const included = includedAccsOf(gown).some(a => a.id === acc.id);
+    setNewCustomer(prev => {
+      const list = prev.selectedAccessories;
+      const exists = list.find(a => a.id === acc.id);
+      return {
+        ...prev,
+        selectedAccessories: exists
+          ? list.filter(a => a.id !== acc.id)
+          : [...list, toAddon(acc, included)],
+      };
+    });
   };
 
   // ── ADD NEW BOOKING ──
@@ -146,7 +216,7 @@ const Customers = () => {
     e.preventDefault();
     const gross = computeGross(newCustomer);
     const discount = Number(newCustomer.discount) || 0;
-    if (discount < 0 || discount > gross) return alert('Sayop ang discount. Dili pwede mas dako sa total.');
+    if (discount < 0 || discount > gross) return alert('Invalid discount. It cannot be greater than the total.');
     const total = gross - discount;
     const down = Number(newCustomer.down);
     const balance = total - down;
@@ -156,7 +226,7 @@ const Customers = () => {
       name: newCustomer.name, contact: newCustomer.contact,
       gmail: newCustomer.gmail, facebook: newCustomer.facebook,
       gown_id: newCustomer.gownId, gown_name: newCustomer.gownName,
-      petticoat: newCustomer.petticoat,
+      petticoat: newCustomer.petticoatId ? 'Yes' : 'No',
       booking_date: newCustomer.bookingDate,
       reservation_date: newCustomer.reservationDate || null,
       return_date: newCustomer.returnDate || null,
@@ -197,7 +267,7 @@ const Customers = () => {
     setIsConfirmingHold(false);
   };
 
-  // Live preview sa pag-edit
+  // Live preview while editing
   const editPreview = (b, f) => {
     const gross = (Number(f.rentalPrice) || 0) + (Number(b.petticoatPrice) || 0) + addonsTotal(b.addons);
     const discount = Number(f.discount) || 0;
@@ -216,10 +286,10 @@ const Customers = () => {
   const handleSaveEdit = async () => {
     const b = selectedBooking;
     const f = editForm;
-    if (!f.name.trim()) return alert('Kinahanglan ang pangalan.');
+    if (!f.name.trim()) return alert('Name is required.');
     const p = editPreview(b, f);
-    if (p.discount < 0) return alert('Dili pwede negative ang discount.');
-    if (p.discount > p.gross) return alert('Mas dako ang discount kaysa total.');
+    if (p.discount < 0) return alert('Discount cannot be negative.');
+    if (p.discount > p.gross) return alert('Discount cannot be greater than the total.');
 
     setSaving(true);
     const { error } = await supabase.from('bookings').update({
@@ -242,7 +312,7 @@ const Customers = () => {
     if (p.prevNet !== p.net) changes.push(`total ₱${p.prevNet} → ₱${p.net}`);
     if ((Number(b.discount) || 0) !== p.discount) changes.push(`discount ₱${Number(b.discount) || 0} → ₱${p.discount}${f.discountNote ? ` (${f.discountNote})` : ''}`);
     if ((b.returnDate || '') !== f.returnDate) changes.push(`return date ${b.returnDate || 'N/A'} → ${f.returnDate || 'N/A'}`);
-    await logActivity('booking_updated', `Gi-edit ang booking ni ${b.name}${changes.length ? ': ' + changes.join(', ') : ''}`);
+    await logActivity('booking_updated', `Edited booking of ${b.name}${changes.length ? ': ' + changes.join(', ') : ''}`);
 
     await refreshSelected(b.id);
     setIsEditMode(false);
@@ -250,36 +320,46 @@ const Customers = () => {
     fetchAll();
   };
 
-  // ── SWAP PETTICOAT / ACCESSORIES in existing booking ──
+  // ── SWAP PETTICOAT in an existing booking ──
   const handleSwapPetticoat = async (booking, newPetti) => {
-    const swapFee = Number(newPetti?.swap_fee || 0);
+    if ((booking.petticoatId || null) === (newPetti?.id || null)) return; // nothing changed
+
+    const gown = gownById(booking.gownId);
+    const includedPetti = includedPettiOf(gown);
+    const pettiPrice = pettiPriceFor(gown, newPetti);
+    // No swap fee when going back to the included layer
+    const swapFee = newPetti && includedPetti?.id !== newPetti.id ? Number(newPetti.swap_fee || 0) : 0;
     const pettiName = newPetti ? `Layer ${newPetti.layer}` : 'None';
-    const pettiPrice = Number(newPetti?.price || 0);
+
     const gross = Number(booking.rentalPrice) + pettiPrice + addonsTotal(booking.addons);
     const newTotal = Math.max(0, gross - (Number(booking.discount) || 0));
     const newBalance = newTotal - Number(booking.down);
+
     const { error } = await supabase.from('bookings').update({
+      petticoat: newPetti ? 'Yes' : 'No',
       petticoat_id: newPetti?.id || null,
       petticoat_price: pettiPrice,
       swap_charges: Number(booking.swapCharges || 0) + swapFee,
       total_rent: newTotal, balance: newBalance,
     }).eq('id', booking.id);
     if (error) { alert('Error: ' + error.message); return; }
-    await logActivity('booking_updated', `${booking.name} swapped petticoat to ${pettiName} (+₱${swapFee} swap fee)`);
+    await logActivity('booking_updated', `${booking.name} changed petticoat to ${pettiName}${pettiPrice > 0 ? ` (+₱${pettiPrice})` : ''}${swapFee > 0 ? ` (swap fee ₱${swapFee})` : ''}`);
     fetchAll();
     await refreshSelected(booking.id);
   };
 
+  // ── ADD / REMOVE ACCESSORY in an existing booking ──
   const handleToggleAddon = async (booking, acc) => {
+    const gown = gownById(booking.gownId);
+    const included = includedAccsOf(gown).some(a => a.id === acc.id);
     const current = booking.addons || [];
     const exists = current.find(a => a.id === acc.id);
-    let newAddons, swapFeeAdd = 0;
-    if (exists) {
-      newAddons = current.filter(a => a.id !== acc.id);
-    } else {
-      newAddons = [...current, { id: acc.id, name: acc.name, price: acc.price, swap_fee: acc.swap_fee }];
-      swapFeeAdd = Number(acc.swap_fee || 0);
-    }
+
+    const newAddons = exists
+      ? current.filter(a => a.id !== acc.id)
+      : [...current, toAddon(acc, included)];
+    const swapFeeAdd = !exists && !included ? Number(acc.swap_fee || 0) : 0;
+
     const gross = Number(booking.rentalPrice) + Number(booking.petticoatPrice || 0) + addonsTotal(newAddons);
     const newTotal = Math.max(0, gross - (Number(booking.discount) || 0));
     const newBalance = newTotal - Number(booking.down);
@@ -288,7 +368,41 @@ const Customers = () => {
       swap_charges: Number(booking.swapCharges || 0) + swapFeeAdd,
     }).eq('id', booking.id);
     if (error) { alert('Error: ' + error.message); return; }
-    await logActivity('booking_updated', `${booking.name} ${exists ? 'removed' : 'added'} ${acc.name} addon`);
+    await logActivity('booking_updated', `${booking.name} ${exists ? 'removed' : 'added'} ${acc.name}`);
+    fetchAll();
+    await refreshSelected(booking.id);
+  };
+
+  // ── APPLY THE GOWN PACKAGE to an existing booking (for older bookings) ──
+  const handleApplyPackage = async (booking) => {
+    const gown = gownById(booking.gownId);
+    const petti = includedPettiOf(gown);
+    const incAccs = includedAccsOf(gown);
+    if (!petti && incAccs.length === 0) return alert('This gown has no included package.');
+
+    const current = booking.addons || [];
+    const missing = incAccs
+      .filter(a => !current.some(c => c.id === a.id))
+      .map(a => toAddon(a, true));
+    const newAddons = [...current, ...missing];
+
+    const applyPetti = !!petti && !booking.petticoatId;
+    const pettiId = applyPetti ? petti.id : (booking.petticoatId || null);
+    const pettiPrice = applyPetti ? 0 : Number(booking.petticoatPrice || 0);
+
+    const gross = Number(booking.rentalPrice) + pettiPrice + addonsTotal(newAddons);
+    const newTotal = Math.max(0, gross - (Number(booking.discount) || 0));
+    const newBalance = newTotal - Number(booking.down);
+
+    const { error } = await supabase.from('bookings').update({
+      petticoat: pettiId ? 'Yes' : 'No',
+      petticoat_id: pettiId,
+      petticoat_price: pettiPrice,
+      addons: newAddons,
+      total_rent: newTotal, balance: newBalance,
+    }).eq('id', booking.id);
+    if (error) { alert('Error: ' + error.message); return; }
+    await logActivity('booking_updated', `Applied included package of "${booking.gownName}" to ${booking.name}`);
     fetchAll();
     await refreshSelected(booking.id);
   };
@@ -347,7 +461,7 @@ const Customers = () => {
       down: newDown, balance: total - newDown,
       reservation_date: holdData.reservationDate || null,
       return_date: holdData.returnDate,
-      deposit: Number(holdData.deposit), petticoat: holdData.petticoat,
+      deposit: Number(holdData.deposit),
       penalty_rate: Number(holdData.penaltyRate),
       cancel_penalty_amt: Number(holdData.cancelPenaltyAmt),
       assisted_by: holdData.assistedBy,
@@ -368,18 +482,24 @@ const Customers = () => {
   };
 
   const handleExportExcel = () => {
-    const data = filtered.map(c => ({
-      Name: c.name, Contact: c.contact, Gmail: c.gmail || '',
-      Gown: c.gownName, Status: c.returnStatus,
-      'Booking Date': c.bookingDate, 'Return Date': c.returnDate || '',
-      'Rental Price': c.rentalPrice, 'Petticoat': c.petticoatPrice > 0 ? `+₱${c.petticoatPrice}` : 'None',
-      'Accessories': (c.addons || []).map(a => a.name).join(', ') || 'None',
-      'Swap Charges': c.swapCharges || 0,
-      Discount: c.discount || 0, 'Discount Note': c.discountNote || '',
-      'Total (after discount)': netTotal(c),
-      Downpayment: c.down, Deposit: c.deposit, Balance: c.balance,
-      Penalty: c.penaltyPaid || 0, Commission: c.commissions,
-    }));
+    const data = filtered.map(c => {
+      const petti = petticoats.find(p => p.id === c.petticoatId);
+      const pettiLabel = c.petticoatId
+        ? `${petti ? `Layer ${petti.layer}` : 'Yes'}${c.petticoatPrice > 0 ? ` (+₱${c.petticoatPrice})` : ' (included)'}`
+        : 'None';
+      return {
+        Name: c.name, Contact: c.contact, Gmail: c.gmail || '',
+        Gown: c.gownName, Status: c.returnStatus,
+        'Booking Date': c.bookingDate, 'Return Date': c.returnDate || '',
+        'Rental Price': c.rentalPrice, Petticoat: pettiLabel,
+        Accessories: (c.addons || []).map(a => `${a.name}${Number(a.price) > 0 ? ` (+₱${a.price})` : ''}`).join(', ') || 'None',
+        'Swap Charges': c.swapCharges || 0,
+        Discount: c.discount || 0, 'Discount Note': c.discountNote || '',
+        'Total (after discount)': netTotal(c),
+        Downpayment: c.down, Deposit: c.deposit, Balance: c.balance,
+        Penalty: c.penaltyPaid || 0, Commission: c.commissions,
+      };
+    });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Bookings');
     XLSX.writeFile(wb, `Bookings_${new Date().toISOString().split('T')[0]}.xlsx`);
@@ -393,11 +513,28 @@ const Customers = () => {
     return matchSearch && matchTab;
   });
 
+  /* ---------- DERIVED VALUES ---------- */
   const sb = selectedBooking;
   const sbPenalty = sb ? calculatePenalty(sb) : 0;
   const sbNet = sb ? netTotal(sb) : 0;
   const sbBalance = sb ? Number(sb.balance) || 0 : 0;
   const preview = sb && editForm ? editPreview(sb, editForm) : null;
+
+  // Package of the gown in the opened booking
+  const sbGown = sb ? gownById(sb.gownId) : null;
+  const sbIncPetti = includedPettiOf(sbGown);
+  const sbIncAccs = includedAccsOf(sbGown);
+  const sbHasPackage = !!sbIncPetti || sbIncAccs.length > 0;
+  const sbPackageMissing = sb && sbHasPackage && (
+    (!!sbIncPetti && !sb.petticoatId) ||
+    sbIncAccs.some(a => !(sb.addons || []).some(x => x.id === a.id))
+  );
+  const sbPetti = sb ? petticoats.find(p => p.id === sb.petticoatId) : null;
+
+  // Package of the gown in the New Rental form
+  const formGown = gownById(newCustomer.gownId);
+  const formIncPetti = includedPettiOf(formGown);
+  const formIncAccs = includedAccsOf(formGown);
 
   return (
     <>
@@ -435,7 +572,7 @@ const Customers = () => {
         <div className="booking-grid">
           {filtered.map(c => {
             const p = calculatePenalty(c);
-            const hasAddons = (c.addons || []).length > 0 || c.petticoatPrice > 0;
+            const hasAddons = (c.addons || []).length > 0 || !!c.petticoatId;
             return (
               <div key={c.id} className="booking-mini-card" onClick={() => { setSelectedBooking(c); setIsSwapMode(false); setIsEditMode(false); setIsConfirmingHold(false); }}>
                 <div className="card-top-section">
@@ -445,7 +582,7 @@ const Customers = () => {
                     <span>{c.gownName}</span>
                     {hasAddons && (
                       <div className="card-addons-chips">
-                        {c.petticoatPrice > 0 && <span className="addon-chip chip-petti">🩱 Petticoat</span>}
+                        {c.petticoatId && <span className="addon-chip chip-petti">🩱 Petticoat</span>}
                         {(c.addons || []).slice(0,2).map((a,i) => <span key={i} className="addon-chip chip-acc">👑 {a.name}</span>)}
                         {(c.addons || []).length > 2 && <span className="addon-chip chip-more">+{c.addons.length - 2}</span>}
                       </div>
@@ -474,7 +611,7 @@ const Customers = () => {
               </div>
             );
           })}
-          {filtered.length === 0 && <p className="empty-note">Walay booking nga nakit-an.</p>}
+          {filtered.length === 0 && <p className="empty-note">No bookings found.</p>}
         </div>
 
         {/* ══════════════════════════════════
@@ -523,10 +660,10 @@ const Customers = () => {
                 {/* ========== EDIT MODE ========== */}
                 {isEditMode && editForm && preview && (
                   <div className="edit-panel">
-                    <h4 className="panel-title"><Edit3 size={13} /> I-edit ang Booking</h4>
+                    <h4 className="panel-title"><Edit3 size={13} /> Edit Booking</h4>
 
                     <div className="edit-grid">
-                      <div className="input-grp"><label>Pangalan</label>
+                      <div className="input-grp"><label>Name</label>
                         <input type="text" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} /></div>
                       <div className="input-grp"><label>Contact</label>
                         <input type="text" value={editForm.contact} onChange={e => setEditForm({ ...editForm, contact: e.target.value })} /></div>
@@ -554,7 +691,7 @@ const Customers = () => {
                       <div className="edit-grid">
                         <div className="input-grp"><label>Discount Amount (₱)</label>
                           <input type="number" min="0" value={editForm.discount} onChange={e => setEditForm({ ...editForm, discount: e.target.value })} /></div>
-                        <div className="input-grp"><label>Rason / Note</label>
+                        <div className="input-grp"><label>Reason / Note</label>
                           <input type="text" placeholder="e.g. regular customer, promo" value={editForm.discountNote} onChange={e => setEditForm({ ...editForm, discountNote: e.target.value })} /></div>
                       </div>
                       <div className="quick-discounts">
@@ -568,22 +705,22 @@ const Customers = () => {
 
                     {/* LIVE PREVIEW */}
                     <div className="edit-preview">
-                      <div className="prev-row"><span>Una nga total</span><span>{formatCurrency(preview.prevNet)}</span></div>
+                      <div className="prev-row"><span>Previous total</span><span>{formatCurrency(preview.prevNet)}</span></div>
                       <div className="prev-row"><span>Subtotal (gown + add-ons)</span><span>{formatCurrency(preview.gross)}</span></div>
                       {preview.discount > 0 && (
                         <div className="prev-row minus"><span>Discount</span><span>−{formatCurrency(preview.discount)}</span></div>
                       )}
-                      <div className="prev-row strong"><span>Bag-ong total</span><span>{formatCurrency(preview.net)}</span></div>
-                      <div className="prev-row"><span>Nabayad na</span><span>{formatCurrency(preview.paid)}</span></div>
+                      <div className="prev-row strong"><span>New total</span><span>{formatCurrency(preview.net)}</span></div>
+                      <div className="prev-row"><span>Already paid</span><span>{formatCurrency(preview.paid)}</span></div>
                       <div className={`prev-row strong ${preview.balance < 0 ? 'refund' : preview.balance > 0 ? 'owe' : ''}`}>
-                        <span>{preview.balance < 0 ? 'I-refund sa customer' : 'Bag-ong balance'}</span>
+                        <span>{preview.balance < 0 ? 'Refund to customer' : 'New balance'}</span>
                         <span>{formatCurrency(Math.abs(preview.balance))}</span>
                       </div>
                       {preview.diff !== 0 && (
                         <p className={`prev-diff ${preview.diff < 0 ? 'down' : 'up'}`}>
                           {preview.diff < 0
-                            ? `Nabawasan ang total og ${formatCurrency(Math.abs(preview.diff))}`
-                            : `Nadugang ang total og ${formatCurrency(preview.diff)}`}
+                            ? `Total reduced by ${formatCurrency(Math.abs(preview.diff))}`
+                            : `Total increased by ${formatCurrency(preview.diff)}`}
                         </p>
                       )}
                     </div>
@@ -591,7 +728,7 @@ const Customers = () => {
                     <div className="edit-actions">
                       <button className="btn-edit-cancel" onClick={() => { setIsEditMode(false); setEditForm(null); }}>Cancel</button>
                       <button className="btn-edit-save" onClick={handleSaveEdit} disabled={saving}>
-                        <Save size={15} /> {saving ? 'Nag-save...' : 'Save Changes'}
+                        <Save size={15} /> {saving ? 'Saving...' : 'Save Changes'}
                       </button>
                     </div>
                   </div>
@@ -621,16 +758,22 @@ const Customers = () => {
                       </div>
                     </div>
 
-                    {/* PRICE BREAKDOWN (resibo) */}
+                    {/* PRICE BREAKDOWN (receipt) */}
                     <div className="info-block receipt-block">
                       <label><DollarSign size={13} /> Price Breakdown</label>
                       <div className="receipt">
                         <div className="receipt-row"><span>Gown rental</span><span>{formatCurrency(sb.rentalPrice)}</span></div>
-                        {sb.petticoatPrice > 0 && (
-                          <div className="receipt-row"><span>🩱 Petticoat</span><span>{formatCurrency(sb.petticoatPrice)}</span></div>
+                        {sb.petticoatId && (
+                          <div className="receipt-row">
+                            <span>🩱 Petticoat{sbPetti ? ` (Layer ${sbPetti.layer})` : ''}</span>
+                            <span>{sb.petticoatPrice > 0 ? `+${formatCurrency(sb.petticoatPrice)}` : 'Included'}</span>
+                          </div>
                         )}
                         {(sb.addons || []).map((a, i) => (
-                          <div key={i} className="receipt-row"><span>👑 {a.name}</span><span>{formatCurrency(a.price)}</span></div>
+                          <div key={i} className="receipt-row">
+                            <span>👑 {a.name}</span>
+                            <span>{Number(a.price) > 0 ? formatCurrency(a.price) : 'Included'}</span>
+                          </div>
                         ))}
 
                         {sb.discount > 0 && (
@@ -647,15 +790,15 @@ const Customers = () => {
                         )}
 
                         <div className="receipt-row total"><span>Total</span><span>{formatCurrency(sbNet)}</span></div>
-                        <div className="receipt-row"><span>Nabayad na</span><span className="text-success">{formatCurrency(sb.down)}</span></div>
+                        <div className="receipt-row"><span>Already paid</span><span className="text-success">{formatCurrency(sb.down)}</span></div>
                         <div className={`receipt-row balance ${sbBalance < 0 ? 'refund' : ''}`}>
-                          <span>{sbBalance < 0 ? 'I-refund sa customer' : 'Balance'}</span>
+                          <span>{sbBalance < 0 ? 'Refund to customer' : 'Balance'}</span>
                           <span>{formatCurrency(Math.abs(sbBalance))}</span>
                         </div>
 
-                        <div className="receipt-row muted"><span>Security deposit (lain)</span><span>{formatCurrency(sb.deposit)}</span></div>
+                        <div className="receipt-row muted"><span>Security deposit (separate)</span><span>{formatCurrency(sb.deposit)}</span></div>
                         {sb.swapCharges > 0 && (
-                          <div className="receipt-row muted"><span>🔄 Swap charges (lain)</span><span>{formatCurrency(sb.swapCharges)}</span></div>
+                          <div className="receipt-row muted"><span>🔄 Swap charges (separate)</span><span>{formatCurrency(sb.swapCharges)}</span></div>
                         )}
                         {sbPenalty > 0 && (
                           <div className="receipt-row penalty"><span>⚠️ Penalty</span><span>{formatCurrency(sbPenalty)}</span></div>
@@ -664,30 +807,54 @@ const Customers = () => {
 
                       {sbBalance > 0 && (
                         <div className="partial-pay-input-grp">
-                          <input type="number" placeholder="Amount nga bayran" value={partialPayAmt} onChange={e => setPartialPayAmt(e.target.value)} />
+                          <input type="number" placeholder="Amount to pay" value={partialPayAmt} onChange={e => setPartialPayAmt(e.target.value)} />
                           <button className="btn-pay-small" onClick={() => handleUpdatePayment(sb)}><CreditCard size={13} /> Pay</button>
                         </div>
                       )}
                       {sbBalance < 0 && (
-                        <p className="refund-note">Sobra ang bayad sa bag-ong total. I-hatag balik sa customer ang {formatCurrency(Math.abs(sbBalance))}.</p>
+                        <p className="refund-note">The amount paid exceeds the new total. Give {formatCurrency(Math.abs(sbBalance))} back to the customer.</p>
                       )}
                     </div>
 
-                    {/* ADD-ONS (collapsible) */}
+                    {/* ADD-ONS & SWAP */}
                     <div className="info-block">
                       <div className="addon-head">
                         <label><RefreshCw size={13} /> Add-ons & Swap</label>
                         <button className="manage-btn" onClick={() => setIsSwapMode(!isSwapMode)}>
-                          {isSwapMode ? 'Isira' : 'Manage'}
+                          {isSwapMode ? 'Close' : 'Manage'}
                         </button>
                       </div>
 
+                      {/* Package included with the gown */}
+                      {sbHasPackage && (
+                        <div className="included-box">
+                          <p className="included-title"><Package size={13} /> Included with this gown</p>
+                          <div className="addon-summary">
+                            {sbIncPetti && <span className="addon-chip chip-petti">🩱 Layer {sbIncPetti.layer}</span>}
+                            {sbIncAccs.map(a => <span key={a.id} className="addon-chip chip-acc">👑 {a.name}</span>)}
+                          </div>
+                          {sbPackageMissing && (
+                            <button className="btn-apply-package" onClick={() => handleApplyPackage(sb)}>
+                              Apply included package
+                            </button>
+                          )}
+                        </div>
+                      )}
+
                       {!isSwapMode && (
                         <div className="addon-summary">
-                          <span className="addon-chip chip-petti">🩱 {sb.petticoatPrice > 0 ? `Petticoat ₱${sb.petticoatPrice}` : 'Walay petticoat'}</span>
+                          <span className="addon-chip chip-petti">
+                            🩱 {sb.petticoatId
+                              ? `Layer ${sbPetti?.layer ?? ''}${sb.petticoatPrice > 0 ? ` · +₱${sb.petticoatPrice}` : ' · Included'}`
+                              : 'No petticoat'}
+                          </span>
                           {(sb.addons || []).length === 0
-                            ? <span className="addon-chip chip-more">Walay accessories</span>
-                            : sb.addons.map((a, i) => <span key={i} className="addon-chip chip-acc">👑 {a.name}</span>)}
+                            ? <span className="addon-chip chip-more">No accessories</span>
+                            : sb.addons.map((a, i) => (
+                                <span key={i} className="addon-chip chip-acc">
+                                  👑 {a.name}{Number(a.price) > 0 ? ` · ₱${a.price}` : ''}
+                                </span>
+                              ))}
                         </div>
                       )}
 
@@ -699,23 +866,35 @@ const Customers = () => {
                               className={`swap-opt-btn ${!sb.petticoatId ? 'active' : ''}`}
                               onClick={() => handleSwapPetticoat(sb, null)}
                             >None</button>
-                            {petticoats.map(p => (
-                              <button
-                                key={p.id}
-                                className={`swap-opt-btn ${sb.petticoatId === p.id ? 'active' : ''}`}
-                                onClick={() => handleSwapPetticoat(sb, p)}
-                              >
-                                L{p.layer} {p.price > 0 ? `₱${p.price}` : 'Free'}
-                                {p.swap_fee > 0 && sb.petticoatId !== p.id && <span className="swap-fee-tag">+₱{p.swap_fee}</span>}
-                              </button>
-                            ))}
+                            {petticoats.map(p => {
+                              const isCurrent = sb.petticoatId === p.id;
+                              const isIncluded = sbIncPetti?.id === p.id;
+                              const charge = pettiPriceFor(sbGown, p);
+                              return (
+                                <button
+                                  key={p.id}
+                                  className={`swap-opt-btn ${isCurrent ? 'active' : ''}`}
+                                  onClick={() => handleSwapPetticoat(sb, p)}
+                                >
+                                  Layer {p.layer}
+                                  {isIncluded
+                                    ? <span className="included-tag">Included</span>
+                                    : charge > 0 && <span className="swap-fee-tag">+₱{charge}</span>}
+                                  {!isCurrent && !isIncluded && p.swap_fee > 0 && (
+                                    <span className="swap-fee-tag">swap +₱{p.swap_fee}</span>
+                                  )}
+                                </button>
+                              );
+                            })}
                           </div>
+                          {petticoats.length === 0 && <span className="empty-inline">No petticoat layers in inventory yet.</span>}
 
                           <p className="addon-group-title">👑 Accessories</p>
                           <div className="addon-swap-btns">
-                            {accessories.length === 0 && <span className="empty-inline">Wala pay accessories sa inventory.</span>}
+                            {accessories.length === 0 && <span className="empty-inline">No accessories in inventory yet.</span>}
                             {accessories.map(acc => {
                               const has = (sb.addons || []).find(a => a.id === acc.id);
+                              const isIncluded = sbIncAccs.some(a => a.id === acc.id);
                               return (
                                 <button
                                   key={acc.id}
@@ -723,8 +902,10 @@ const Customers = () => {
                                   onClick={() => handleToggleAddon(sb, acc)}
                                 >
                                   {acc.name}
-                                  {!has && acc.price > 0 && <span className="swap-fee-tag">₱{acc.price}</span>}
-                                  {!has && acc.swap_fee > 0 && <span className="swap-fee-tag">+₱{acc.swap_fee}</span>}
+                                  {isIncluded
+                                    ? <span className="included-tag">Included</span>
+                                    : !has && acc.price > 0 && <span className="swap-fee-tag">+₱{acc.price}</span>}
+                                  {!has && !isIncluded && acc.swap_fee > 0 && <span className="swap-fee-tag">swap +₱{acc.swap_fee}</span>}
                                 </button>
                               );
                             })}
@@ -819,11 +1000,7 @@ const Customers = () => {
                   <div className="form-grid-2">
                     <div className="input-grp">
                       <label>Gown Selection</label>
-                      <select required value={newCustomer.gownId}
-                        onChange={e => {
-                          const g = gowns.find(x => String(x.id) === e.target.value);
-                          if (g) setNewCustomer({...newCustomer, gownId: g.id, gownName: g.name, rentalPrice: g.price});
-                        }}>
+                      <select required value={newCustomer.gownId} onChange={handleGownSelect}>
                         <option value="">-- Choose Gown --</option>
                         {gowns.filter(g => g.stock > 0).map(g => <option key={g.id} value={String(g.id)}>{g.name} ({g.stock} left)</option>)}
                       </select>
@@ -839,45 +1016,59 @@ const Customers = () => {
                 {/* Petticoat */}
                 <div className="form-section">
                   <h4 className="form-section-title"><Layers size={13} /> Petticoat Layer</h4>
+                  <p className="package-hint">
+                    {!formGown
+                      ? 'Select a gown first to see its included petticoat.'
+                      : formIncPetti
+                        ? `Included with this gown: Layer ${formIncPetti.layer}. A higher layer only charges the difference.`
+                        : 'This gown does not include a petticoat. Any layer is charged in full.'}
+                  </p>
                   <div className="addon-selector-grid">
                     <button type="button"
                       className={`addon-select-btn ${!newCustomer.petticoatId ? 'selected' : ''}`}
-                      onClick={() => setNewCustomer({...newCustomer, petticoatId: null, petticoatName: '', petticoatPrice: 0})}>
+                      onClick={() => handleFormPetticoat(null)}>
                       None
                     </button>
-                    {petticoats.map(p => (
-                      <button type="button" key={p.id}
-                        className={`addon-select-btn ${newCustomer.petticoatId === p.id ? 'selected' : ''}`}
-                        onClick={() => setNewCustomer({...newCustomer, petticoatId: p.id, petticoatName: `Layer ${p.layer}`, petticoatPrice: p.price})}>
-                        Layer {p.layer}
-                        {p.price > 0 && <span>+₱{Number(p.price).toLocaleString()}</span>}
-                      </button>
-                    ))}
+                    {petticoats.map(p => {
+                      const charge = pettiPriceFor(formGown, p);
+                      const isIncluded = formIncPetti?.id === p.id;
+                      return (
+                        <button type="button" key={p.id}
+                          className={`addon-select-btn ${newCustomer.petticoatId === p.id ? 'selected' : ''}`}
+                          onClick={() => handleFormPetticoat(p)}>
+                          Layer {p.layer}
+                          {isIncluded
+                            ? <span className="included-tag">Included</span>
+                            : charge > 0 && <span>+₱{Number(charge).toLocaleString()}</span>}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
                 {/* Accessories */}
                 {accessories.length > 0 && (
                   <div className="form-section">
-                    <h4 className="form-section-title"><Crown size={13} /> Accessories (optional)</h4>
+                    <h4 className="form-section-title"><Crown size={13} /> Accessories</h4>
+                    <p className="package-hint">
+                      {!formGown
+                        ? 'Select a gown first to see its included accessories.'
+                        : formIncAccs.length > 0
+                          ? `Included with this gown: ${formIncAccs.map(a => a.name).join(', ')}. Any extra accessory is charged.`
+                          : 'This gown has no included accessories. Any accessory is charged.'}
+                    </p>
                     <div className="addon-selector-grid">
                       {accessories.map(acc => {
                         const selected = newCustomer.selectedAccessories.find(a => a.id === acc.id);
+                        const isIncluded = formIncAccs.some(a => a.id === acc.id);
                         return (
                           <button type="button" key={acc.id}
                             className={`addon-select-btn ${selected ? 'selected' : ''}`}
-                            onClick={() => {
-                              const list = newCustomer.selectedAccessories;
-                              const exists = list.find(a => a.id === acc.id);
-                              setNewCustomer({
-                                ...newCustomer,
-                                selectedAccessories: exists
-                                  ? list.filter(a => a.id !== acc.id)
-                                  : [...list, { id: acc.id, name: acc.name, price: acc.price, swap_fee: acc.swap_fee }]
-                              });
-                            }}>
+                            onClick={() => toggleFormAccessory(acc)}>
                             {acc.name}
-                            {acc.price > 0 && <span>+₱{Number(acc.price).toLocaleString()}</span>}
+                            {isIncluded
+                              ? <span className="included-tag">Included</span>
+                              : acc.price > 0 && <span>+₱{Number(acc.price).toLocaleString()}</span>}
                           </button>
                         );
                       })}
@@ -891,8 +1082,18 @@ const Customers = () => {
 
                   <div className="running-total-bar">
                     <span>Gown: {formatCurrency(newCustomer.rentalPrice)}</span>
-                    {newCustomer.petticoatPrice > 0 && <span>+ Petticoat: {formatCurrency(newCustomer.petticoatPrice)}</span>}
-                    {newCustomer.selectedAccessories.map((a, i) => <span key={i}>+ {a.name}: {formatCurrency(a.price)}</span>)}
+                    {newCustomer.petticoatId && (
+                      <span>
+                        {newCustomer.petticoatPrice > 0
+                          ? `+ ${newCustomer.petticoatName} upgrade: ${formatCurrency(newCustomer.petticoatPrice)}`
+                          : `${newCustomer.petticoatName} (included)`}
+                      </span>
+                    )}
+                    {newCustomer.selectedAccessories.map((a, i) => (
+                      <span key={i}>
+                        {Number(a.price) > 0 ? `+ ${a.name}: ${formatCurrency(a.price)}` : `${a.name} (included)`}
+                      </span>
+                    ))}
                     {Number(newCustomer.discount) > 0 && <span className="rt-discount">− Discount: {formatCurrency(newCustomer.discount)}</span>}
                     <strong>Total: {formatCurrency(computeTotal(newCustomer))}</strong>
                   </div>

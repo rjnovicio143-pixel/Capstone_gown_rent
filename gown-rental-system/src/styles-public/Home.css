@@ -1,6 +1,13 @@
 /* =========================================
    BASE
 ========================================= */
+.hp-page,
+.hp-page *,
+.hp-page *::before,
+.hp-page *::after {
+  box-sizing: border-box;
+}
+
 .hp-page {
   min-height: 100vh;
   background: #f4f5f7;
@@ -12,14 +19,12 @@
 ========================================= */
 .hp-hero {
   background: linear-gradient(160deg, #1a1a2e 0%, #2d1a4e 100%);
-  padding: 36px 32px 36px;
+  padding: 36px 32px;
   border-radius: 0 0 40px 40px;
 }
 
 /* Greeting */
-.hp-greeting {
-  margin-bottom: 24px;
-}
+.hp-greeting { margin-bottom: 24px; }
 .hp-greeting h1 {
   font-size: clamp(24px, 3.5vw, 40px);
   font-weight: 900;
@@ -31,11 +36,11 @@
 .hp-greeting h1 span { color: #f59e0b; }
 .hp-greeting p {
   font-size: 13px;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255, 255, 255, 0.5);
   margin: 0;
 }
 
-/* ── CAROUSEL ── */
+/* ── CAROUSEL (mobile / default: photo fills the card) ── */
 .hp-carousel-wrap { position: relative; }
 
 .hp-card-shell {
@@ -45,14 +50,20 @@
   border-radius: 24px;
   overflow: hidden;
   background: #2a2a4a;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.35);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+
+.hp-card-media {
+  position: absolute;
+  inset: 0;
 }
 
 .hp-card-img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.5s ease;
+  object-position: center 20%;
   animation: hpFadeIn 0.4s ease;
 }
 @keyframes hpFadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -62,9 +73,9 @@
   inset: 0;
   background: linear-gradient(
     to bottom,
-    rgba(0,0,0,0.05) 0%,
-    rgba(0,0,0,0.08) 35%,
-    rgba(0,0,0,0.72) 100%
+    rgba(0, 0, 0, 0.05) 0%,
+    rgba(0, 0, 0, 0.08) 35%,
+    rgba(0, 0, 0, 0.72) 100%
   );
 }
 
@@ -81,7 +92,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255,255,255,0.35);
+  color: rgba(255, 255, 255, 0.35);
   font-size: 14px;
 }
 
@@ -100,14 +111,14 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: rgba(255,255,255,0.15);
+  background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(8px);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
   padding: 6px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .hp-badge-amt {
@@ -117,7 +128,7 @@
   font-weight: 800;
   padding: 6px 14px;
   border-radius: 999px;
-  box-shadow: 0 4px 14px rgba(245,158,11,0.45);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.45);
 }
 
 /* Card footer */
@@ -130,12 +141,13 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
+  gap: 12px;
   z-index: 2;
 }
 
 .hp-card-cat  { display: block; font-size: 10px; font-weight: 700; color: #f59e0b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
 .hp-card-name { font-size: clamp(18px, 2.5vw, 26px); font-weight: 900; color: #fff; margin: 0 0 4px; line-height: 1.2; }
-.hp-card-desc { font-size: 12px; color: rgba(255,255,255,0.6); margin: 0; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; max-width: 200px; }
+.hp-card-desc { font-size: 12px; color: rgba(255, 255, 255, 0.6); margin: 0; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; max-width: 200px; }
 
 .hp-card-btn {
   display: flex;
@@ -151,7 +163,7 @@
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  box-shadow: 0 4px 14px rgba(245,158,11,0.5);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.5);
   transition: transform 0.2s;
 }
 .hp-card-btn:hover { transform: translateY(-2px); }
@@ -162,9 +174,9 @@
   top: 50%;
   transform: translateY(-50%);
   z-index: 3;
-  background: rgba(255,255,255,0.14);
+  background: rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: #fff;
   width: 36px;
   height: 36px;
@@ -175,9 +187,9 @@
   cursor: pointer;
   transition: background 0.2s;
 }
-.hp-arrow:hover   { background: rgba(245,158,11,0.45); }
-.hp-arrow-l       { left: 10px; }
-.hp-arrow-r       { right: 10px; }
+.hp-arrow:hover { background: rgba(245, 158, 11, 0.45); }
+.hp-arrow-l { left: 10px; }
+.hp-arrow-r { right: 10px; }
 
 /* Dots */
 .hp-dots {
@@ -187,10 +199,11 @@
   margin-top: 14px;
 }
 .hp-dot {
-  width: 7px; height: 7px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   border: none;
-  background: rgba(255,255,255,0.25);
+  background: rgba(255, 255, 255, 0.25);
   cursor: pointer;
   transition: 0.2s;
   padding: 0;
@@ -202,21 +215,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0;
   margin-top: 24px;
-  background: rgba(255,255,255,0.07);
+  background: rgba(255, 255, 255, 0.07);
   border-radius: 18px;
   padding: 18px 24px;
 }
 .hp-stat { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .hp-stat strong { font-size: 22px; font-weight: 900; color: #f59e0b; }
-.hp-stat span   { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.06em; }
-.hp-stat-div    { width: 1px; height: 32px; background: rgba(255,255,255,0.1); flex-shrink: 0; }
+.hp-stat span   { font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.45); text-transform: uppercase; letter-spacing: 0.06em; }
+.hp-stat-div    { width: 1px; height: 32px; background: rgba(255, 255, 255, 0.1); flex-shrink: 0; }
 
 /* Spinner */
 .hp-spin {
-  width: 34px; height: 34px;
-  border: 3px solid rgba(255,255,255,0.12);
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(255, 255, 255, 0.12);
   border-top-color: #f59e0b;
   border-radius: 50%;
   animation: hpSpin 0.7s linear infinite;
@@ -226,9 +239,7 @@
 /* =========================================
    EXPLORE
 ========================================= */
-.hp-explore {
-  padding: 30px 24px 36px;
-}
+.hp-explore { padding: 30px 24px 36px; }
 
 .hp-row {
   display: flex;
@@ -238,7 +249,7 @@
 }
 
 .hp-eyebrow {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 5px;
   font-size: 11px;
@@ -247,7 +258,6 @@
   letter-spacing: 0.08em;
   color: #f59e0b;
   margin-bottom: 5px;
-  display: block;
 }
 
 .hp-sec-title {
@@ -300,7 +310,7 @@
   transition: 0.18s;
 }
 .hp-pill:hover  { border-color: #f59e0b; color: #f59e0b; }
-.hp-pill.active { background: #f59e0b; color: #fff; border-color: #f59e0b; box-shadow: 0 4px 12px rgba(245,158,11,0.3); }
+.hp-pill.active { background: #f59e0b; color: #fff; border-color: #f59e0b; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3); }
 
 /* Grid */
 .hp-grid {
@@ -314,10 +324,10 @@
   border-radius: 20px;
   overflow: hidden;
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
   transition: transform 0.2s, box-shadow 0.2s;
 }
-.hp-gown-card:hover { transform: translateY(-5px); box-shadow: 0 12px 28px rgba(0,0,0,0.11); }
+.hp-gown-card:hover { transform: translateY(-5px); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.11); }
 
 .hp-gown-img {
   position: relative;
@@ -325,18 +335,27 @@
   background: #f3f4f6;
   overflow: hidden;
 }
-.hp-gown-img img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
+.hp-gown-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+  transition: transform 0.3s;
+}
 .hp-gown-card:hover .hp-gown-img img { transform: scale(1.05); }
 .hp-gown-noimg { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 48px; }
 
 .hp-avail {
   position: absolute;
-  bottom: 8px; left: 10px;
-  font-size: 10px; font-weight: 700;
-  padding: 3px 10px; border-radius: 999px;
+  bottom: 8px;
+  left: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
 }
-.hp-avail.in  { background: rgba(220,252,231,0.95); color: #15803d; }
-.hp-avail.out { background: rgba(254,226,226,0.95); color: #b91c1c; }
+.hp-avail.in  { background: rgba(220, 252, 231, 0.95); color: #15803d; }
+.hp-avail.out { background: rgba(254, 226, 226, 0.95); color: #b91c1c; }
 
 .hp-card-body { padding: 12px 14px 14px; }
 .hp-gcat  { font-size: 10px; font-weight: 700; color: #f59e0b; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 3px; }
@@ -368,30 +387,17 @@
 .hp-cta::before {
   content: '';
   position: absolute;
-  top: -80px; right: -80px;
-  width: 240px; height: 240px;
-  background: radial-gradient(circle, rgba(245,158,11,0.18) 0%, transparent 70%);
+  top: -80px;
+  right: -80px;
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.18) 0%, transparent 70%);
   pointer-events: none;
 }
 
-.hp-cta-body {
-  padding: 32px 28px;
-  position: relative;
-  z-index: 1;
-}
-.hp-cta-body h2 {
-  font-size: clamp(20px, 3vw, 28px);
-  font-weight: 900;
-  color: #fff;
-  margin: 0 0 8px;
-}
-.hp-cta-body p {
-  font-size: 13px;
-  color: rgba(255,255,255,0.55);
-  line-height: 1.6;
-  margin: 0 0 22px;
-  max-width: 380px;
-}
+.hp-cta-body { padding: 32px 28px; position: relative; z-index: 1; }
+.hp-cta-body h2 { font-size: clamp(20px, 3vw, 28px); font-weight: 900; color: #fff; margin: 0 0 8px; }
+.hp-cta-body p  { font-size: 13px; color: rgba(255, 255, 255, 0.55); line-height: 1.6; margin: 0 0 22px; max-width: 380px; }
 .hp-cta-body button {
   display: inline-flex;
   align-items: center;
@@ -404,22 +410,107 @@
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(245,158,11,0.45);
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.45);
   transition: transform 0.2s;
 }
 .hp-cta-body button:hover { transform: translateY(-2px); }
 
 /* =========================================
+   DESKTOP (901px and up)
+   Split featured card: text on the left, portrait photo on the right
+========================================= */
+@media (min-width: 901px) {
+  .hp-hero { padding: 44px 40px 40px; }
+
+  /* Keep content centered with a comfortable max width on wide screens */
+  .hp-greeting,
+  .hp-carousel-wrap,
+  .hp-stats,
+  .hp-explore,
+  .hp-cta {
+    max-width: 1240px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .hp-explore { padding: 40px 40px 44px; }
+  .hp-cta { width: calc(100% - 80px); margin-bottom: 48px; }
+
+  .hp-greeting { margin-bottom: 28px; }
+
+  /* Split card */
+  .hp-card-shell {
+    display: flex;
+    height: 480px;
+    border-radius: 28px;
+    background: linear-gradient(135deg, #2a2a4a 0%, #3b1f6e 100%);
+  }
+
+  .hp-card-media {
+    position: relative;
+    inset: auto;
+    flex: 0 0 46%;
+    margin-left: auto;
+  }
+  .hp-card-img { object-position: center 12%; }
+
+  /* Soft fade where the photo meets the text panel */
+  .hp-card-gradient {
+    background: linear-gradient(
+      to right,
+      rgba(42, 26, 74, 0.9) 0%,
+      rgba(42, 26, 74, 0) 28%
+    );
+  }
+
+  .hp-card-badges {
+    top: 32px;
+    left: 40px;
+    right: calc(46% + 40px);
+  }
+
+  .hp-card-foot {
+    left: 0;
+    right: 46%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 22px;
+    padding: 0 40px 44px;
+  }
+
+  .hp-card-cat  { font-size: 12px; margin-bottom: 8px; }
+  .hp-card-name { font-size: clamp(30px, 3.4vw, 46px); line-height: 1.1; margin-bottom: 12px; }
+  .hp-card-desc {
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 440px;
+    -webkit-line-clamp: 3;
+  }
+
+  .hp-card-btn { padding: 14px 28px; font-size: 14px; }
+
+  /* Arrows sit on the photo side */
+  .hp-arrow-l { left: calc(54% + 14px); }
+  .hp-arrow-r { right: 14px; }
+
+  /* Gown cards */
+  .hp-grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 20px; }
+  .hp-gown-img { height: 280px; }
+  .hp-skel-img { height: 280px; }
+  .hp-gname { font-size: 14px; }
+  .hp-gprice { font-size: 16px; }
+}
+
+/* =========================================
    RESPONSIVE
 ========================================= */
 @media (max-width: 900px) {
-  .hp-hero  { padding: 28px 24px 28px; }
-  .hp-grid  { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
+  .hp-hero    { padding: 28px 24px; }
+  .hp-grid    { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
   .hp-explore { padding: 24px 20px 30px; }
 }
 
 @media (max-width: 600px) {
-  .hp-hero        { padding: 24px 18px 24px; border-radius: 0 0 32px 32px; }
+  .hp-hero        { padding: 24px 18px; border-radius: 0 0 32px 32px; }
   .hp-card-shell  { height: 260px; }
   .hp-grid        { grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .hp-gown-img    { height: 170px; }

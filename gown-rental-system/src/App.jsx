@@ -1,57 +1,79 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
+import SuperSidebar from './components/SuperSidebar';
 
-// I-import ang imong mga tinuod nga Pages (Admin)
-import Dashboard from './pages-admin/Dashboard'; 
+// Admin pages
+import Dashboard from './pages-admin/Dashboard';
 import Inventory from './pages-admin/Inventory';
 import Availability from './pages-admin/Availability';
-import Customers from './pages-admin/Customers'; 
-import Reports from './pages-admin/Reports'; 
+import Customers from './pages-admin/Customers';
+import Reports from './pages-admin/Reports';
 import Settings from './pages-admin/Settings';
 import ActivityLog from './pages-admin/ActivityLog';
 import AdminMannequin from './pages-admin/AdminMannequin';
 
-// I-import ang mga Public Pages (Gikan sa imong pages-public folder)
+// Super admin pages
+import SuperAccounts from './pages-super/SuperAccounts';
+import SuperModels from './pages-super/SuperModels';
+
+// Public pages
 import Home from './pages-public/Home';
 import GownSuit from './pages-public/GownSuit';
-import ReservationForm from './pages-public/ReservationForm'; 
-import Login from './pages-public/Login'; 
+import ReservationForm from './pages-public/ReservationForm';
+import Login from './pages-public/Login';
 import VirtualTryOn from './pages-public/VirtualTryOn';
 import AboutUs from './pages-public/AboutUs';
 import Contact from './pages-public/Contact';
-import Mannequin3D from './pages-public/Mannequin3D'; 
+import Mannequin3D from './pages-public/Mannequin3D';
 
 import PublicNavbar from './components/PublicNavbar';
-import './App.css'; 
+import './App.css';
+
+// Asa moadto ang user human sa login
+const roleHome = (role) => {
+  if (role === 'super_admin') return '/super/accounts';
+  if (role === 'admin')       return '/admin/dashboard';
+  return '/';
+};
+
+// Kuhaon ang tinuod nga role gikan sa localStorage.admin (parehas sa gibasa sa header).
+// Kung customer, ayaw i-override. Kung walay admin data, gamiton ang fallback.
+const readRole = (fallback) => {
+  if (fallback === 'customer') return fallback;
+  try {
+    const stored = JSON.parse(localStorage.getItem('admin'));
+    if (stored?.role) return stored.role;
+  } catch (_) {
+    // ignore parse errors
+  }
+  return fallback;
+};
 
 function App() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  
-  // BAG-ONG STATE: Para masiguro ang cross-matching sa iyang system identity role
   const [userRole, setUserRole] = useState(null);
 
-  // Susiha kung duna nay logged in nga user ug unsa iyang identity token credentials
   useEffect(() => {
     const token = localStorage.getItem('userToken');
-    const role = localStorage.getItem('userRole'); // Kuhaon ang role ('admin' o 'customer')
-    
     if (token) {
       setIsAuthenticated(true);
-      setUserRole(role);
+      setUserRole(readRole(localStorage.getItem('userRole')));
     }
   }, []);
 
   const handleLoginSuccess = (role) => {
+    const finalRole = readRole(role);
+    localStorage.setItem('userRole', finalRole);
     setIsAuthenticated(true);
-    setUserRole(role);
+    setUserRole(finalRole);
   };
 
   return (
     <Router>
       <Routes>
-        
+
         {/* ================= 1. PUBLIC ROUTES (CUSTOMER FACING) ================= */}
         <Route path="/" element={
           <div className="public-layout">
@@ -102,19 +124,15 @@ function App() {
           </div>
         } />
 
-        {/* LOGIN ROUTE */}
+        {/* LOGIN: ang padulong depende sa role */}
         <Route path="/login" element={
-          isAuthenticated ? (
-            // Kung admin, dretso sa dashboard. Kung customer, pabilin sa public access directory link
-            userRole === 'admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/" replace />
-          ) : (
-            <Login onLoginSuccess={handleLoginSuccess} />
-          )
+          isAuthenticated
+            ? <Navigate to={roleHome(userRole)} replace />
+            : <Login onLoginSuccess={handleLoginSuccess} />
         } />
 
-        {/* ================= 2. ADMIN ROUTES (SECURED PORTAL LAYER) ================= */}
+        {/* ================= 2. ADMIN PORTAL (role: admin) ================= */}
         <Route path="/admin/*" element={
-          // DUAL-LAYER GUARD: Kinahanglan naka-login OUG dapat 'admin' gyud iyang active role block token
           isAuthenticated && userRole === 'admin' ? (
             <div className="app-layout">
               <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
@@ -136,13 +154,39 @@ function App() {
                 </main>
               </div>
             </div>
+          ) : isAuthenticated && userRole === 'super_admin' ? (
+            // Super admin dili na mo-agi sa admin portal
+            <Navigate to="/super/accounts" replace />
           ) : (
-            // Kon dili admin (bisan pa og naka-login as customer), sipaon dretso sa Public Home link!
             <Navigate to="/" replace />
           )
         } />
 
-        {/* FALLBACK REDIRECT GRID */}
+        {/* ================= 3. SUPER ADMIN PORTAL (role: super_admin) ================= */}
+        <Route path="/super/*" element={
+          isAuthenticated && userRole === 'super_admin' ? (
+            <div className="app-layout">
+              <SuperSidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+
+              <div className={`main-wrapper ${isCollapsed ? 'sidebar-closed' : 'sidebar-open'}`}>
+                <main className="content-area">
+                  <Routes>
+                    <Route path="/" element={<Navigate to="accounts" replace />} />
+                    <Route path="accounts" element={<SuperAccounts />} />
+                    <Route path="models" element={<SuperModels />} />
+                    <Route path="*" element={<Navigate to="accounts" replace />} />
+                  </Routes>
+                </main>
+              </div>
+            </div>
+          ) : isAuthenticated && userRole === 'admin' ? (
+            <Navigate to="/admin/dashboard" replace />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        } />
+
+        {/* FALLBACK REDIRECT */}
         <Route path="*" element={<Navigate to="/" replace />} />
 
       </Routes>

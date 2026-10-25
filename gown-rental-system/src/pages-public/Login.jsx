@@ -6,6 +6,21 @@ import '../styles-public/Login.css';
 // Supabase client instance configuration driver
 import { supabase } from '../supabaseClient';
 
+// Asa moadto ang user depende sa role
+const roleHome = (role) => (role === 'super_admin' ? '/super/accounts' : '/admin/dashboard');
+
+// I-save ang session sa browser gamit ang TINUOD nga role gikan sa database
+const saveAdminSession = (adminRow) => {
+  localStorage.setItem('userToken', adminRow.id);
+  localStorage.setItem('userRole', adminRow.role);
+  localStorage.setItem('admin', JSON.stringify({
+    id: adminRow.id,
+    name: adminRow.name,
+    email: adminRow.email,
+    role: adminRow.role,
+  }));
+};
+
 const Login = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
   const [error, setError] = useState('');
@@ -31,6 +46,7 @@ const Login = ({ onLoginSuccess }) => {
     };
 
     handleAuthRedirect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, onLoginSuccess]);
 
   // Shared processing cluster for identity routing parameters (ADMIN ONLY)
@@ -49,15 +65,15 @@ const Login = ({ onLoginSuccess }) => {
         .single();
 
       if (!adminLookupError && adminByEmail) {
-        localStorage.setItem('userToken', adminByEmail.id);
-        localStorage.setItem('userRole', 'admin');
+        const role = adminByEmail.role || 'admin';
+        saveAdminSession({ ...adminByEmail, role });
 
         if (typeof onLoginSuccess === 'function') {
-          onLoginSuccess('admin');
+          onLoginSuccess(role);
         }
 
         setLoading(false);
-        navigate('/admin/dashboard');
+        navigate(roleHome(role));
         return;
       }
 
@@ -113,7 +129,7 @@ const Login = ({ onLoginSuccess }) => {
       const { data: adminData, error: adminError } = await supabase
         .from('admins')
         .select('*')
-        .eq('email', email)
+        .eq('email', email.trim().toLowerCase())
         .eq('password', password)
         .single();
 
@@ -125,10 +141,11 @@ const Login = ({ onLoginSuccess }) => {
         throw new Error('Naka-link na ni nga account sa Google. Palihug gamit ang "Continue with Gmail" para mo-login.');
       }
 
-      localStorage.setItem('userToken', adminData.id);
-      localStorage.setItem('userRole', 'admin');
-      if (typeof onLoginSuccess === 'function') onLoginSuccess('admin');
-      navigate('/admin/dashboard');
+      const role = adminData.role || 'admin';
+      saveAdminSession({ ...adminData, role });
+
+      if (typeof onLoginSuccess === 'function') onLoginSuccess(role);
+      navigate(roleHome(role));
     } catch (err) {
       console.error(err);
       setError(err.message || 'Invalid email or password.');

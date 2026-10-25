@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  Search, PlusCircle, X, Upload, Package, CheckCircle,
-  AlertCircle, Trash2, Edit, Camera, Eye, EyeOff,
+  Search, PlusCircle, X, Upload, Package, AlertCircle,
+  Trash2, Edit, Camera, Eye, EyeOff,
   Crown, Layers, ShoppingBag, Globe
 } from 'lucide-react';
 import '../styles/Inventory.css';
@@ -9,14 +9,11 @@ import Header from '../components/Header';
 import { supabase } from '../supabaseClient';
 import { logActivity } from '../utils/activityLogger';
 
-const PETTICOAT_LAYERS = [
-  { value: null, label: 'None' },
-  { value: 1,    label: 'Layer 1' },
-  { value: 2,    label: 'Layer 2' },
-  { value: 3,    label: 'Layer 3' },
-];
-
 const GOWN_CATEGORIES = ['Wedding', 'Debut', 'Formal', 'Ball Gown', 'Others'];
+const ACC_CATEGORIES = ['Crown', 'Necklace', 'Earrings', 'Gloves', 'Veil', 'Others'];
+
+const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const emptyGownForm = {
   name: '', price: '', stock: 1, size: '', category: 'Wedding',
@@ -26,65 +23,91 @@ const emptyGownForm = {
   is_posted: false,
 };
 
+const emptyAccForm = { name: '', category: 'Others', price: '', swap_fee: '' };
+const emptyPettiForm = { layer: '', price: '', swap_fee: '' };
+
 const Inventory = () => {
-  const [activeTab, setActiveTab]         = useState('gowns');
+  const [activeTab, setActiveTab] = useState('gowns'); // 'gowns' | 'petticoats' | 'accessories'
 
-  // Gowns
-  const [gowns, setGowns]                 = useState([]);
-  const [searchTerm, setSearchTerm]       = useState('');
-  const [filterPosted, setFilterPosted]   = useState('all'); // 'all' | 'posted' | 'draft'
+  // Data
+  const [gowns, setGowns]             = useState([]);
+  const [petticoats, setPetticoats]   = useState([]);
+  const [accessories, setAccessories] = useState([]);
 
-  // Accessories catalog
-  const [accessories, setAccessories]     = useState([]);
-  const [accSearch, setAccSearch]         = useState('');
+  // Filters
+  const [searchTerm, setSearchTerm]     = useState('');
+  const [filterPosted, setFilterPosted] = useState('all'); // 'all' | 'posted' | 'draft'
+  const [accSearch, setAccSearch]       = useState('');
 
   // Gown modal
   const [gownModalOpen, setGownModalOpen] = useState(false);
-  const [editingGown, setEditingGown]     = useState(null);   // null = add mode
+  const [editingGown, setEditingGown]     = useState(null);
   const [gownForm, setGownForm]           = useState(emptyGownForm);
   const [imageFile, setImageFile]         = useState(null);
   const [imagePreview, setImagePreview]   = useState(null);
 
   // Accessory modal
-  const [accModalOpen, setAccModalOpen]   = useState(false);
-  const [editingAcc, setEditingAcc]       = useState(null);
-  const [accForm, setAccForm]             = useState({ name: '', category: 'Others' });
+  const [accModalOpen, setAccModalOpen] = useState(false);
+  const [editingAcc, setEditingAcc]     = useState(null);
+  const [accForm, setAccForm]           = useState(emptyAccForm);
 
-  const [loading, setLoading]             = useState(false);
+  // Petticoat modal
+  const [pettiModalOpen, setPettiModalOpen] = useState(false);
+  const [editingPetti, setEditingPetti]     = useState(null);
+  const [pettiForm, setPettiForm]           = useState(emptyPettiForm);
+
+  const [loading, setLoading] = useState(false);
 
   // ── FETCH ──
   const fetchGowns = async () => {
     const { data, error } = await supabase
-      .from('gowns')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .from('gowns').select('*').order('created_at', { ascending: false });
     if (!error) setGowns(data || []);
+  };
+
+  const fetchPetticoats = async () => {
+    const { data, error } = await supabase
+      .from('petticoats').select('*').order('layer', { ascending: true });
+    if (!error) setPetticoats(data || []);
   };
 
   const fetchAccessories = async () => {
     const { data, error } = await supabase
-      .from('accessories')
-      .select('*')
-      .order('category', { ascending: true });
+      .from('accessories').select('*').order('category', { ascending: true });
     if (!error) setAccessories(data || []);
   };
 
   useEffect(() => {
     fetchGowns();
+    fetchPetticoats();
     fetchAccessories();
   }, []);
 
-  // ── IMAGE HELPERS ──
+  // ── HELPERS ──
+  const accName = (id) => accessories.find(a => a.id === id)?.name || `#${id}`;
+  const pettiByLayer = (layer) => petticoats.find(p => Number(p.layer) === Number(layer));
+
+  // Total value of the items included in the gown package (gown form)
+  const includedValue = () => {
+    const petti = Number(pettiByLayer(gownForm.petticoat_layer)?.price || 0);
+    const accs = (gownForm.included_accessories || []).reduce(
+      (s, id) => s + Number(accessories.find(a => a.id === id)?.price || 0), 0
+    );
+    return petti + accs;
+  };
+
+  // ── IMAGE ──
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    const url = URL.createObjectURL(file);
     setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
-    setGownForm(prev => ({ ...prev, image: URL.createObjectURL(file) }));
+    setImagePreview(url);
+    setGownForm(prev => ({ ...prev, image: url }));
   };
 
   const uploadImage = async (file) => {
-    const ext      = file.name.split('.').pop();
+    const ext = file.name.split('.').pop();
     const fileName = `${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from('Gown images').upload(fileName, file);
     if (error) throw error;
@@ -92,7 +115,7 @@ const Inventory = () => {
     return urlData.publicUrl;
   };
 
-  // ── OPEN MODALS ──
+  // ── GOWN MODAL ──
   const openAddGown = () => {
     setEditingGown(null);
     setGownForm(emptyGownForm);
@@ -104,16 +127,16 @@ const Inventory = () => {
   const openEditGown = (gown) => {
     setEditingGown(gown);
     setGownForm({
-      name:                    gown.name        || '',
-      price:                   gown.price       || '',
-      stock:                   gown.stock       ?? 1,
-      size:                    gown.size        || '',
-      category:                gown.category    || 'Wedding',
-      desc:                    gown.desc        || '',
-      image:                   gown.image       || null,
-      petticoat_layer:         gown.petticoat_layer ?? null,
-      included_accessories:    gown.included_accessories || [],
-      is_posted:               gown.is_posted   || false,
+      name: gown.name || '',
+      price: gown.price || '',
+      stock: gown.stock ?? 1,
+      size: gown.size || '',
+      category: gown.category || 'Wedding',
+      desc: gown.desc || '',
+      image: gown.image || null,
+      petticoat_layer: gown.petticoat_layer ?? null,
+      included_accessories: gown.included_accessories || [],
+      is_posted: gown.is_posted || false,
     });
     setImageFile(null);
     setImagePreview(gown.image || null);
@@ -127,28 +150,27 @@ const Inventory = () => {
     setImagePreview(null);
   };
 
-  // ── SAVE GOWN (add or update) ──
   const handleSaveGown = async () => {
-    if (!gownForm.name.trim())    return alert('Palihug butangi og ngalan ang gown.');
-    if (!gownForm.price)          return alert('Palihug butangi og presyo.');
+    if (!gownForm.name.trim()) return alert('Please enter a gown name.');
+    if (!gownForm.price)       return alert('Please enter a price.');
     setLoading(true);
     try {
       let imageUrl = editingGown?.image || '';
       if (imageFile) imageUrl = await uploadImage(imageFile);
 
       const payload = {
-        name:                 gownForm.name.trim(),
-        price:                Number(gownForm.price),
-        stock:                Number(gownForm.stock),
-        size:                 gownForm.size,
-        category:             gownForm.category,
-        desc:                 gownForm.desc,
-        image:                imageUrl,
-        petticoat_layer:      gownForm.petticoat_layer,
+        name: gownForm.name.trim(),
+        price: Number(gownForm.price),
+        stock: Number(gownForm.stock),
+        size: gownForm.size,
+        category: gownForm.category,
+        desc: gownForm.desc,
+        image: imageUrl,
+        petticoat_layer: gownForm.petticoat_layer,
         included_accessories: gownForm.included_accessories,
-        is_posted:            gownForm.is_posted,
-        status:               Number(gownForm.stock) > 0 ? 'Available' : 'Out of Stock',
-        type:                 'gown',
+        is_posted: gownForm.is_posted,
+        status: Number(gownForm.stock) > 0 ? 'Available' : 'Out of Stock',
+        type: 'gown',
       };
 
       if (editingGown) {
@@ -165,102 +187,164 @@ const Inventory = () => {
       closeGownModal();
     } catch (err) {
       console.error(err);
-      alert('Naay sayop: ' + err.message);
+      alert('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // ── TOGGLE POST ──
   const handleTogglePost = async (gown) => {
     const next = !gown.is_posted;
-
-    // Must have price & image before posting
     if (next && (!gown.price || gown.price <= 0)) {
-      return alert('Palihug set-an og presyo ang gown bago i-post.');
+      return alert('Please set a price before posting this gown.');
     }
-
-    const { error } = await supabase
-      .from('gowns')
-      .update({ is_posted: next })
-      .eq('id', gown.id);
-
-    if (error) { alert('Naay sayop: ' + error.message); return; }
-
+    const { error } = await supabase.from('gowns').update({ is_posted: next }).eq('id', gown.id);
+    if (error) { alert('Error: ' + error.message); return; }
     await logActivity('gown_edited', `${next ? 'Posted' : 'Unpublished'} gown: ${gown.name}`);
     fetchGowns();
   };
 
-  // ── DELETE GOWN (with active-booking protection) ──
   const handleDeleteGown = async (gown) => {
-    // Check if gown has active bookings
     const { count, error: countErr } = await supabase
       .from('bookings')
       .select('id', { count: 'exact', head: true })
       .eq('gown_id', gown.id)
       .not('return_status', 'in', '("returned","cancelled")');
-
-    if (countErr) { console.error(countErr); }
+    if (countErr) console.error(countErr);
 
     if (count > 0) {
-      alert(`Dili ma-delete ang "${gown.name}" — naa pa kini ${count} ka aktibo nga booking/rental.`);
+      alert(`Cannot delete "${gown.name}" — it still has ${plural(count, 'active booking')}.`);
       return;
     }
-
-    if (!window.confirm(`Delete "${gown.name}"? Dili na kini ma-undo.`)) return;
+    if (!window.confirm(`Delete "${gown.name}"? This cannot be undone.`)) return;
 
     const { error } = await supabase.from('gowns').delete().eq('id', gown.id);
-    if (error) { alert('Naay sayop: ' + error.message); return; }
-
+    if (error) { alert('Error: ' + error.message); return; }
     await logActivity('gown_deleted', `Deleted gown: ${gown.name}`);
     fetchGowns();
+  };
+
+  // ── PETTICOATS CRUD ──
+  const openAddPetti = () => {
+    setEditingPetti(null);
+    // Suggest the next layer number
+    const nextLayer = petticoats.length ? Math.max(...petticoats.map(p => Number(p.layer))) + 1 : 1;
+    setPettiForm({ layer: nextLayer, price: '', swap_fee: '' });
+    setPettiModalOpen(true);
+  };
+
+  const openEditPetti = (p) => {
+    setEditingPetti(p);
+    setPettiForm({ layer: p.layer, price: p.price ?? '', swap_fee: p.swap_fee ?? '' });
+    setPettiModalOpen(true);
+  };
+
+  const handleSavePetti = async () => {
+    const layerNum = Number(pettiForm.layer);
+    if (!layerNum || layerNum < 1) return alert('Enter a valid layer number (1 or higher).');
+    if (petticoats.some(p => Number(p.layer) === layerNum && p.id !== editingPetti?.id)) {
+      return alert(`Layer ${layerNum} already exists.`);
+    }
+    setLoading(true);
+    try {
+      const payload = {
+        layer: layerNum,
+        price: Number(pettiForm.price) || 0,
+        swap_fee: Number(pettiForm.swap_fee) || 0,
+      };
+      if (editingPetti) {
+        const { error } = await supabase.from('petticoats').update(payload).eq('id', editingPetti.id);
+        if (error) throw error;
+        // If the layer number changed, keep gowns that use it in sync
+        if (Number(editingPetti.layer) !== layerNum) {
+          await supabase.from('gowns').update({ petticoat_layer: layerNum }).eq('petticoat_layer', editingPetti.layer);
+          fetchGowns();
+        }
+        await logActivity('petticoat_edited', `Updated petticoat Layer ${layerNum}`);
+      } else {
+        const { error } = await supabase.from('petticoats').insert([payload]);
+        if (error) throw error;
+        await logActivity('petticoat_added', `Added petticoat Layer ${layerNum}`);
+      }
+      fetchPetticoats();
+      setPettiModalOpen(false);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePetti = async (p) => {
+    const used = gowns.filter(g => Number(g.petticoat_layer) === Number(p.layer)).length;
+    if (used > 0) {
+      alert(`Cannot delete Layer ${p.layer} — it is used by ${plural(used, 'gown')}. Change the package of those gowns first.`);
+      return;
+    }
+    if (!window.confirm(`Delete Layer ${p.layer}?`)) return;
+    const { error } = await supabase.from('petticoats').delete().eq('id', p.id);
+    if (error) { alert('Error: ' + error.message); return; }
+    await logActivity('petticoat_deleted', `Deleted petticoat Layer ${p.layer}`);
+    fetchPetticoats();
   };
 
   // ── ACCESSORIES CRUD ──
   const openAddAcc = () => {
     setEditingAcc(null);
-    setAccForm({ name: '', category: 'Others' });
+    setAccForm(emptyAccForm);
     setAccModalOpen(true);
   };
 
   const openEditAcc = (acc) => {
     setEditingAcc(acc);
-    setAccForm({ name: acc.name, category: acc.category });
+    setAccForm({
+      name: acc.name,
+      category: acc.category || 'Others',
+      price: acc.price ?? '',
+      swap_fee: acc.swap_fee ?? '',
+    });
     setAccModalOpen(true);
   };
 
   const handleSaveAcc = async () => {
-    if (!accForm.name.trim()) return alert('Palihug butangi og ngalan.');
+    if (!accForm.name.trim()) return alert('Please enter a name.');
     setLoading(true);
     try {
+      const payload = {
+        name: accForm.name.trim(),
+        category: accForm.category,
+        price: Number(accForm.price) || 0,
+        swap_fee: Number(accForm.swap_fee) || 0,
+      };
       if (editingAcc) {
-        const { error } = await supabase
-          .from('accessories')
-          .update({ name: accForm.name.trim(), category: accForm.category })
-          .eq('id', editingAcc.id);
+        const { error } = await supabase.from('accessories').update(payload).eq('id', editingAcc.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('accessories')
-          .insert([{ name: accForm.name.trim(), category: accForm.category }]);
+        const { error } = await supabase.from('accessories').insert([payload]);
         if (error) throw error;
       }
       fetchAccessories();
       setAccModalOpen(false);
     } catch (err) {
-      alert('Naay sayop: ' + err.message);
+      alert('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteAcc = async (acc) => {
+    const used = gowns.filter(g => (g.included_accessories || []).includes(acc.id)).length;
+    if (used > 0) {
+      alert(`Cannot delete "${acc.name}" — it is included in the package of ${plural(used, 'gown')}. Remove it from those gowns first.`);
+      return;
+    }
     if (!window.confirm(`Delete "${acc.name}"?`)) return;
-    await supabase.from('accessories').delete().eq('id', acc.id);
+    const { error } = await supabase.from('accessories').delete().eq('id', acc.id);
+    if (error) { alert('Error: ' + error.message); return; }
     fetchAccessories();
   };
 
-  // ── ACCESSORY CHECKBOX TOGGLE in gown form ──
+  // ── ACCESSORY CHECKBOX in gown form ──
   const toggleAccInForm = (accId) => {
     setGownForm(prev => {
       const list = prev.included_accessories || [];
@@ -273,10 +357,7 @@ const Inventory = () => {
     });
   };
 
-  // Helper: get accessory name from id
-  const accName = (id) => accessories.find(a => a.id === id)?.name || `#${id}`;
-
-  // ── FILTERED DATA ──
+  // ── FILTERED ──
   const filteredGowns = gowns.filter(g => {
     const matchSearch = g.name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchPosted =
@@ -291,10 +372,10 @@ const Inventory = () => {
   );
 
   // ── STATS ──
-  const totalGowns   = gowns.length;
-  const postedCount  = gowns.filter(g => g.is_posted).length;
-  const draftCount   = gowns.filter(g => !g.is_posted).length;
-  const outCount     = gowns.filter(g => (g.stock || 0) === 0).length;
+  const totalGowns  = gowns.length;
+  const postedCount = gowns.filter(g => g.is_posted).length;
+  const draftCount  = gowns.filter(g => !g.is_posted).length;
+  const outCount    = gowns.filter(g => (g.stock || 0) === 0).length;
 
   return (
     <div className="inv-wrapper">
@@ -320,6 +401,10 @@ const Inventory = () => {
             <div><span>Out of Stock</span><h3>{outCount}</h3></div>
           </div>
           <div className="inv-stat-card">
+            <Layers className="inv-stat-icon purple" />
+            <div><span>Petticoats</span><h3>{petticoats.length}</h3></div>
+          </div>
+          <div className="inv-stat-card">
             <Crown className="inv-stat-icon gold" />
             <div><span>Accessories</span><h3>{accessories.length}</h3></div>
           </div>
@@ -327,43 +412,29 @@ const Inventory = () => {
 
         {/* ── TABS ── */}
         <div className="inv-tabs">
-          <button
-            className={`inv-tab ${activeTab === 'gowns' ? 'active' : ''}`}
-            onClick={() => setActiveTab('gowns')}
-          >
+          <button className={`inv-tab ${activeTab === 'gowns' ? 'active' : ''}`} onClick={() => setActiveTab('gowns')}>
             👗 Gowns
           </button>
-          <button
-            className={`inv-tab ${activeTab === 'accessories' ? 'active' : ''}`}
-            onClick={() => setActiveTab('accessories')}
-          >
+          <button className={`inv-tab ${activeTab === 'petticoats' ? 'active' : ''}`} onClick={() => setActiveTab('petticoats')}>
+            🩱 Petticoats
+          </button>
+          <button className={`inv-tab ${activeTab === 'accessories' ? 'active' : ''}`} onClick={() => setActiveTab('accessories')}>
             👑 Accessories
           </button>
         </div>
 
-        {/* ════════════════════════════════
-            TAB: GOWNS
-        ════════════════════════════════ */}
+        {/* ════════ TAB: GOWNS ════════ */}
         {activeTab === 'gowns' && (
           <>
-            {/* Toolbar */}
             <div className="inv-toolbar">
               <div className="inv-search">
                 <Search size={16} />
-                <input
-                  placeholder="Search gowns..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
+                <input placeholder="Search gowns..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
               </div>
 
               <div className="inv-filter-pills">
                 {['all', 'posted', 'draft'].map(f => (
-                  <button
-                    key={f}
-                    className={`inv-pill ${filterPosted === f ? 'active' : ''}`}
-                    onClick={() => setFilterPosted(f)}
-                  >
+                  <button key={f} className={`inv-pill ${filterPosted === f ? 'active' : ''}`} onClick={() => setFilterPosted(f)}>
                     {f === 'all' ? 'All' : f === 'posted' ? '🌐 Posted' : '📝 Draft'}
                   </button>
                 ))}
@@ -374,86 +445,115 @@ const Inventory = () => {
               </button>
             </div>
 
-            {/* Grid */}
             <div className="inv-grid">
               {filteredGowns.length === 0 ? (
                 <div className="inv-empty">No gowns found.</div>
-              ) : filteredGowns.map(gown => (
-                <div key={gown.id} className="inv-card">
-                  {/* Status badge */}
-                  <div className={`inv-post-badge ${gown.is_posted ? 'posted' : 'draft'}`}>
-                    {gown.is_posted ? '🌐 Posted' : '📝 Draft'}
-                  </div>
+              ) : filteredGowns.map(gown => {
+                const petti = gown.petticoat_layer ? pettiByLayer(gown.petticoat_layer) : null;
+                return (
+                  <div key={gown.id} className="inv-card">
+                    <div className={`inv-post-badge ${gown.is_posted ? 'posted' : 'draft'}`}>
+                      {gown.is_posted ? '🌐 Posted' : '📝 Draft'}
+                    </div>
 
-                  {/* Image */}
-                  <div className="inv-card-img">
-                    {gown.image
-                      ? <img src={gown.image} alt={gown.name} />
-                      : <div className="inv-no-img">👗</div>
-                    }
-                    <span className={`inv-stock-tag ${gown.stock > 0 ? 'in' : 'out'}`}>
-                      {gown.stock || 0} left
-                    </span>
-                  </div>
+                    <div className="inv-card-img">
+                      {gown.image ? <img src={gown.image} alt={gown.name} /> : <div className="inv-no-img">👗</div>}
+                      <span className={`inv-stock-tag ${gown.stock > 0 ? 'in' : 'out'}`}>{gown.stock || 0} left</span>
+                    </div>
 
-                  {/* Info */}
-                  <div className="inv-card-body">
-                    <span className="inv-card-cat">{gown.category}</span>
-                    <h3 className="inv-card-name">{gown.name}</h3>
-                    <p className="inv-card-price">₱{Number(gown.price).toLocaleString()}</p>
+                    <div className="inv-card-body">
+                      <span className="inv-card-cat">{gown.category}</span>
+                      <h3 className="inv-card-name">{gown.name}</h3>
+                      <p className="inv-card-price">{peso(gown.price)}</p>
 
-                    {/* Included items chips */}
-                    <div className="inv-chips">
-                      {gown.petticoat_layer && (
-                        <span className="inv-chip chip-petticoat">
-                          <Layers size={11} /> Layer {gown.petticoat_layer}
-                        </span>
-                      )}
-                      {(gown.included_accessories || []).map(id => (
-                        <span key={id} className="inv-chip chip-acc">
-                          <Crown size={11} /> {accName(id)}
-                        </span>
-                      ))}
+                      <div className="inv-chips">
+                        {gown.petticoat_layer && (
+                          <span className="inv-chip chip-petticoat">
+                            <Layers size={11} /> Layer {gown.petticoat_layer}
+                            {petti && Number(petti.price) > 0 && <em> · {peso(petti.price)}</em>}
+                          </span>
+                        )}
+                        {(gown.included_accessories || []).map(id => (
+                          <span key={id} className="inv-chip chip-acc">
+                            <Crown size={11} /> {accName(id)}
+                          </span>
+                        ))}
+                        {!gown.petticoat_layer && (gown.included_accessories || []).length === 0 && (
+                          <span className="inv-chip chip-none">Gown only</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="inv-card-actions">
+                      <button className="inv-act-btn edit" onClick={() => openEditGown(gown)}>
+                        <Edit size={14} /> Edit
+                      </button>
+                      <button className={`inv-act-btn ${gown.is_posted ? 'unpost' : 'post'}`} onClick={() => handleTogglePost(gown)}>
+                        {gown.is_posted ? <><EyeOff size={14} /> Unpost</> : <><Eye size={14} /> Post</>}
+                      </button>
+                      <button className="inv-act-btn del" onClick={() => handleDeleteGown(gown)} aria-label="Delete gown">
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
-
-                  {/* Actions */}
-                  <div className="inv-card-actions">
-                    <button className="inv-act-btn edit" onClick={() => openEditGown(gown)}>
-                      <Edit size={14} /> Edit
-                    </button>
-                    <button
-                      className={`inv-act-btn ${gown.is_posted ? 'unpost' : 'post'}`}
-                      onClick={() => handleTogglePost(gown)}
-                    >
-                      {gown.is_posted
-                        ? <><EyeOff size={14} /> Unpost</>
-                        : <><Eye size={14} /> Post</>
-                      }
-                    </button>
-                    <button className="inv-act-btn del" onClick={() => handleDeleteGown(gown)}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
 
-        {/* ════════════════════════════════
-            TAB: ACCESSORIES
-        ════════════════════════════════ */}
+        {/* ════════ TAB: PETTICOATS ════════ */}
+        {activeTab === 'petticoats' && (
+          <>
+            <div className="inv-toolbar">
+              <p className="inv-tab-note">
+                Petticoat layers. These appear in the gown package and in Customers (New Rental / Swap).
+              </p>
+              <button className="inv-add-btn" onClick={openAddPetti}>
+                <PlusCircle size={18} /> Add Layer
+              </button>
+            </div>
+
+            <div className="acc-list">
+              {petticoats.length === 0 ? (
+                <div className="inv-empty">No petticoat layers yet. Click "Add Layer".</div>
+              ) : petticoats.map(p => {
+                const used = gowns.filter(g => Number(g.petticoat_layer) === Number(p.layer)).length;
+                return (
+                  <div key={p.id} className="acc-row">
+                    <div className="acc-row-info">
+                      <span className="acc-icon">🩱</span>
+                      <div>
+                        <p className="acc-name">Layer {p.layer}</p>
+                        <span className="acc-cat">Used by {plural(used, 'gown')}</span>
+                      </div>
+                    </div>
+                    <div className="acc-row-meta">
+                      <span className="inv-price-tag">{Number(p.price) > 0 ? peso(p.price) : 'Free'}</span>
+                      {Number(p.swap_fee) > 0 && <span className="inv-swap-tag">Swap +{peso(p.swap_fee)}</span>}
+                    </div>
+                    <div className="acc-row-actions">
+                      <button className="inv-act-btn edit" onClick={() => openEditPetti(p)}>
+                        <Edit size={14} /> Edit
+                      </button>
+                      <button className="inv-act-btn del" onClick={() => handleDeletePetti(p)} aria-label="Delete layer">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* ════════ TAB: ACCESSORIES ════════ */}
         {activeTab === 'accessories' && (
           <>
             <div className="inv-toolbar">
               <div className="inv-search">
                 <Search size={16} />
-                <input
-                  placeholder="Search accessories..."
-                  value={accSearch}
-                  onChange={e => setAccSearch(e.target.value)}
-                />
+                <input placeholder="Search accessories..." value={accSearch} onChange={e => setAccSearch(e.target.value)} />
               </div>
               <button className="inv-add-btn" onClick={openAddAcc}>
                 <PlusCircle size={18} /> Add Accessory
@@ -463,151 +563,138 @@ const Inventory = () => {
             <div className="acc-list">
               {filteredAccs.length === 0 ? (
                 <div className="inv-empty">No accessories found.</div>
-              ) : filteredAccs.map(acc => (
-                <div key={acc.id} className="acc-row">
-                  <div className="acc-row-info">
-                    <span className="acc-icon">👑</span>
-                    <div>
-                      <p className="acc-name">{acc.name}</p>
-                      <span className="acc-cat">{acc.category}</span>
+              ) : filteredAccs.map(acc => {
+                const used = gowns.filter(g => (g.included_accessories || []).includes(acc.id)).length;
+                return (
+                  <div key={acc.id} className="acc-row">
+                    <div className="acc-row-info">
+                      <span className="acc-icon">👑</span>
+                      <div>
+                        <p className="acc-name">{acc.name}</p>
+                        <span className="acc-cat">{acc.category} · Used by {plural(used, 'gown')}</span>
+                      </div>
+                    </div>
+                    <div className="acc-row-meta">
+                      <span className="inv-price-tag">{Number(acc.price) > 0 ? peso(acc.price) : 'Free'}</span>
+                      {Number(acc.swap_fee) > 0 && <span className="inv-swap-tag">Swap +{peso(acc.swap_fee)}</span>}
+                    </div>
+                    <div className="acc-row-actions">
+                      <button className="inv-act-btn edit" onClick={() => openEditAcc(acc)}>
+                        <Edit size={14} /> Edit
+                      </button>
+                      <button className="inv-act-btn del" onClick={() => handleDeleteAcc(acc)} aria-label="Delete accessory">
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
-                  <div className="acc-row-actions">
-                    <button className="inv-act-btn edit" onClick={() => openEditAcc(acc)}>
-                      <Edit size={14} /> Edit
-                    </button>
-                    <button className="inv-act-btn del" onClick={() => handleDeleteAcc(acc)}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
 
-        {/* ════════════════════════════════
-            GOWN MODAL (Add / Edit)
-        ════════════════════════════════ */}
+        {/* ════════ GOWN MODAL ════════ */}
         {gownModalOpen && (
           <div className="inv-overlay" onClick={closeGownModal}>
             <div className="inv-modal" onClick={e => e.stopPropagation()}>
-              {/* Header */}
               <div className="inv-modal-header">
                 <h2>{editingGown ? 'Edit Gown Package' : 'Add New Gown Package'}</h2>
-                <button className="inv-modal-close" onClick={closeGownModal}>
-                  <X size={16} />
-                </button>
+                <button className="inv-modal-close" onClick={closeGownModal} aria-label="Close"><X size={16} /></button>
               </div>
 
               <div className="inv-modal-body">
 
                 {/* Image upload */}
                 <label className="inv-upload">
-                  {imagePreview
-                    ? <>
-                        <img src={imagePreview} alt="preview" className="inv-upload-preview" />
-                        <div className="inv-upload-overlay"><Camera size={20} /> Change Photo</div>
-                      </>
-                    : <div className="inv-upload-placeholder">
-                        <Upload size={24} />
-                        <span>Upload Gown Photo</span>
-                      </div>
-                  }
+                  {imagePreview ? (
+                    <>
+                      <img src={imagePreview} alt="preview" className="inv-upload-preview" />
+                      <div className="inv-upload-overlay"><Camera size={20} /> Change Photo</div>
+                    </>
+                  ) : (
+                    <div className="inv-upload-placeholder">
+                      <Upload size={24} />
+                      <span>Upload Gown Photo</span>
+                    </div>
+                  )}
                   <input type="file" accept="image/*" onChange={handleImageChange} hidden />
                 </label>
 
-                {/* Basic fields */}
+                {/* Basic */}
                 <div className="inv-form-section">
                   <h4 className="inv-section-title">📝 Basic Info</h4>
 
                   <div className="inv-field">
                     <label>Gown Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Mermaid Wedding Gown"
-                      value={gownForm.name}
-                      onChange={e => setGownForm(p => ({ ...p, name: e.target.value }))}
-                    />
+                    <input type="text" placeholder="e.g. Mermaid Wedding Gown" value={gownForm.name}
+                      onChange={e => setGownForm(p => ({ ...p, name: e.target.value }))} />
                   </div>
 
                   <div className="inv-row-3">
                     <div className="inv-field">
                       <label>Price (₱)</label>
-                      <input
-                        type="number"
-                        placeholder="0"
-                        value={gownForm.price}
-                        onChange={e => setGownForm(p => ({ ...p, price: e.target.value }))}
-                      />
+                      <input type="number" placeholder="0" value={gownForm.price}
+                        onChange={e => setGownForm(p => ({ ...p, price: e.target.value }))} />
                     </div>
                     <div className="inv-field">
                       <label>Stock</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={gownForm.stock}
-                        onChange={e => setGownForm(p => ({ ...p, stock: e.target.value }))}
-                      />
+                      <input type="number" min="0" value={gownForm.stock}
+                        onChange={e => setGownForm(p => ({ ...p, stock: e.target.value }))} />
                     </div>
                     <div className="inv-field">
                       <label>Size</label>
-                      <input
-                        type="text"
-                        placeholder="S / M / L / XL"
-                        value={gownForm.size}
-                        onChange={e => setGownForm(p => ({ ...p, size: e.target.value }))}
-                      />
+                      <input type="text" placeholder="S / M / L / XL" value={gownForm.size}
+                        onChange={e => setGownForm(p => ({ ...p, size: e.target.value }))} />
                     </div>
                   </div>
 
                   <div className="inv-field">
                     <label>Category</label>
-                    <select
-                      value={gownForm.category}
-                      onChange={e => setGownForm(p => ({ ...p, category: e.target.value }))}
-                    >
-                      {GOWN_CATEGORIES.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
+                    <select value={gownForm.category} onChange={e => setGownForm(p => ({ ...p, category: e.target.value }))}>
+                      {GOWN_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
 
                   <div className="inv-field">
                     <label>Description</label>
-                    <textarea
-                      rows="3"
-                      placeholder="Describe the gown, style, occasion..."
-                      value={gownForm.desc}
-                      onChange={e => setGownForm(p => ({ ...p, desc: e.target.value }))}
-                    />
+                    <textarea rows="3" placeholder="Describe the gown, style, occasion..." value={gownForm.desc}
+                      onChange={e => setGownForm(p => ({ ...p, desc: e.target.value }))} />
                   </div>
                 </div>
 
-                {/* Petticoat */}
+                {/* Petticoat (from the petticoats table) */}
                 <div className="inv-form-section">
                   <h4 className="inv-section-title">🩱 Petticoat Included</h4>
                   <div className="inv-petticoat-btns">
-                    {PETTICOAT_LAYERS.map(opt => (
+                    <button
+                      type="button"
+                      className={`inv-layer-btn ${gownForm.petticoat_layer === null ? 'active' : ''}`}
+                      onClick={() => setGownForm(p => ({ ...p, petticoat_layer: null }))}
+                    >
+                      None
+                    </button>
+                    {petticoats.map(p => (
                       <button
-                        key={opt.label}
+                        key={p.id}
                         type="button"
-                        className={`inv-layer-btn ${gownForm.petticoat_layer === opt.value ? 'active' : ''}`}
-                        onClick={() => setGownForm(p => ({ ...p, petticoat_layer: opt.value }))}
+                        className={`inv-layer-btn ${Number(gownForm.petticoat_layer) === Number(p.layer) ? 'active' : ''}`}
+                        onClick={() => setGownForm(prev => ({ ...prev, petticoat_layer: Number(p.layer) }))}
                       >
-                        {opt.label}
+                        Layer {p.layer}
+                        <span>{Number(p.price) > 0 ? peso(p.price) : 'Free'}</span>
                       </button>
                     ))}
                   </div>
+                  {petticoats.length === 0 && (
+                    <p className="inv-no-acc-msg">No layers yet — add some in the Petticoats tab first.</p>
+                  )}
                 </div>
 
-                {/* Accessories */}
+                {/* Accessories (from the accessories table) */}
                 <div className="inv-form-section">
                   <h4 className="inv-section-title">👑 Accessories Included</h4>
                   {accessories.length === 0 ? (
-                    <p className="inv-no-acc-msg">
-                      No accessories yet — add some in the Accessories tab first.
-                    </p>
+                    <p className="inv-no-acc-msg">No accessories yet — add some in the Accessories tab first.</p>
                   ) : (
                     <div className="inv-acc-checks">
                       {accessories.map(acc => (
@@ -621,80 +708,119 @@ const Inventory = () => {
                             <span className="inv-check-name">{acc.name}</span>
                             <span className="inv-check-cat">{acc.category}</span>
                           </span>
+                          <span className="inv-check-price">{Number(acc.price) > 0 ? peso(acc.price) : 'Free'}</span>
                         </label>
                       ))}
                     </div>
                   )}
                 </div>
 
+                {/* Package summary */}
+                <div className="inv-package-note">
+                  <div><span>Gown</span><strong>{peso(gownForm.price)}</strong></div>
+                  <div><span>Included in package (value)</span><strong>{peso(includedValue())}</strong></div>
+                  <p>
+                    {gownForm.petticoat_layer ? `Layer ${gownForm.petticoat_layer}` : 'No petticoat'}
+                    {' + '}
+                    {plural((gownForm.included_accessories || []).length, 'accessory').replace('accessorys', 'accessories')}
+                  </p>
+                </div>
+
                 {/* Post toggle */}
                 <div className="inv-form-section inv-post-section">
                   <div className="inv-post-toggle-row">
                     <div>
-                      <h4 className="inv-section-title" style={{ marginBottom: 2 }}>
-                        🌐 Publish to Customer Catalog
-                      </h4>
+                      <h4 className="inv-section-title">🌐 Publish to Customer Catalog</h4>
                       <p className="inv-post-desc">
                         {gownForm.is_posted
-                          ? 'Visible na sa customers — makita na nila sa catalog.'
-                          : 'Draft pa — dili pa makita sa customers.'
-                        }
+                          ? 'Visible to customers in the catalog.'
+                          : 'Draft — not visible to customers yet.'}
                       </p>
                     </div>
                     <button
                       type="button"
                       className={`inv-toggle ${gownForm.is_posted ? 'on' : 'off'}`}
                       onClick={() => setGownForm(p => ({ ...p, is_posted: !p.is_posted }))}
+                      aria-label="Toggle publish"
                     >
                       <span className="inv-toggle-knob" />
                     </button>
                   </div>
                 </div>
 
-                {/* Save */}
                 <button className="inv-save-btn" onClick={handleSaveGown} disabled={loading}>
-                  {loading
-                    ? 'Saving...'
-                    : editingGown ? 'Save Changes' : 'Add to Inventory'
-                  }
+                  {loading ? 'Saving...' : editingGown ? 'Save Changes' : 'Add to Inventory'}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ════════════════════════════════
-            ACCESSORY MODAL (Add / Edit)
-        ════════════════════════════════ */}
+        {/* ════════ PETTICOAT MODAL ════════ */}
+        {pettiModalOpen && (
+          <div className="inv-overlay" onClick={() => setPettiModalOpen(false)}>
+            <div className="inv-modal inv-modal-sm" onClick={e => e.stopPropagation()}>
+              <div className="inv-modal-header">
+                <h2>{editingPetti ? `Edit Layer ${editingPetti.layer}` : 'Add Petticoat Layer'}</h2>
+                <button className="inv-modal-close" onClick={() => setPettiModalOpen(false)} aria-label="Close"><X size={16} /></button>
+              </div>
+              <div className="inv-modal-body">
+                <div className="inv-field">
+                  <label>Layer Number</label>
+                  <input type="number" min="1" value={pettiForm.layer}
+                    onChange={e => setPettiForm(p => ({ ...p, layer: e.target.value }))} />
+                </div>
+                <div className="inv-row-2">
+                  <div className="inv-field">
+                    <label>Price (₱)</label>
+                    <input type="number" min="0" placeholder="0 = Free" value={pettiForm.price}
+                      onChange={e => setPettiForm(p => ({ ...p, price: e.target.value }))} />
+                  </div>
+                  <div className="inv-field">
+                    <label>Swap Fee (₱)</label>
+                    <input type="number" min="0" placeholder="0" value={pettiForm.swap_fee}
+                      onChange={e => setPettiForm(p => ({ ...p, swap_fee: e.target.value }))} />
+                  </div>
+                </div>
+                <button className="inv-save-btn" onClick={handleSavePetti} disabled={loading}>
+                  {loading ? 'Saving...' : editingPetti ? 'Save Changes' : 'Add Layer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ════════ ACCESSORY MODAL ════════ */}
         {accModalOpen && (
           <div className="inv-overlay" onClick={() => setAccModalOpen(false)}>
             <div className="inv-modal inv-modal-sm" onClick={e => e.stopPropagation()}>
               <div className="inv-modal-header">
                 <h2>{editingAcc ? 'Edit Accessory' : 'Add Accessory'}</h2>
-                <button className="inv-modal-close" onClick={() => setAccModalOpen(false)}>
-                  <X size={16} />
-                </button>
+                <button className="inv-modal-close" onClick={() => setAccModalOpen(false)} aria-label="Close"><X size={16} /></button>
               </div>
               <div className="inv-modal-body">
                 <div className="inv-field">
                   <label>Name</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Crown Gold"
-                    value={accForm.name}
-                    onChange={e => setAccForm(p => ({ ...p, name: e.target.value }))}
-                  />
+                  <input type="text" placeholder="e.g. Crown Gold" value={accForm.name}
+                    onChange={e => setAccForm(p => ({ ...p, name: e.target.value }))} />
                 </div>
                 <div className="inv-field">
                   <label>Category</label>
-                  <select
-                    value={accForm.category}
-                    onChange={e => setAccForm(p => ({ ...p, category: e.target.value }))}
-                  >
-                    {['Crown', 'Necklace', 'Earrings', 'Gloves', 'Veil', 'Others'].map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
+                  <select value={accForm.category} onChange={e => setAccForm(p => ({ ...p, category: e.target.value }))}>
+                    {ACC_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                </div>
+                <div className="inv-row-2">
+                  <div className="inv-field">
+                    <label>Price (₱)</label>
+                    <input type="number" min="0" placeholder="0 = Free" value={accForm.price}
+                      onChange={e => setAccForm(p => ({ ...p, price: e.target.value }))} />
+                  </div>
+                  <div className="inv-field">
+                    <label>Swap Fee (₱)</label>
+                    <input type="number" min="0" placeholder="0" value={accForm.swap_fee}
+                      onChange={e => setAccForm(p => ({ ...p, swap_fee: e.target.value }))} />
+                  </div>
                 </div>
                 <button className="inv-save-btn" onClick={handleSaveAcc} disabled={loading}>
                   {loading ? 'Saving...' : editingAcc ? 'Save Changes' : 'Add Accessory'}

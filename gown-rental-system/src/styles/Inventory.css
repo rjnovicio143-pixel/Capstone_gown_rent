@@ -590,3 +590,51 @@
   .inv-petticoat-btns { gap: 6px; }
   .inv-layer-btn { padding: 8px 14px; font-size: 12px; }
 }
+
+/* =========================================
+   NEW: petticoat tab, prices, package note
+========================================= */
+.inv-stat-icon.purple { background: #f3e8ff; color: #9333ea; }
+
+.inv-tab-note { margin: 0; font-size: 13px; color: #64748b; max-width: 520px; }
+
+.inv-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* Rows sa petticoat / accessories */
+.acc-row { gap: 14px; flex-wrap: wrap; }
+.acc-row-info { flex: 1; min-width: 180px; }
+.acc-row-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.inv-price-tag {
+  background: #fefce8; color: #b8860b; font-size: 12px; font-weight: 800;
+  padding: 5px 12px; border-radius: 20px;
+}
+.inv-swap-tag {
+  background: #f3e8ff; color: #9333ea; font-size: 11px; font-weight: 700;
+  padding: 4px 10px; border-radius: 20px;
+}
+
+/* Chips sa gown card */
+.inv-chip em { font-style: normal; opacity: 0.8; }
+.chip-none { background: #f1f5f9; color: #94a3b8; }
+
+/* Layer buttons nga naay presyo */
+.inv-layer-btn { display: inline-flex; align-items: center; gap: 8px; }
+.inv-layer-btn span { font-size: 11px; font-weight: 700; opacity: 0.75; }
+
+/* Presyo sa accessory checkbox */
+.inv-check-text { flex: 1; }
+.inv-check-price { font-size: 12px; font-weight: 800; color: #b8860b; white-space: nowrap; }
+
+/* Package summary sa gown form */
+.inv-package-note {
+  background: #fffcf0; border: 1px dashed #e5d9a8; border-radius: 14px;
+  padding: 14px 18px; display: flex; flex-direction: column; gap: 6px;
+}
+.inv-package-note > div { display: flex; justify-content: space-between; font-size: 13px; color: #64748b; }
+.inv-package-note strong { color: #1e293b; font-weight: 800; }
+.inv-package-note p { margin: 4px 0 0; font-size: 12px; color: #94a3b8; }
+
+@media (max-width: 480px) {
+  .inv-row-2 { grid-template-columns: 1fr; }
+}

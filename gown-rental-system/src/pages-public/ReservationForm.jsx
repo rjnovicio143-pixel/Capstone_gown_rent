@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import {
   ArrowLeft, Send, User, Phone, Mail,
-  MessageSquare, CheckCircle, Clock
+  MessageSquare, CheckCircle, Clock, Layers, Crown
 } from 'lucide-react';
 import '../styles-public/ReservationForm.css';
 
@@ -23,6 +23,47 @@ const ReservationForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted]       = useState(false);
 
+  // Package included with the gown (petticoat + accessories)
+  const [pkg, setPkg]               = useState({ petticoat: null, accessories: [] });
+  const [pkgLoading, setPkgLoading] = useState(true);
+  const [pkgError, setPkgError]     = useState('');
+
+  // Load the gown package from the database
+  useEffect(() => {
+    if (!gown?.id) return;
+
+    const loadPackage = async () => {
+      setPkgLoading(true);
+      setPkgError('');
+
+      const [gRes, pRes, aRes] = await Promise.all([
+        supabase.from('gowns').select('petticoat_layer, included_accessories').eq('id', gown.id).single(),
+        supabase.from('petticoats').select('*'),
+        supabase.from('accessories').select('*'),
+      ]);
+
+      if (gRes.error || pRes.error || aRes.error) {
+        console.error(gRes.error || pRes.error || aRes.error);
+        setPkgError('Could not load the gown package. Please refresh the page.');
+        setPkgLoading(false);
+        return;
+      }
+
+      const layer = gRes.data?.petticoat_layer;
+      const accessoryIds = gRes.data?.included_accessories || [];
+
+      const petticoat = layer
+        ? (pRes.data || []).find(p => Number(p.layer) === Number(layer)) || null
+        : null;
+      const accessories = (aRes.data || []).filter(a => accessoryIds.includes(a.id));
+
+      setPkg({ petticoat, accessories });
+      setPkgLoading(false);
+    };
+
+    loadPackage();
+  }, [gown?.id]);
+
   // No gown selected fallback
   if (!gown) {
     return (
@@ -38,37 +79,51 @@ const ReservationForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (pkgLoading || pkgError) return;
     setIsSubmitting(true);
 
     try {
       const now        = new Date();
       const expiryDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const gownPrice  = Number(gown.price);
 
       const { error } = await supabase.from('bookings').insert([{
-        name:              formData.name,
-        contact:           formData.contact,
-        gmail:             formData.gmail,
-        facebook:          formData.altContact,   // reusing altContact as secondary
-        customer_message:  formData.customerMessage,
-        gown_id:           gown.id,
-        gown_name:         gown.name,
-        rental_price:      Number(gown.price),
-        return_status:     'pending',
-        hold_expires_at:   expiryDate.toISOString(),
-        is_online_hold:    true,
-        down:              0,
-        deposit:           0,
-        balance:           Number(gown.price),
-        assisted_by:       '',
-        commissions:       0,
-        penalty_rate:      500,
+        name:               formData.name,
+        contact:            formData.contact,
+        gmail:              formData.gmail,
+        facebook:           formData.altContact,   // reusing altContact as secondary
+        customer_message:   formData.customerMessage,
+        gown_id:            gown.id,
+        gown_name:          gown.name,
+        rental_price:       gownPrice,
+        return_status:      'pending',
+        hold_expires_at:    expiryDate.toISOString(),
+        is_online_hold:     true,
+        down:               0,
+        deposit:            0,
+        total_rent:         gownPrice,
+        balance:            gownPrice,
+        assisted_by:        '',
+        commissions:        0,
+        penalty_rate:       500,
         cancel_penalty_amt: 200,
         is_penalty_settled: false,
-        penalty:           0,
-        penalty_paid:      0,
-        claimed_status:    'unclaimed',
-        addons:            [],
-        swap_charges:      0,
+        penalty:            0,
+        penalty_paid:       0,
+        claimed_status:     'unclaimed',
+        swap_charges:       0,
+
+        // Package included with the gown: price is 0 because it is already part of the gown price
+        petticoat:          pkg.petticoat ? 'Yes' : 'No',
+        petticoat_id:       pkg.petticoat?.id || null,
+        petticoat_price:    0,
+        addons: pkg.accessories.map(a => ({
+          id: a.id,
+          name: a.name,
+          price: 0,
+          swap_fee: Number(a.swap_fee) || 0,
+          included: true,
+        })),
       }]);
 
       if (error) throw error;
@@ -76,7 +131,7 @@ const ReservationForm = () => {
       setSubmitted(true);
     } catch (error) {
       console.error(error);
-      alert("Naay sayop sa pag-submit. Palihug sulayan pag-usab.");
+      alert('Something went wrong while submitting. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -107,6 +162,8 @@ const ReservationForm = () => {
     );
   }
 
+  const hasPackage = pkg.petticoat || pkg.accessories.length > 0;
+
   return (
     <div className="rf-page">
       {/* ── BACK BUTTON ── */}
@@ -130,6 +187,32 @@ const ReservationForm = () => {
             <p className="rf-gown-price">₱{Number(gown.price).toLocaleString()}</p>
             {gown.size && <p className="rf-gown-size">Size: {gown.size}</p>}
           </div>
+
+          {/* Included package */}
+          <div className="rf-package">
+            <h4>Included in this gown</h4>
+            {pkgLoading ? (
+              <p className="rf-package-empty">Loading...</p>
+            ) : pkgError ? (
+              <p className="rf-package-error">{pkgError}</p>
+            ) : hasPackage ? (
+              <div className="rf-package-list">
+                {pkg.petticoat && (
+                  <span className="rf-package-chip petti">
+                    <Layers size={12} /> Petticoat Layer {pkg.petticoat.layer}
+                  </span>
+                )}
+                {pkg.accessories.map(a => (
+                  <span key={a.id} className="rf-package-chip acc">
+                    <Crown size={12} /> {a.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="rf-package-empty">Gown only (no petticoat or accessories included).</p>
+            )}
+          </div>
+
           <div className="rf-hold-notice">
             <Clock size={15} />
             <div>
@@ -204,7 +287,7 @@ const ReservationForm = () => {
             <button
               type="submit"
               className="rf-submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || pkgLoading || !!pkgError}
             >
               {isSubmitting
                 ? <><span className="rf-spinner" /> Submitting...</>

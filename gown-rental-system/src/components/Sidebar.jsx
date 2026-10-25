@@ -10,7 +10,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
   const menuItems = [
     { name: 'Dashboard',      icon: LayoutDashboard, path: '/admin/dashboard'   },
     { name: 'Gown Inventory', icon: Shirt,            path: '/admin/inventory'   },
-    { name: 'Availability',   icon: CalendarCheck,    path: '/admin/availability'},
+    { name: 'Wedding Events', icon: CalendarCheck,    path: '/admin/availability'},
     { name: 'Customers',      icon: Users,            path: '/admin/customers'   },
     { name: '3D Mannequin',   icon: Box,             path: '/admin/mannequin'    },
     { name: 'Reports',        icon: FileBarChart,     path: '/admin/reports'     },

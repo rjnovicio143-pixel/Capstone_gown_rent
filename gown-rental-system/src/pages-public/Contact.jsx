@@ -10,11 +10,11 @@ import '../styles-public/ContactUs.css';
 /* ---------- SHOP DETAILS ----------
    TODO: replace the placeholder values (address, phone, email, Facebook) with the real ones. */
 const SHOP = {
-  address: 'Your shop address here',          // real street address shown on the page
-  phoneDisplay: '+63 900 000 0000',           // phone number as shown on screen
-  phoneLink: '+639000000000',                 // same number without spaces, used for tap-to-call
-  email: 'yourshop@gmail.com',                // real shop email
-  facebook: 'https://facebook.com/your-page', // link to the Facebook page
+  address: 'Villanueva, Misamis Oriental',          // real street address shown on the page
+  phoneDisplay: '+0918 242 0619',           // phone number as shown on screen
+  phoneLink: '+0918 242 0619',                 // same number without spaces, used for tap-to-call
+  email: 'mwauh18z@gmail.com',                // real shop email
+  facebook: 'https://www.facebook.com/Mrs.GGownRental', // link to the Facebook page
   hours: [
     { days: 'Monday to Saturday', time: '9:00 AM to 6:00 PM' },
     { days: 'Sunday', time: 'By appointment only' },

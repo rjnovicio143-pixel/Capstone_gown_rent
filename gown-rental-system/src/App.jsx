@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import SuperSidebar from './components/SuperSidebar';
@@ -30,15 +30,14 @@ import Mannequin3D from './pages-public/Mannequin3D';
 import PublicNavbar from './components/PublicNavbar';
 import './App.css';
 
-// Asa moadto ang user human sa login
+// Where each role goes after login
 const roleHome = (role) => {
   if (role === 'super_admin') return '/super/accounts';
   if (role === 'admin')       return '/admin/dashboard';
   return '/';
 };
 
-// Kuhaon ang tinuod nga role gikan sa localStorage.admin (parehas sa gibasa sa header).
-// Kung customer, ayaw i-override. Kung walay admin data, gamiton ang fallback.
+// The real role comes from localStorage.admin (saved by Login.jsx). Customers are never overridden.
 const readRole = (fallback) => {
   if (fallback === 'customer') return fallback;
   try {
@@ -50,24 +49,30 @@ const readRole = (fallback) => {
   return fallback;
 };
 
+// Read the saved session synchronously, so the very first render already knows who is logged in.
+// If this were done in useEffect, the first render would think nobody is logged in and the
+// protected routes would redirect to Home before the session is loaded.
+const loadSession = () => {
+  try {
+    const token = localStorage.getItem('userToken');
+    if (!token) return { isAuthenticated: false, role: null };
+    return { isAuthenticated: true, role: readRole(localStorage.getItem('userRole')) };
+  } catch (_) {
+    return { isAuthenticated: false, role: null };
+  }
+};
+
 function App() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState(null);
+  const [session, setSession] = useState(loadSession);
 
-  useEffect(() => {
-    const token = localStorage.getItem('userToken');
-    if (token) {
-      setIsAuthenticated(true);
-      setUserRole(readRole(localStorage.getItem('userRole')));
-    }
-  }, []);
+  const isAuthenticated = session.isAuthenticated;
+  const userRole = session.role;
 
   const handleLoginSuccess = (role) => {
     const finalRole = readRole(role);
     localStorage.setItem('userRole', finalRole);
-    setIsAuthenticated(true);
-    setUserRole(finalRole);
+    setSession({ isAuthenticated: true, role: finalRole });
   };
 
   return (
@@ -124,7 +129,7 @@ function App() {
           </div>
         } />
 
-        {/* LOGIN: ang padulong depende sa role */}
+        {/* LOGIN: a logged-in user is sent straight to their own portal */}
         <Route path="/login" element={
           isAuthenticated
             ? <Navigate to={roleHome(userRole)} replace />
@@ -155,7 +160,7 @@ function App() {
               </div>
             </div>
           ) : isAuthenticated && userRole === 'super_admin' ? (
-            // Super admin dili na mo-agi sa admin portal
+            // A super admin does not use the admin portal
             <Navigate to="/super/accounts" replace />
           ) : (
             <Navigate to="/" replace />

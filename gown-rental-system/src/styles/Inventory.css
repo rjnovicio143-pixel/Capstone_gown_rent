@@ -638,3 +638,77 @@
 @media (max-width: 480px) {
   .inv-row-2 { grid-template-columns: 1fr; }
 }
+/* =========================================
+   NEW: photo sulod sa Publish section, accessory stock
+   (i-paste sa pinakaubos sa Inventory.css)
+========================================= */
+
+/* Photo upload nga makita ra kung naka-ON ang Publish */
+.inv-post-photo { margin-top: 16px; }
+.inv-upload.required { border-color: #f59e0b; background: #fffbeb; }
+
+/* Accessory stock (− 5 pcs +) */
+.acc-stock { display: flex; align-items: center; gap: 6px; }
+
+.acc-stock-btn {
+  width: 28px; height: 28px;
+  border: 1.5px solid #e2e8f0; border-radius: 8px;
+  background: #fff; color: #475569;
+  font-size: 16px; font-weight: 800; line-height: 1;
+  cursor: pointer; transition: 0.2s;
+}
+.acc-stock-btn:hover { border-color: #b8860b; color: #b8860b; }
+
+.acc-stock-pill {
+  min-width: 64px; text-align: center;
+  font-size: 12px; font-weight: 800;
+  padding: 5px 10px; border-radius: 20px;
+}
+.acc-stock-pill.in  { background: #dcfce7; color: #15803d; }
+.acc-stock-pill.low { background: #fef3c7; color: #b45309; }
+.acc-stock-pill.out { background: #fee2e2; color: #b91c1c; }
+
+/* Stock text sa gown form checkbox list */
+.inv-check-out { color: #b91c1c; font-weight: 700; }
+
+/* =========================================
+   NEW: category tabs sa Gowns
+========================================= */
+.inv-cat-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.inv-cat-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: 0.2s;
+}
+.inv-cat-tab:hover  { border-color: #b8860b; color: #b8860b; }
+.inv-cat-tab.active { background: #1e293b; border-color: #1e293b; color: #fff; }
+
+.inv-cat-count {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+.inv-cat-tab.active .inv-cat-count { background: rgba(255,255,255,0.18); color: #fff; }

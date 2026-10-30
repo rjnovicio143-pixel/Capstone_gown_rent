@@ -10,7 +10,13 @@ import { supabase } from '../supabaseClient';
 import { logActivity } from '../utils/activityLogger';
 
 const GOWN_CATEGORIES = ['Wedding', 'Debut', 'Formal', 'Ball Gown', 'Others'];
-const ACC_CATEGORIES = ['Crown', 'Necklace', 'Earrings', 'Gloves', 'Veil', 'Others'];
+const ACC_CATEGORIES = [
+  'Crown', 'Hairdressed', 'Basket', 'Veil', 'Couple Cord', 'Pillow',
+  'Suspender', 'Bowtie', 'Necktie', 'Vest',
+  'Filipina Sleeve', 'Shawl / Alampay', 'Bolero', 'Kimono',
+  'Necklace', 'Earrings', 'Gloves', 'Others',
+];
+const LOW_STOCK = 2; // pila na lang = "low stock"
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -23,7 +29,7 @@ const emptyGownForm = {
   is_posted: false,
 };
 
-const emptyAccForm = { name: '', category: 'Others', price: '', swap_fee: '' };
+const emptyAccForm = { name: '', category: 'Others', price: '', swap_fee: '', stock: 1 };
 const emptyPettiForm = { layer: '', price: '', swap_fee: '' };
 
 const Inventory = () => {
@@ -37,6 +43,7 @@ const Inventory = () => {
   // Filters
   const [searchTerm, setSearchTerm]     = useState('');
   const [filterPosted, setFilterPosted] = useState('all'); // 'all' | 'posted' | 'draft'
+  const [filterCategory, setFilterCategory] = useState('All'); // 'All' | Wedding | Debut | ...
   const [accSearch, setAccSearch]       = useState('');
 
   // Gown modal
@@ -153,10 +160,15 @@ const Inventory = () => {
   const handleSaveGown = async () => {
     if (!gownForm.name.trim()) return alert('Please enter a gown name.');
     if (!gownForm.price)       return alert('Please enter a price.');
+    // Photo is required only when the gown is going public
+    if (gownForm.is_posted && !imagePreview) {
+      return alert('Please upload a photo before posting this gown to the public catalog.');
+    }
     setLoading(true);
     try {
       let imageUrl = editingGown?.image || '';
-      if (imageFile) imageUrl = await uploadImage(imageFile);
+      // Only upload when posting, so unused photos don't pile up in storage
+      if (gownForm.is_posted && imageFile) imageUrl = await uploadImage(imageFile);
 
       const payload = {
         name: gownForm.name.trim(),
@@ -197,6 +209,13 @@ const Inventory = () => {
     const next = !gown.is_posted;
     if (next && (!gown.price || gown.price <= 0)) {
       return alert('Please set a price before posting this gown.');
+    }
+    // No photo yet -> open the editor with Publish already ON so the photo can be added
+    if (next && !gown.image) {
+      alert('Add a photo first before posting this gown.');
+      openEditGown(gown);
+      setGownForm(p => ({ ...p, is_posted: true }));
+      return;
     }
     const { error } = await supabase.from('gowns').update({ is_posted: next }).eq('id', gown.id);
     if (error) { alert('Error: ' + error.message); return; }
@@ -302,6 +321,7 @@ const Inventory = () => {
       category: acc.category || 'Others',
       price: acc.price ?? '',
       swap_fee: acc.swap_fee ?? '',
+      stock: acc.stock ?? 0,
     });
     setAccModalOpen(true);
   };
@@ -315,13 +335,16 @@ const Inventory = () => {
         category: accForm.category,
         price: Number(accForm.price) || 0,
         swap_fee: Number(accForm.swap_fee) || 0,
+        stock: Math.max(0, Number(accForm.stock) || 0),
       };
       if (editingAcc) {
         const { error } = await supabase.from('accessories').update(payload).eq('id', editingAcc.id);
         if (error) throw error;
+        await logActivity('accessory_edited', `Updated accessory: ${payload.name}`);
       } else {
         const { error } = await supabase.from('accessories').insert([payload]);
         if (error) throw error;
+        await logActivity('accessory_added', `Added accessory: ${payload.name}`);
       }
       fetchAccessories();
       setAccModalOpen(false);
@@ -341,7 +364,17 @@ const Inventory = () => {
     if (!window.confirm(`Delete "${acc.name}"?`)) return;
     const { error } = await supabase.from('accessories').delete().eq('id', acc.id);
     if (error) { alert('Error: ' + error.message); return; }
+    await logActivity('accessory_deleted', `Deleted accessory: ${acc.name}`);
     fetchAccessories();
+  };
+
+  // Quick +/- sa stock gikan mismo sa list
+  const adjustAccStock = async (acc, delta) => {
+    const next = Math.max(0, Number(acc.stock || 0) + delta);
+    if (next === Number(acc.stock || 0)) return;
+    const { error } = await supabase.from('accessories').update({ stock: next }).eq('id', acc.id);
+    if (error) { alert('Error: ' + error.message); return; }
+    setAccessories(prev => prev.map(a => a.id === acc.id ? { ...a, stock: next } : a));
   };
 
   // ── ACCESSORY CHECKBOX in gown form ──
@@ -364,11 +397,17 @@ const Inventory = () => {
       filterPosted === 'all'    ? true :
       filterPosted === 'posted' ? g.is_posted :
                                   !g.is_posted;
-    return matchSearch && matchPosted;
+    const matchCategory = filterCategory === 'All' ? true : g.category === filterCategory;
+    return matchSearch && matchPosted && matchCategory;
   });
 
+  // Ihap sa gowns kada category (para sa tabs)
+  const categoryCount = (cat) =>
+    cat === 'All' ? gowns.length : gowns.filter(g => g.category === cat).length;
+
   const filteredAccs = accessories.filter(a =>
-    a.name?.toLowerCase().includes(accSearch.toLowerCase())
+    a.name?.toLowerCase().includes(accSearch.toLowerCase()) ||
+    a.category?.toLowerCase().includes(accSearch.toLowerCase())
   );
 
   // ── STATS ──
@@ -445,9 +484,28 @@ const Inventory = () => {
               </button>
             </div>
 
+            {/* Category tabs */}
+            <div className="inv-cat-tabs" role="tablist" aria-label="Gown categories">
+              {['All', ...GOWN_CATEGORIES].map(cat => (
+                <button
+                  key={cat}
+                  type="button"
+                  role="tab"
+                  aria-selected={filterCategory === cat}
+                  className={`inv-cat-tab ${filterCategory === cat ? 'active' : ''}`}
+                  onClick={() => setFilterCategory(cat)}
+                >
+                  {cat}
+                  <span className="inv-cat-count">{categoryCount(cat)}</span>
+                </button>
+              ))}
+            </div>
+
             <div className="inv-grid">
               {filteredGowns.length === 0 ? (
-                <div className="inv-empty">No gowns found.</div>
+                <div className="inv-empty">
+                  {filterCategory === 'All' ? 'No gowns found.' : `No ${filterCategory} gowns found.`}
+                </div>
               ) : filteredGowns.map(gown => {
                 const petti = gown.petticoat_layer ? pettiByLayer(gown.petticoat_layer) : null;
                 return (
@@ -565,6 +623,8 @@ const Inventory = () => {
                 <div className="inv-empty">No accessories found.</div>
               ) : filteredAccs.map(acc => {
                 const used = gowns.filter(g => (g.included_accessories || []).includes(acc.id)).length;
+                const stock = Number(acc.stock || 0);
+                const stockClass = stock === 0 ? 'out' : stock <= LOW_STOCK ? 'low' : 'in';
                 return (
                   <div key={acc.id} className="acc-row">
                     <div className="acc-row-info">
@@ -574,6 +634,16 @@ const Inventory = () => {
                         <span className="acc-cat">{acc.category} · Used by {plural(used, 'gown')}</span>
                       </div>
                     </div>
+
+                    {/* Stock: dali ra i-adjust gamit ang − / + */}
+                    <div className="acc-stock">
+                      <button type="button" className="acc-stock-btn" onClick={() => adjustAccStock(acc, -1)} aria-label="Decrease stock">−</button>
+                      <span className={`acc-stock-pill ${stockClass}`}>
+                        {stock === 0 ? 'Out' : `${stock} pcs`}
+                      </span>
+                      <button type="button" className="acc-stock-btn" onClick={() => adjustAccStock(acc, 1)} aria-label="Increase stock">+</button>
+                    </div>
+
                     <div className="acc-row-meta">
                       <span className="inv-price-tag">{Number(acc.price) > 0 ? peso(acc.price) : 'Free'}</span>
                       {Number(acc.swap_fee) > 0 && <span className="inv-swap-tag">Swap +{peso(acc.swap_fee)}</span>}
@@ -603,22 +673,6 @@ const Inventory = () => {
               </div>
 
               <div className="inv-modal-body">
-
-                {/* Image upload */}
-                <label className="inv-upload">
-                  {imagePreview ? (
-                    <>
-                      <img src={imagePreview} alt="preview" className="inv-upload-preview" />
-                      <div className="inv-upload-overlay"><Camera size={20} /> Change Photo</div>
-                    </>
-                  ) : (
-                    <div className="inv-upload-placeholder">
-                      <Upload size={24} />
-                      <span>Upload Gown Photo</span>
-                    </div>
-                  )}
-                  <input type="file" accept="image/*" onChange={handleImageChange} hidden />
-                </label>
 
                 {/* Basic */}
                 <div className="inv-form-section">
@@ -697,20 +751,28 @@ const Inventory = () => {
                     <p className="inv-no-acc-msg">No accessories yet — add some in the Accessories tab first.</p>
                   ) : (
                     <div className="inv-acc-checks">
-                      {accessories.map(acc => (
-                        <label key={acc.id} className="inv-check-label">
-                          <input
-                            type="checkbox"
-                            checked={(gownForm.included_accessories || []).includes(acc.id)}
-                            onChange={() => toggleAccInForm(acc.id)}
-                          />
-                          <span className="inv-check-text">
-                            <span className="inv-check-name">{acc.name}</span>
-                            <span className="inv-check-cat">{acc.category}</span>
-                          </span>
-                          <span className="inv-check-price">{Number(acc.price) > 0 ? peso(acc.price) : 'Free'}</span>
-                        </label>
-                      ))}
+                      {accessories.map(acc => {
+                        const stock = Number(acc.stock || 0);
+                        return (
+                          <label key={acc.id} className="inv-check-label">
+                            <input
+                              type="checkbox"
+                              checked={(gownForm.included_accessories || []).includes(acc.id)}
+                              onChange={() => toggleAccInForm(acc.id)}
+                            />
+                            <span className="inv-check-text">
+                              <span className="inv-check-name">{acc.name}</span>
+                              <span className="inv-check-cat">
+                                {acc.category} ·{' '}
+                                <span className={stock === 0 ? 'inv-check-out' : ''}>
+                                  {stock === 0 ? 'Out of stock' : `${stock} pcs`}
+                                </span>
+                              </span>
+                            </span>
+                            <span className="inv-check-price">{Number(acc.price) > 0 ? peso(acc.price) : 'Free'}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -726,15 +788,15 @@ const Inventory = () => {
                   </p>
                 </div>
 
-                {/* Post toggle */}
+                {/* Post toggle  +  photo (photo only appears when Publish is ON) */}
                 <div className="inv-form-section inv-post-section">
                   <div className="inv-post-toggle-row">
                     <div>
                       <h4 className="inv-section-title">🌐 Publish to Customer Catalog</h4>
                       <p className="inv-post-desc">
                         {gownForm.is_posted
-                          ? 'Visible to customers in the catalog.'
-                          : 'Draft — not visible to customers yet.'}
+                          ? 'Visible to customers in the catalog. A photo is required.'
+                          : 'Draft — not visible to customers yet. No photo needed.'}
                       </p>
                     </div>
                     <button
@@ -746,6 +808,25 @@ const Inventory = () => {
                       <span className="inv-toggle-knob" />
                     </button>
                   </div>
+
+                  {gownForm.is_posted && (
+                    <div className="inv-post-photo">
+                      <label className={`inv-upload ${!imagePreview ? 'required' : ''}`}>
+                        {imagePreview ? (
+                          <>
+                            <img src={imagePreview} alt="preview" className="inv-upload-preview" />
+                            <div className="inv-upload-overlay"><Camera size={20} /> Change Photo</div>
+                          </>
+                        ) : (
+                          <div className="inv-upload-placeholder">
+                            <Upload size={24} />
+                            <span>Upload Gown Photo (required to post)</span>
+                          </div>
+                        )}
+                        <input type="file" accept="image/*" onChange={handleImageChange} hidden />
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 <button className="inv-save-btn" onClick={handleSaveGown} disabled={loading}>
@@ -801,14 +882,21 @@ const Inventory = () => {
               <div className="inv-modal-body">
                 <div className="inv-field">
                   <label>Name</label>
-                  <input type="text" placeholder="e.g. Crown Gold" value={accForm.name}
+                  <input type="text" placeholder="e.g. Bowtie - Black, Fil Blue, Crown Gold" value={accForm.name}
                     onChange={e => setAccForm(p => ({ ...p, name: e.target.value }))} />
                 </div>
-                <div className="inv-field">
-                  <label>Category</label>
-                  <select value={accForm.category} onChange={e => setAccForm(p => ({ ...p, category: e.target.value }))}>
-                    {ACC_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                <div className="inv-row-2">
+                  <div className="inv-field">
+                    <label>Category</label>
+                    <select value={accForm.category} onChange={e => setAccForm(p => ({ ...p, category: e.target.value }))}>
+                      {ACC_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="inv-field">
+                    <label>Stock (pcs)</label>
+                    <input type="number" min="0" placeholder="0" value={accForm.stock}
+                      onChange={e => setAccForm(p => ({ ...p, stock: e.target.value }))} />
+                  </div>
                 </div>
                 <div className="inv-row-2">
                   <div className="inv-field">

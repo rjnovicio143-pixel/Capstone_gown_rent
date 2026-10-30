@@ -164,6 +164,7 @@ const PublicNavbar = () => {
         </div>
       )}
 
+      {/* Makita sa tanan (customers ug admin) */}
       <a
         className="pn-menu-item"
         href={FACEBOOK_URL}
@@ -175,17 +176,18 @@ const PublicNavbar = () => {
         <span>Facebook Page</span>
       </a>
 
-      <button
-        className="pn-menu-item"
-        role="menuitem"
-        onClick={() => navigate(isAdmin ? '/admin/dashboard' : '/login')}
-      >
-        <LayoutDashboard size={16} />
-        <span>Admin Panel</span>
-      </button>
-
+      {/* Admin ra ang makakita sa Admin Panel ug Logout */}
       {isAdmin && (
         <>
+          <button
+            className="pn-menu-item"
+            role="menuitem"
+            onClick={() => navigate('/admin/dashboard')}
+          >
+            <LayoutDashboard size={16} />
+            <span>Admin Panel</span>
+          </button>
+
           <div className="pn-divider" />
           <button className="pn-menu-item danger" role="menuitem" onClick={handleLogoutAction}>
             <LogOut size={16} />

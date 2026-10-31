@@ -712,3 +712,140 @@
   text-align: center;
 }
 .inv-cat-tab.active .inv-cat-count { background: rgba(255,255,255,0.18); color: #fff; }
+
+/* =========================================
+   v3: compact lists, no-photo rows, item type, accessory picker
+========================================= */
+
+/* ---- Accessories / petticoats list: compact 2-column grid ---- */
+.acc-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 500px), 1fr)); gap: 8px; }
+.acc-list .inv-empty { grid-column: 1 / -1; }
+.acc-row { padding: 8px 12px; gap: 10px; flex-wrap: nowrap; border-radius: 10px; }
+.acc-row-info { gap: 10px; min-width: 0; }
+.acc-row-text { min-width: 0; }
+.acc-icon { font-size: 18px; }
+.acc-name { margin: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acc-cat { font-size: 11px; }
+.acc-row-meta { flex-direction: column; align-items: flex-end; gap: 3px; min-width: 64px; }
+.inv-price-tag { padding: 3px 10px; font-size: 11.5px; }
+.inv-swap-tag { padding: 2px 8px; font-size: 10px; }
+.acc-row-actions { gap: 6px; flex-shrink: 0; }
+.acc-row .inv-act-btn { padding: 6px 10px; }
+.acc-row .inv-act-btn.del { width: 32px; padding: 6px; }
+.acc-stock { flex-shrink: 0; gap: 4px; }
+.acc-stock-btn { width: 26px; height: 26px; font-size: 15px; }
+.acc-stock-pill { min-width: 58px; padding: 4px 8px; font-size: 11.5px; }
+
+.inv-act-btn.edit.icon { flex: none; width: 32px; padding: 6px; }
+
+/* ---- "No photo yet" rows ---- */
+.inv-section-bar {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 26px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.inv-cat-tabs + .inv-section-bar { margin-top: 0; }
+.inv-section-bar span { font-size: 13px; font-weight: 800; color: #475569; }
+.inv-section-bar b { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #f1f5f9; font-size: 11px; }
+.inv-section-bar small { font-size: 12px; color: #94a3b8; }
+
+.inv-row-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 8px; }
+
+.inv-row-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  background: #fff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  transition: box-shadow 0.2s;
+}
+.inv-row-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.07); }
+
+.inv-row-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #f1f5f9;
+  font-size: 20px;
+}
+.inv-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.inv-row-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.inv-row-title strong { font-size: 13.5px; font-weight: 800; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inv-mini-badge { flex-shrink: 0; padding: 2px 8px; border-radius: 999px; font-size: 9.5px; font-weight: 800; }
+.inv-mini-badge.posted { background: #dcfce7; color: #15803d; }
+.inv-mini-badge.draft  { background: #f1f5f9; color: #64748b; }
+.inv-row-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 11.5px; font-weight: 600; color: #94a3b8; }
+.inv-row-sub b { color: #b8860b; font-weight: 800; }
+.inv-row-sub .inv-chip { padding: 2px 7px; font-size: 9.5px; }
+
+.inv-stock-tag.static { position: static; flex-shrink: 0; white-space: nowrap; }
+.inv-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.inv-row-actions .inv-act-btn { flex: none; padding: 6px 10px; font-size: 11.5px; }
+.inv-row-actions .inv-act-btn.del { width: 32px; padding: 6px; }
+
+/* ---- Item type toggle (Gown / Men's Suit) ---- */
+.inv-type-toggle { display: flex; gap: 8px; }
+.inv-type-btn {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.inv-type-btn:hover  { border-color: #b8860b; color: #b8860b; }
+.inv-type-btn.active { background: #fefce8; border-color: #b8860b; color: #92400e; }
+
+/* ---- Accessory picker inside the gown modal ---- */
+.inv-section-title .inv-count-badge {
+  margin-left: 8px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 10.5px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.inv-pick-tools { margin-bottom: 10px; }
+.inv-search.sm { max-width: none; padding: 8px 12px; border-radius: 10px; }
+.inv-search.sm input { font-size: 13px; }
+
+.inv-acc-checks.scroll {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 236px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #b8860b #f1f5f9;
+}
+.inv-acc-checks.scroll .inv-check-label { padding: 7px 10px; gap: 9px; border-radius: 9px; min-width: 0; }
+.inv-acc-checks.scroll .inv-check-text { min-width: 0; }
+.inv-acc-checks.scroll .inv-check-name { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inv-acc-checks.scroll .inv-check-cat  { font-size: 10.5px; }
+.inv-acc-checks.scroll .inv-check-price { font-size: 11px; }
+.inv-pick-empty { grid-column: 1 / -1; margin: 0; padding: 6px 2px; font-size: 12.5px; color: #94a3b8; }
+
+@media (max-width: 640px) {
+  .acc-row { flex-wrap: wrap; }
+  .inv-row-card { flex-wrap: wrap; }
+  .inv-row-main { flex-basis: calc(100% - 60px); }
+  .inv-acc-checks.scroll { grid-template-columns: minmax(0, 1fr); }
+}

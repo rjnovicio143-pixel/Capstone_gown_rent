@@ -10,6 +10,9 @@ import { supabase } from '../supabaseClient';
 import { logActivity } from '../utils/activityLogger';
 
 const GOWN_CATEGORIES = ['Wedding', 'Debut', 'Formal', 'Ball Gown', 'Others'];
+const SUIT_CATEGORIES = ['Wedding', 'Barong', 'Formal', 'Others'];
+const ALL_CATEGORIES  = ['Wedding', 'Debut', 'Formal', 'Ball Gown', 'Barong', 'Others'];
+const catsFor = (type) => (type === 'suit' ? SUIT_CATEGORIES : GOWN_CATEGORIES);
 const ACC_CATEGORIES = [
   'Crown', 'Hairdressed', 'Basket', 'Veil', 'Couple Cord', 'Pillow',
   'Suspender', 'Bowtie', 'Necktie', 'Vest',
@@ -22,7 +25,7 @@ const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const emptyGownForm = {
-  name: '', price: '', stock: 1, size: '', category: 'Wedding',
+  type: 'gown', name: '', price: '', stock: 1, size: '', category: 'Wedding',
   desc: '', image: null,
   petticoat_layer: null,
   included_accessories: [],
@@ -45,6 +48,8 @@ const Inventory = () => {
   const [filterPosted, setFilterPosted] = useState('all'); // 'all' | 'posted' | 'draft'
   const [filterCategory, setFilterCategory] = useState('All'); // 'All' | Wedding | Debut | ...
   const [accSearch, setAccSearch]       = useState('');
+  const [accCat, setAccCat]             = useState('All');
+  const [pickSearch, setPickSearch]     = useState('');   // search inside the gown modal
 
   // Gown modal
   const [gownModalOpen, setGownModalOpen] = useState(false);
@@ -90,9 +95,114 @@ const Inventory = () => {
     fetchAccessories();
   }, []);
 
+  // Clear the accessory search every time the gown modal closes
+  useEffect(() => {
+    if (!gownModalOpen) setPickSearch('');
+  }, [gownModalOpen]);
+
   // ── HELPERS ──
   const accName = (id) => accessories.find(a => a.id === id)?.name || `#${id}`;
   const pettiByLayer = (layer) => petticoats.find(p => Number(p.layer) === Number(layer));
+  const itemEmoji = (g) => (g.type === 'suit' ? '🤵' : '👗');
+
+  // Full card: only for items that already have a photo
+  const renderGownCard = (gown) => {
+    const petti = gown.petticoat_layer ? pettiByLayer(gown.petticoat_layer) : null;
+    return (
+      <div key={gown.id} className="inv-card">
+        <div className={`inv-post-badge ${gown.is_posted ? 'posted' : 'draft'}`}>
+          {gown.is_posted ? '🌐 Posted' : '📝 Draft'}
+        </div>
+
+        <div className="inv-card-img">
+          <img src={gown.image} alt={gown.name} />
+          <span className={`inv-stock-tag ${gown.stock > 0 ? 'in' : 'out'}`}>{gown.stock || 0} left</span>
+        </div>
+
+        <div className="inv-card-body">
+          <span className="inv-card-cat">{gown.type === 'suit' ? '🤵 ' : ''}{gown.category}</span>
+          <h3 className="inv-card-name">{gown.name}</h3>
+          <p className="inv-card-price">{peso(gown.price)}</p>
+
+          <div className="inv-chips">
+            {gown.petticoat_layer && (
+              <span className="inv-chip chip-petticoat">
+                <Layers size={11} /> Layer {gown.petticoat_layer}
+                {petti && Number(petti.price) > 0 && <em> · {peso(petti.price)}</em>}
+              </span>
+            )}
+            {(gown.included_accessories || []).map(id => (
+              <span key={id} className="inv-chip chip-acc">
+                <Crown size={11} /> {accName(id)}
+              </span>
+            ))}
+            {!gown.petticoat_layer && (gown.included_accessories || []).length === 0 && (
+              <span className="inv-chip chip-none">{gown.type === 'suit' ? 'Suit only' : 'Gown only'}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="inv-card-actions">
+          <button className="inv-act-btn edit" onClick={() => openEditGown(gown)}>
+            <Edit size={14} /> Edit
+          </button>
+          <button className={`inv-act-btn ${gown.is_posted ? 'unpost' : 'post'}`} onClick={() => handleTogglePost(gown)}>
+            {gown.is_posted ? <><EyeOff size={14} /> Unpost</> : <><Eye size={14} /> Post</>}
+          </button>
+          <button className="inv-act-btn del" onClick={() => handleDeleteGown(gown)} aria-label="Delete gown">
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Small row: for items without a photo (keeps the page short)
+  const renderGownRow = (gown) => {
+    const accIds = gown.included_accessories || [];
+    const shown = accIds.slice(0, 2);
+    const extra = accIds.length - shown.length;
+    const stock = Number(gown.stock || 0);
+    return (
+      <div key={gown.id} className="inv-row-card">
+        <span className="inv-row-ico">{itemEmoji(gown)}</span>
+
+        <div className="inv-row-main">
+          <div className="inv-row-title">
+            <strong title={gown.name}>{gown.name}</strong>
+            <span className={`inv-mini-badge ${gown.is_posted ? 'posted' : 'draft'}`}>
+              {gown.is_posted ? 'Posted' : 'Draft'}
+            </span>
+          </div>
+          <div className="inv-row-sub">
+            <span>{gown.category}</span>
+            <b>{peso(gown.price)}</b>
+            {gown.petticoat_layer && (
+              <span className="inv-chip chip-petticoat"><Layers size={10} /> L{gown.petticoat_layer}</span>
+            )}
+            {shown.map(id => (
+              <span key={id} className="inv-chip chip-acc"><Crown size={10} /> {accName(id)}</span>
+            ))}
+            {extra > 0 && <span className="inv-chip chip-none">+{extra}</span>}
+          </div>
+        </div>
+
+        <span className={`inv-stock-tag static ${stock > 0 ? 'in' : 'out'}`}>{stock} left</span>
+
+        <div className="inv-row-actions">
+          <button className="inv-act-btn edit" onClick={() => openEditGown(gown)}>
+            <Edit size={13} /> Edit
+          </button>
+          <button className={`inv-act-btn ${gown.is_posted ? 'unpost' : 'post'}`} onClick={() => handleTogglePost(gown)}>
+            {gown.is_posted ? <><EyeOff size={13} /> Unpost</> : <><Eye size={13} /> Post</>}
+          </button>
+          <button className="inv-act-btn del" onClick={() => handleDeleteGown(gown)} aria-label="Delete gown">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   // Total value of the items included in the gown package (gown form)
   const includedValue = () => {
@@ -138,6 +248,7 @@ const Inventory = () => {
       price: gown.price || '',
       stock: gown.stock ?? 1,
       size: gown.size || '',
+      type: gown.type || 'gown',
       category: gown.category || 'Wedding',
       desc: gown.desc || '',
       image: gown.image || null,
@@ -178,11 +289,11 @@ const Inventory = () => {
         category: gownForm.category,
         desc: gownForm.desc,
         image: imageUrl,
-        petticoat_layer: gownForm.petticoat_layer,
+        petticoat_layer: gownForm.type === 'suit' ? null : gownForm.petticoat_layer,
         included_accessories: gownForm.included_accessories,
         is_posted: gownForm.is_posted,
         status: Number(gownForm.stock) > 0 ? 'Available' : 'Out of Stock',
-        type: 'gown',
+        type: gownForm.type || 'gown',
       };
 
       if (editingGown) {
@@ -405,10 +516,32 @@ const Inventory = () => {
   const categoryCount = (cat) =>
     cat === 'All' ? gowns.length : gowns.filter(g => g.category === cat).length;
 
-  const filteredAccs = accessories.filter(a =>
-    a.name?.toLowerCase().includes(accSearch.toLowerCase()) ||
-    a.category?.toLowerCase().includes(accSearch.toLowerCase())
-  );
+  // Accessory category pills (only categories that really exist)
+  const presentCats = [...new Set(accessories.map(a => a.category).filter(Boolean))].sort((a, b) => {
+    const ia = ACC_CATEGORIES.indexOf(a);
+    const ib = ACC_CATEGORIES.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  const accCatList = ['All', ...presentCats];
+  const accCatSel  = accCatList.includes(accCat) ? accCat : 'All';
+  const accCatCount = (c) => (c === 'All' ? accessories.length : accessories.filter(a => a.category === c).length);
+
+  const filteredAccs = accessories.filter(a => {
+    const t = accSearch.toLowerCase();
+    const matchText = a.name?.toLowerCase().includes(t) || a.category?.toLowerCase().includes(t);
+    const matchCat = accCatSel === 'All' ? true : a.category === accCatSel;
+    return matchText && matchCat;
+  });
+
+  // Gowns: with photo -> card, without photo -> compact row
+  const gownsWithPhoto = filteredGowns.filter(g => g.image);
+  const gownsNoPhoto   = filteredGowns.filter(g => !g.image);
+
+  // Accessory picker inside the gown modal
+  const pickList = accessories.filter(a => {
+    const t = pickSearch.trim().toLowerCase();
+    return !t || a.name?.toLowerCase().includes(t) || a.category?.toLowerCase().includes(t);
+  });
 
   // ── STATS ──
   const totalGowns  = gowns.length;
@@ -452,7 +585,7 @@ const Inventory = () => {
         {/* ── TABS ── */}
         <div className="inv-tabs">
           <button className={`inv-tab ${activeTab === 'gowns' ? 'active' : ''}`} onClick={() => setActiveTab('gowns')}>
-            👗 Gowns
+            👗 Gowns & Suits
           </button>
           <button className={`inv-tab ${activeTab === 'petticoats' ? 'active' : ''}`} onClick={() => setActiveTab('petticoats')}>
             🩱 Petticoats
@@ -486,7 +619,7 @@ const Inventory = () => {
 
             {/* Category tabs */}
             <div className="inv-cat-tabs" role="tablist" aria-label="Gown categories">
-              {['All', ...GOWN_CATEGORIES].map(cat => (
+              {['All', ...ALL_CATEGORIES].map(cat => (
                 <button
                   key={cat}
                   type="button"
@@ -501,62 +634,31 @@ const Inventory = () => {
               ))}
             </div>
 
-            <div className="inv-grid">
-              {filteredGowns.length === 0 ? (
+            {filteredGowns.length === 0 && (
+              <div className="inv-grid">
                 <div className="inv-empty">
-                  {filterCategory === 'All' ? 'No gowns found.' : `No ${filterCategory} gowns found.`}
+                  {filterCategory === 'All' ? 'No gowns found.' : `No ${filterCategory} items found.`}
                 </div>
-              ) : filteredGowns.map(gown => {
-                const petti = gown.petticoat_layer ? pettiByLayer(gown.petticoat_layer) : null;
-                return (
-                  <div key={gown.id} className="inv-card">
-                    <div className={`inv-post-badge ${gown.is_posted ? 'posted' : 'draft'}`}>
-                      {gown.is_posted ? '🌐 Posted' : '📝 Draft'}
-                    </div>
+              </div>
+            )}
 
-                    <div className="inv-card-img">
-                      {gown.image ? <img src={gown.image} alt={gown.name} /> : <div className="inv-no-img">👗</div>}
-                      <span className={`inv-stock-tag ${gown.stock > 0 ? 'in' : 'out'}`}>{gown.stock || 0} left</span>
-                    </div>
+            {gownsWithPhoto.length > 0 && (
+              <div className="inv-grid">
+                {gownsWithPhoto.map(renderGownCard)}
+              </div>
+            )}
 
-                    <div className="inv-card-body">
-                      <span className="inv-card-cat">{gown.category}</span>
-                      <h3 className="inv-card-name">{gown.name}</h3>
-                      <p className="inv-card-price">{peso(gown.price)}</p>
-
-                      <div className="inv-chips">
-                        {gown.petticoat_layer && (
-                          <span className="inv-chip chip-petticoat">
-                            <Layers size={11} /> Layer {gown.petticoat_layer}
-                            {petti && Number(petti.price) > 0 && <em> · {peso(petti.price)}</em>}
-                          </span>
-                        )}
-                        {(gown.included_accessories || []).map(id => (
-                          <span key={id} className="inv-chip chip-acc">
-                            <Crown size={11} /> {accName(id)}
-                          </span>
-                        ))}
-                        {!gown.petticoat_layer && (gown.included_accessories || []).length === 0 && (
-                          <span className="inv-chip chip-none">Gown only</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="inv-card-actions">
-                      <button className="inv-act-btn edit" onClick={() => openEditGown(gown)}>
-                        <Edit size={14} /> Edit
-                      </button>
-                      <button className={`inv-act-btn ${gown.is_posted ? 'unpost' : 'post'}`} onClick={() => handleTogglePost(gown)}>
-                        {gown.is_posted ? <><EyeOff size={14} /> Unpost</> : <><Eye size={14} /> Post</>}
-                      </button>
-                      <button className="inv-act-btn del" onClick={() => handleDeleteGown(gown)} aria-label="Delete gown">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            {gownsNoPhoto.length > 0 && (
+              <>
+                <div className="inv-section-bar">
+                  <span>📷 No photo yet <b>{gownsNoPhoto.length}</b></span>
+                  <small>Add a photo to post these to the public catalog.</small>
+                </div>
+                <div className="inv-row-grid">
+                  {gownsNoPhoto.map(renderGownRow)}
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -618,6 +720,22 @@ const Inventory = () => {
               </button>
             </div>
 
+            <div className="inv-cat-tabs" role="tablist" aria-label="Accessory categories">
+              {accCatList.map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  role="tab"
+                  aria-selected={accCatSel === c}
+                  className={`inv-cat-tab ${accCatSel === c ? 'active' : ''}`}
+                  onClick={() => setAccCat(c)}
+                >
+                  {c}
+                  <span className="inv-cat-count">{accCatCount(c)}</span>
+                </button>
+              ))}
+            </div>
+
             <div className="acc-list">
               {filteredAccs.length === 0 ? (
                 <div className="inv-empty">No accessories found.</div>
@@ -629,8 +747,8 @@ const Inventory = () => {
                   <div key={acc.id} className="acc-row">
                     <div className="acc-row-info">
                       <span className="acc-icon">👑</span>
-                      <div>
-                        <p className="acc-name">{acc.name}</p>
+                      <div className="acc-row-text">
+                        <p className="acc-name" title={acc.name}>{acc.name}</p>
                         <span className="acc-cat">{acc.category} · Used by {plural(used, 'gown')}</span>
                       </div>
                     </div>
@@ -649,8 +767,8 @@ const Inventory = () => {
                       {Number(acc.swap_fee) > 0 && <span className="inv-swap-tag">Swap +{peso(acc.swap_fee)}</span>}
                     </div>
                     <div className="acc-row-actions">
-                      <button className="inv-act-btn edit" onClick={() => openEditAcc(acc)}>
-                        <Edit size={14} /> Edit
+                      <button className="inv-act-btn edit icon" onClick={() => openEditAcc(acc)} title="Edit" aria-label="Edit accessory">
+                        <Edit size={14} />
                       </button>
                       <button className="inv-act-btn del" onClick={() => handleDeleteAcc(acc)} aria-label="Delete accessory">
                         <Trash2 size={14} />
@@ -703,9 +821,29 @@ const Inventory = () => {
                   </div>
 
                   <div className="inv-field">
+                    <label>Item type</label>
+                    <div className="inv-type-toggle">
+                      {[['gown', '👗 Gown'], ['suit', "🤵 Men's Suit"]].map(([v, label]) => (
+                        <button
+                          key={v}
+                          type="button"
+                          className={`inv-type-btn ${gownForm.type === v ? 'active' : ''}`}
+                          onClick={() => setGownForm(p => ({
+                            ...p,
+                            type: v,
+                            category: catsFor(v).includes(p.category) ? p.category : catsFor(v)[0],
+                          }))}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="inv-field">
                     <label>Category</label>
                     <select value={gownForm.category} onChange={e => setGownForm(p => ({ ...p, category: e.target.value }))}>
-                      {GOWN_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      {catsFor(gownForm.type).map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
 
@@ -716,7 +854,8 @@ const Inventory = () => {
                   </div>
                 </div>
 
-                {/* Petticoat (from the petticoats table) */}
+                {/* Petticoat (from the petticoats table) - gowns only */}
+                {gownForm.type !== 'suit' && (
                 <div className="inv-form-section">
                   <h4 className="inv-section-title">🩱 Petticoat Included</h4>
                   <div className="inv-petticoat-btns">
@@ -743,37 +882,55 @@ const Inventory = () => {
                     <p className="inv-no-acc-msg">No layers yet — add some in the Petticoats tab first.</p>
                   )}
                 </div>
+                )}
 
                 {/* Accessories (from the accessories table) */}
                 <div className="inv-form-section">
-                  <h4 className="inv-section-title">👑 Accessories Included</h4>
+                  <h4 className="inv-section-title">
+                    👑 Accessories Included
+                    <span className="inv-count-badge">{(gownForm.included_accessories || []).length} selected</span>
+                  </h4>
                   {accessories.length === 0 ? (
                     <p className="inv-no-acc-msg">No accessories yet — add some in the Accessories tab first.</p>
                   ) : (
-                    <div className="inv-acc-checks">
-                      {accessories.map(acc => {
-                        const stock = Number(acc.stock || 0);
-                        return (
-                          <label key={acc.id} className="inv-check-label">
-                            <input
-                              type="checkbox"
-                              checked={(gownForm.included_accessories || []).includes(acc.id)}
-                              onChange={() => toggleAccInForm(acc.id)}
-                            />
-                            <span className="inv-check-text">
-                              <span className="inv-check-name">{acc.name}</span>
-                              <span className="inv-check-cat">
-                                {acc.category} ·{' '}
-                                <span className={stock === 0 ? 'inv-check-out' : ''}>
-                                  {stock === 0 ? 'Out of stock' : `${stock} pcs`}
+                    <>
+                      <div className="inv-pick-tools">
+                        <div className="inv-search sm">
+                          <Search size={14} />
+                          <input
+                            placeholder="Search accessories..."
+                            value={pickSearch}
+                            onChange={e => setPickSearch(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="inv-acc-checks scroll">
+                        {pickList.map(acc => {
+                          const stock = Number(acc.stock || 0);
+                          return (
+                            <label key={acc.id} className="inv-check-label">
+                              <input
+                                type="checkbox"
+                                checked={(gownForm.included_accessories || []).includes(acc.id)}
+                                onChange={() => toggleAccInForm(acc.id)}
+                              />
+                              <span className="inv-check-text">
+                                <span className="inv-check-name">{acc.name}</span>
+                                <span className="inv-check-cat">
+                                  {acc.category} ·{' '}
+                                  <span className={stock === 0 ? 'inv-check-out' : ''}>
+                                    {stock === 0 ? 'Out of stock' : `${stock} pcs`}
+                                  </span>
                                 </span>
                               </span>
-                            </span>
-                            <span className="inv-check-price">{Number(acc.price) > 0 ? peso(acc.price) : 'Free'}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
+                              <span className="inv-check-price">{Number(acc.price) > 0 ? peso(acc.price) : 'Free'}</span>
+                            </label>
+                          );
+                        })}
+                        {pickList.length === 0 && <p className="inv-pick-empty">No accessory matches.</p>}
+                      </div>
+                    </>
                   )}
                 </div>
 

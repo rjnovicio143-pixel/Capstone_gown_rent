@@ -582,3 +582,157 @@
   .wa-modal-body, .wa-form { padding: 16px 20px 22px; }
   .wa-res-actions .wa-btn { flex: 1 1 auto; }
 }
+/* =========================================
+   v2: editable packages + Inventory link
+========================================= */
+
+/* Setup notice */
+.wa-setup {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 22px;
+  padding: 14px 18px;
+  background: #fffbeb;
+  border: 1px dashed #fcd34d;
+  border-radius: 14px;
+  color: #92400e;
+}
+.wa-setup svg { flex-shrink: 0; margin-top: 2px; }
+.wa-setup > div { display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.5; }
+.wa-setup strong { font-size: 13.5px; }
+
+/* Package card wrapper (edit pencil sits on top of the card) */
+.wa-pkg-wrap { position: relative; display: flex; }
+.wa-pkg-wrap .wa-pkg { width: 100%; }
+.wa-pkg-edit {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: #fff;
+  border: 1.5px solid #f1e6c8;
+  border-radius: 9px;
+  color: #b8860b;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.wa-pkg-edit:hover { background: #b8860b; border-color: #b8860b; color: #fff; }
+
+/* Add package card */
+.wa-pkg-add {
+  align-items: center;
+  justify-content: center;
+  min-height: 150px;
+  background: transparent;
+  border: 2px dashed #e5d9a8;
+  color: #b8860b;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+.wa-pkg-add:hover { background: #fffbeb; }
+
+/* Inventory options line on the package card */
+.wa-pkg-links { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px; font-size: 11px; font-weight: 700; color: #94a3b8; }
+.wa-pkg-links span { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Editor modal */
+.wa-editor-modal { max-width: 680px; }
+.wa-editor-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.wa-editor-foot .wa-gold { margin-left: auto; padding-left: 26px; padding-right: 26px; }
+
+.wa-check-row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 700; color: #475569; cursor: pointer; }
+.wa-check-row input { width: 17px; height: 17px; accent-color: #b8860b; }
+
+.wa-box h4 small { margin-left: auto; font-size: 11px; font-weight: 700; letter-spacing: 0; text-transform: none; color: #94a3b8; }
+
+/* Inventory checklist (limited height so the modal stays short) */
+.wa-pick-search {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  outline: none;
+  font-family: inherit;
+  font-size: 13px;
+}
+.wa-pick-search:focus { border-color: #daa520; }
+
+.wa-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 208px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #daa520 #f1f5f9;
+}
+.wa-pick-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 6px 9px;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.wa-pick-item:hover { border-color: #daa520; }
+.wa-pick-item.on { background: #fffbeb; border-color: #daa520; }
+.wa-pick-item input { width: 15px; height: 15px; flex-shrink: 0; accent-color: #b8860b; }
+.wa-pick-item img,
+.wa-pick-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  object-fit: cover;
+  font-size: 17px;
+}
+.wa-pick-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wa-pick-name small { font-size: 10.5px; font-weight: 600; color: #94a3b8; }
+.wa-pick-empty { grid-column: 1 / -1; margin: 0; padding: 6px 2px; font-size: 12.5px; color: #94a3b8; }
+.wa-pick-hint { margin: 8px 0 0; font-size: 11.5px; color: #94a3b8; }
+
+/* Read-only thumbnails in the package details */
+.wa-gal { display: flex; flex-direction: column; gap: 6px; max-height: 190px; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; }
+.wa-gal-item { display: flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 700; color: #334155; }
+.wa-gal-item img { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+.wa-gal-item span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Chosen gown / attire preview in the reservation form */
+.wa-sel-prev { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.wa-sel-item { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 10px; background: #fffdf7; border: 1px solid #f1e6c8; border-radius: 12px; }
+.wa-sel-item img,
+.wa-sel-item .wa-pick-ph { width: 46px; height: 46px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+.wa-sel-item > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.wa-sel-item strong { font-size: 13px; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wa-sel-item small { font-size: 11px; color: #94a3b8; }
+
+@media (max-width: 600px) {
+  .wa-pick-grid,
+  .wa-sel-prev { grid-template-columns: minmax(0, 1fr); }
+}

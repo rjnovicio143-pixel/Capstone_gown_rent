@@ -736,3 +736,55 @@
   .wa-pick-grid,
   .wa-sel-prev { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Error shown inside the reservation form */
+.wa-form-error {
+  margin: 0;
+  padding: 11px 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #b91c1c;
+  word-break: break-word;
+}
+
+.wa-field input[readonly]{background:#f8fafc;color:#64748b;cursor:not-allowed}
+
+/* ===== stages + all bookings ===== */
+.wa-badge.out      { background: #fee2e2; color: #b91c1c; }
+.wa-badge.returned { background: #e0f2fe; color: #0369a1; }
+
+.wa-books { margin-top: 20px; }
+.wa-books .wa-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.wa-book-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.wa-chip {
+  border: 1px solid #e2e8f0; background: #fff; color: #475569; border-radius: 999px;
+  padding: 6px 13px; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.wa-chip b { margin-left: 4px; color: #94a3b8; }
+.wa-chip.on { background: #1e293b; border-color: #1e293b; color: #fff; }
+.wa-chip.on b { color: #cbd5e1; }
+.wa-chip.alert:not(.on) { border-color: #fca5a5; color: #b91c1c; background: #fef2f2; }
+.wa-chip.alert:not(.on) b { color: #b91c1c; }
+
+.wa-book-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; max-height: 520px; overflow-y: auto; }
+.wa-book {
+  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto auto;
+  align-items: center; gap: 12px; padding: 10px 14px;
+  border: 1px solid #e2e8f0; border-radius: 12px; background: #fff;
+}
+.wa-book-main { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wa-book-main strong { font-size: 14px; color: #1e293b; }
+.wa-book-main span { font-size: 12px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wa-book-money { display: flex; flex-direction: column; font-size: 12px; color: #475569; }
+.wa-book-money .owe { color: #b45309; font-weight: 700; }
+.wa-book-money .paid { color: #15803d; font-weight: 700; }
+.wa-book-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+
+@media (max-width: 720px) {
+  .wa-book { grid-template-columns: 1fr auto; }
+  .wa-book-money { grid-column: 1; }
+  .wa-book-actions { grid-column: 1 / -1; justify-content: flex-start; }
+}

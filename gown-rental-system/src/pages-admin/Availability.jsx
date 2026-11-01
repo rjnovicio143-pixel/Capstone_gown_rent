@@ -5,7 +5,7 @@ import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import {
   Search, X, Crown, Gift, CalendarDays, Plus, Gem, Phone, Palette,
-  CheckCircle2, Ban, Wallet, Sparkles, Info, Pencil, Trash2, Shirt
+  CheckCircle2, Ban, Wallet, Sparkles, Info, Pencil, Trash2, Shirt, Download
 } from 'lucide-react';
 import Header from '../components/Header';
 import '../styles/Availability.css';
@@ -114,7 +114,32 @@ const STATUS_LABEL = {
   confirmed: 'Confirmed',
   completed: 'Completed',
   cancelled: 'Cancelled',
+  out: 'Picked up · not yet returned',
+  returned: 'Returned',
 };
+
+// A confirmed booking moves: Confirmed -> Picked up (out) -> Returned -> Completed
+const stageOf = (r) => {
+  if (r.status !== 'confirmed') return r.status;
+  if (r.returnedAt) return 'returned';
+  if (r.pickedUpAt) return 'out';
+  return 'confirmed';
+};
+
+const shortDate = (iso) =>
+  iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+
+const BOOK_FILTERS = [
+  ['all', 'All'],
+  ['pending', 'Awaiting downpayment'],
+  ['confirmed', 'Confirmed'],
+  ['out', 'Not yet returned'],
+  ['returned', 'Returned'],
+  ['completed', 'Completed'],
+  ['cancelled', 'Cancelled'],
+];
+
+const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
 /* ---------- HELPERS ---------- */
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
@@ -144,6 +169,8 @@ const mapReservation = (row) => ({
   cancelReason: row.cancel_reason || '',
   bridalGownId: row.bridal_gown_id ? String(row.bridal_gown_id) : '',
   groomAttireId: row.groom_attire_id ? String(row.groom_attire_id) : '',
+  pickedUpAt: row.picked_up_at || '',
+  returnedAt: row.returned_at || '',
 });
 
 const mapPackage = (row) => ({
@@ -265,6 +292,10 @@ const Availability = () => {
   const [showForm, setShowForm] = useState(false);       // new reservation modal
   const [form, setForm] = useState(emptyForm(toKey(new Date())));
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);       // reservation being edited (null = new one)
+  const [bookFilter, setBookFilter] = useState('all');
+  const [bookQ, setBookQ] = useState('');
+  const [formError, setFormError] = useState('');        // error shown inside the reservation form
   const [search, setSearch] = useState('');
   const [payInputs, setPayInputs] = useState({});        // amount typed per reservation
 
@@ -341,13 +372,18 @@ const Availability = () => {
   // How many confirmed/completed weddings already hold this item on that date
   const usedOnDate = (itemId, key) =>
     reservations.filter(r =>
+      r.id !== (showForm ? editingId : null) &&
       r.weddingDate === key &&
       (r.status === 'confirmed' || r.status === 'completed') &&
       (r.bridalGownId === String(itemId) || r.groomAttireId === String(itemId))
     ).length;
 
   const takenNote = (item, key) => {
-    const cap = Number(item.stock ?? 1);
+    const outNow = reservations.filter(r =>
+      r.status === 'confirmed' && r.pickedUpAt && !r.returnedAt &&
+      (r.bridalGownId === String(item.id) || r.groomAttireId === String(item.id))
+    ).length;
+    const cap = Number(item.stock ?? 1) + outNow;   // units on the shelf + units out with customers
     if (cap <= 0) return 'out of stock';
     return usedOnDate(item.id, key) >= cap ? 'reserved on this date' : '';
   };
@@ -505,6 +541,8 @@ const Availability = () => {
     if (packages.length === 0) return alert('Add a wedding package first.');
     const fallback = packages.find(p => p.bestSeller)?.key || packages[0].key;
     setForm(emptyForm(dateKey, packageKey || fallback));
+    setEditingId(null);
+    setFormError('');
     setViewPkg(null);
     setShowForm(true);
   };
@@ -527,10 +565,108 @@ const Availability = () => {
     }));
   };
 
+  // Open the form filled with an existing booking
+  const openEdit = (r) => {
+    setEditingId(r.id);
+    setForm({
+      name: r.name,
+      contact: r.contact,
+      email: r.email,
+      packageKey: packages.some(p => p.key === r.packageKey) ? r.packageKey : (packages[0]?.key || ''),
+      weddingDate: r.weddingDate,
+      motifColor: r.motifColor,
+      downpayment: '',
+      notes: r.notes,
+      bridalGownId: r.bridalGownId,
+      groomAttireId: r.groomAttireId,
+    });
+    setFormError('');
+    setViewPkg(null);
+    setShowForm(true);
+  };
+
+  const handleUpdate = async (pkg) => {
+    const current = reservations.find(r => r.id === editingId);
+    if (!current) return;
+
+    if (current.downpayment > pkg.price) {
+      return alert(`${peso(current.downpayment)} was already paid, which is more than this package (${peso(pkg.price)}). Pick a package that costs at least that.`);
+    }
+
+    // A booking that already holds a slot needs a free slot on the new date
+    const holdsSlot = current.status === 'confirmed' || current.status === 'completed';
+    if (holdsSlot && form.weddingDate !== current.weddingDate &&
+        slotTakers(form.weddingDate).filter(r => r.id !== editingId).length >= MAX_WEDDINGS_PER_DAY) {
+      return alert('No slots left on that date. Pick another date.');
+    }
+
+    const isOut = current.pickedUpAt && !current.returnedAt;
+    if (isOut && (form.bridalGownId !== current.bridalGownId || form.groomAttireId !== current.groomAttireId)) {
+      return alert('The gown / suit is already picked up. Mark it as returned first before changing it.');
+    }
+
+    const clash = [pickedBridal, pickedGroom].filter(Boolean).find(it => takenNote(it, form.weddingDate));
+    if (clash) {
+      return alert(`"${clash.name}" is ${takenNote(clash, form.weddingDate)}. Choose another one or pick another date.`);
+    }
+
+    setSaving(true);
+    setFormError('');
+    const { error } = await supabase
+      .from('wedding_reservations')
+      .update({
+        name: form.name.trim(),
+        contact: form.contact.trim(),
+        email: form.email.trim() || null,
+        package_key: pkg.key,
+        package_name: pkg.name,
+        package_price: pkg.price,
+        wedding_date: form.weddingDate,
+        motif_color: form.motifColor || null,
+        notes: form.notes.trim() || null,
+        bridal_gown_id: form.bridalGownId || null,
+        groom_attire_id: form.groomAttireId || null,
+      })
+      .eq('id', editingId);
+    setSaving(false);
+
+    if (error) {
+      console.error('Could not update the wedding reservation:', error);
+      setFormError(`${error.message}${error.details ? ` — ${error.details}` : ''}${error.hint ? ` (${error.hint})` : ''}`);
+      return;
+    }
+
+    await logActivity('wedding_updated', `Edited ${form.name.trim()}'s wedding reservation (${pkg.name}, ${form.weddingDate})`);
+    setShowForm(false);
+    setEditingId(null);
+    setDate(fromKey(form.weddingDate));
+    fetchReservations();
+  };
+
+  const handleDelete = async (r) => {
+    const paidNote = r.downpayment > 0 ? ` ${peso(r.downpayment)} was already paid.` : '';
+    const isOut = r.status === 'confirmed' && r.pickedUpAt && !r.returnedAt;
+    const outNote = isOut ? ' The gown / suit is still out, so its stock will be given back to Inventory.' : '';
+    if (!window.confirm(`Delete ${r.name}'s reservation permanently?${paidNote}${outNote} This cannot be undone.`)) return;
+
+    const { error } = await supabase.from('wedding_reservations').delete().eq('id', r.id);
+    if (error) { alert('Error: ' + error.message); return; }
+
+    if (isOut && itemIdsOf(r).length) {
+      const stockError = await adjustStock(itemIdsOf(r), 1);
+      if (stockError) alert(`The booking was deleted, but Inventory was not updated: ${stockError}`);
+      fetchInventory();
+    }
+
+    await logActivity('wedding_deleted', `Deleted ${r.name}'s wedding reservation (${r.packageName}, ${r.weddingDate})`);
+    fetchReservations();
+  };
+
   const handleCreate = async (e) => {
     e.preventDefault();
     const pkg = formPkg;
     if (!pkg) return alert('Pick a package.');
+    if (editingId) return handleUpdate(pkg);
     const down = Number(form.downpayment) || 0;
 
     if (down > 0) {
@@ -565,10 +701,19 @@ const Availability = () => {
     if (form.bridalGownId) row.bridal_gown_id = form.bridalGownId;
     if (form.groomAttireId) row.groom_attire_id = form.groomAttireId;
 
-    const { error } = await supabase.from('wedding_reservations').insert([row]);
+    setFormError('');
+    const { data: saved, error } = await supabase.from('wedding_reservations').insert([row]).select('id');
     setSaving(false);
 
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) {
+      console.error('Could not save the wedding reservation:', error, row);
+      setFormError(`${error.message}${error.details ? ` — ${error.details}` : ''}${error.hint ? ` (${error.hint})` : ''}`);
+      return;
+    }
+    if (!saved || saved.length === 0) {
+      setFormError('The reservation was sent but nothing came back. Check the policies (RLS) of the wedding_reservations table.');
+      return;
+    }
 
     const cancelled = down > 0 ? await cancelCompetingPending(form.weddingDate) : 0;
     await logActivity('wedding_reserved', `${form.name.trim()} reserved the ${pkg.name} for ${form.weddingDate}${down > 0 ? ` (downpayment ${peso(down)})` : ' (awaiting downpayment)'}`);
@@ -615,6 +760,9 @@ const Availability = () => {
   };
 
   const handleStatus = async (r, status) => {
+    if (status === 'completed' && !r.returnedAt) {
+      return alert('Mark the gown / suit as returned first, then complete the booking.');
+    }
     const label = status === 'completed' ? 'mark this wedding as completed' : 'cancel this reservation';
     if (!window.confirm(`Do you want to ${label}?`)) return;
 
@@ -626,6 +774,150 @@ const Availability = () => {
 
     await logActivity('wedding_updated', `${r.name}'s wedding reservation marked as ${status}`);
     fetchReservations();
+  };
+
+  // Change the Inventory stock of the gown / suit linked to a booking (delta -1 = taken, +1 = back)
+  const itemIdsOf = (r) => [r.bridalGownId, r.groomAttireId].filter(Boolean);
+
+  const adjustStock = async (ids, delta) => {
+    // check first so we never half-update
+    const current = {};
+    for (const id of ids) {
+      const { data, error } = await supabase.from('gowns').select('name, stock').eq('id', id).single();
+      if (error || !data) return `Could not read the stock of an item (${error?.message || 'not found'}).`;
+      if (delta < 0 && Number(data.stock || 0) <= 0) return `"${data.name}" has no stock left in Inventory.`;
+      current[id] = Number(data.stock || 0);
+    }
+    for (const id of ids) {
+      const next = Math.max(0, current[id] + delta);
+      const { error } = await supabase
+        .from('gowns')
+        .update({ stock: next, status: next > 0 ? 'Available' : 'Out of Stock' })
+        .eq('id', id);
+      if (error) return `Could not update the stock: ${error.message}`;
+    }
+    return '';
+  };
+
+  // Pick up / return / undo. Needs the picked_up_at and returned_at columns (see wedding-stages.sql).
+  // Picking up takes 1 from the Inventory stock of the chosen gown and suit; returning puts it back.
+  const handleMove = async (r, step) => {
+    const ids = itemIdsOf(r);
+    const names = ids.map(id => itemById[id]?.name).filter(Boolean).join(', ');
+    const stockNote = names ? `\n\nInventory stock will change for: ${names}.` : '';
+    const messages = {
+      pickup: (r.packagePrice - r.downpayment > 0
+        ? `${r.name} still has a balance of ${peso(r.packagePrice - r.downpayment)}. Mark as picked up anyway?`
+        : `Mark ${r.name}'s gown / suit as picked up?`) + (names ? `${stockNote.replace('change', 'go down by 1')}` : ''),
+      return: `Mark ${r.name}'s gown / suit as returned?${names ? stockNote.replace('change', 'go back up by 1') : ''}`,
+      undo: r.returnedAt ? 'Undo the return?' : 'Undo the pickup?',
+    };
+    if (!window.confirm(messages[step])) return;
+
+    // -1 when the items leave the shop, +1 when they come back
+    const delta = step === 'pickup' ? -1 : step === 'return' ? 1 : (r.returnedAt ? -1 : 1);
+
+    const now = new Date().toISOString();
+    let patch;
+    if (step === 'pickup') patch = { picked_up_at: now };
+    else if (step === 'return') patch = { returned_at: now };
+    else patch = r.returnedAt ? { returned_at: null } : { picked_up_at: null };
+
+    // stock check before touching the booking
+    if (delta < 0 && ids.length) {
+      for (const id of ids) {
+        const { data } = await supabase.from('gowns').select('name, stock').eq('id', id).single();
+        if (data && Number(data.stock || 0) <= 0) return alert(`"${data.name}" has no stock left in Inventory.`);
+      }
+    }
+
+    const { error } = await supabase.from('wedding_reservations').update(patch).eq('id', r.id);
+    if (error) {
+      alert('Error: ' + error.message + '\n\nRun wedding-stages.sql in the Supabase SQL Editor first (adds the picked_up_at and returned_at columns).');
+      return;
+    }
+
+    if (ids.length) {
+      const stockError = await adjustStock(ids, delta);
+      if (stockError) alert(`The booking was updated, but Inventory was not: ${stockError}`);
+      fetchInventory();
+    }
+
+    const what = step === 'pickup' ? 'picked up' : step === 'return' ? 'returned' : 'undone (pickup/return)';
+    await logActivity('wedding_updated', `${r.name}'s wedding gown / suit ${what}${names ? ` (${names})` : ''}`);
+    fetchReservations();
+  };
+
+  // The one button that moves a confirmed booking to its next stage
+  const stageButtons = (r) => {
+    if (r.status !== 'confirmed') return null;
+    const s = stageOf(r);
+    return (
+      <>
+        {s === 'confirmed' && (
+          <button className="wa-btn wa-gold wa-sm" onClick={() => handleMove(r, 'pickup')}>
+            <Shirt size={14} /> Picked up
+          </button>
+        )}
+        {s === 'out' && (
+          <button className="wa-btn wa-gold wa-sm" onClick={() => handleMove(r, 'return')}>
+            <CheckCircle2 size={14} /> Returned
+          </button>
+        )}
+        {s === 'returned' && (
+          <button className="wa-btn wa-green wa-sm" onClick={() => handleStatus(r, 'completed')}>
+            <CheckCircle2 size={14} /> Complete
+          </button>
+        )}
+        {s !== 'confirmed' && (
+          <button className="wa-btn wa-ghost wa-sm" onClick={() => handleMove(r, 'undo')}>Undo</button>
+        )}
+      </>
+    );
+  };
+
+  /* ---------- ALL BOOKINGS (every date) + EXCEL EXPORT ---------- */
+  const bookCounts = useMemo(() => {
+    const c = { all: reservations.length };
+    BOOK_FILTERS.slice(1).forEach(([k]) => { c[k] = 0; });
+    reservations.forEach(r => { c[stageOf(r)] = (c[stageOf(r)] || 0) + 1; });
+    return c;
+  }, [reservations]);
+
+  const bookRows = useMemo(() => {
+    const bq = bookQ.trim().toLowerCase();
+    const rows = reservations
+      .filter(r => bookFilter === 'all' || stageOf(r) === bookFilter)
+      .filter(r =>
+        !bq ||
+        r.name?.toLowerCase().includes(bq) ||
+        r.contact?.includes(bq) ||
+        r.packageName?.toLowerCase().includes(bq)
+      );
+    const oldestFirst = ['pending', 'confirmed', 'out'].includes(bookFilter);
+    return rows.sort((a, b) =>
+      oldestFirst ? a.weddingDate.localeCompare(b.weddingDate) : b.weddingDate.localeCompare(a.weddingDate));
+  }, [reservations, bookFilter, bookQ]);
+
+  // CSV with a BOM so Excel opens it directly with the peso sign intact
+  const exportExcel = () => {
+    const head = ['Name', 'Contact', 'Email', 'Package', 'Package price', 'Wedding date', 'Motif', 'Bridal gown',
+      'Groom attire', 'Paid', 'Balance', 'Status', 'Picked up', 'Returned', 'Notes'];
+    const body = bookRows.map(r => [
+      r.name, r.contact, r.email, r.packageName, r.packagePrice, r.weddingDate, r.motifColor,
+      itemById[r.bridalGownId]?.name || '', itemById[r.groomAttireId]?.name || '',
+      r.downpayment, r.packagePrice - r.downpayment,
+      STATUS_LABEL[stageOf(r)] || r.status, shortDate(r.pickedUpAt), shortDate(r.returnedAt), r.notes,
+    ]);
+    const csv = '﻿' + [head, ...body].map(row => row.map(csvCell).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `wedding-bookings-${todayKey}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const canEditPackages = pkgState === 'ok';
@@ -791,7 +1083,7 @@ const Availability = () => {
                           <strong>{r.name}</strong>
                           <span><Phone size={12} /> {r.contact}</span>
                         </div>
-                        <span className={`wa-badge ${r.status}`}>{STATUS_LABEL[r.status]}</span>
+                        <span className={`wa-badge ${stageOf(r)}`}>{STATUS_LABEL[stageOf(r)]}</span>
                       </div>
 
                       <div className="wa-res-meta">
@@ -805,6 +1097,14 @@ const Availability = () => {
                         <span>Paid <strong>{peso(r.downpayment)}</strong></span>
                         <span>Balance <strong className={balance > 0 ? 'owe' : 'paid'}>{balance > 0 ? peso(balance) : 'Fully paid'}</strong></span>
                       </div>
+
+                      {(r.pickedUpAt || r.returnedAt) && (
+                        <p className="wa-res-notes">
+                          {r.pickedUpAt && `Picked up ${shortDate(r.pickedUpAt)}`}
+                          {r.pickedUpAt && r.returnedAt && ' · '}
+                          {r.returnedAt && `Returned ${shortDate(r.returnedAt)}`}
+                        </p>
+                      )}
 
                       {r.notes && <p className="wa-res-notes">{r.notes}</p>}
 
@@ -820,13 +1120,28 @@ const Availability = () => {
                           <button className="wa-btn wa-gold wa-sm" onClick={() => handlePay(r)}>
                             {r.status === 'pending' ? 'Confirm downpayment' : 'Add payment'}
                           </button>
-                          {r.status === 'confirmed' && (
-                            <button className="wa-btn wa-green wa-sm" onClick={() => handleStatus(r, 'completed')}>
-                              <CheckCircle2 size={14} /> Complete
+                          {stageButtons(r)}
+                          <button className="wa-btn wa-ghost wa-sm" onClick={() => openEdit(r)}>
+                            <Pencil size={14} /> Edit
+                          </button>
+                          {!r.pickedUpAt && (
+                            <button className="wa-btn wa-danger wa-sm" onClick={() => handleStatus(r, 'cancelled')}>
+                              <Ban size={14} /> Cancel
                             </button>
                           )}
-                          <button className="wa-btn wa-danger wa-sm" onClick={() => handleStatus(r, 'cancelled')}>
-                            <Ban size={14} /> Cancel
+                          <button className="wa-btn wa-danger wa-sm" onClick={() => handleDelete(r)}>
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        </div>
+                      )}
+
+                      {!active && (
+                        <div className="wa-res-actions">
+                          <button className="wa-btn wa-ghost wa-sm" onClick={() => openEdit(r)}>
+                            <Pencil size={14} /> Edit
+                          </button>
+                          <button className="wa-btn wa-danger wa-sm" onClick={() => handleDelete(r)}>
+                            <Trash2 size={14} /> Delete
                           </button>
                         </div>
                       )}
@@ -845,6 +1160,11 @@ const Availability = () => {
                     </div>
                     <div className="wa-res-meta"><span><Gem size={12} /> {r.packageName}</span></div>
                     {r.cancelReason && <p className="wa-res-notes">{r.cancelReason}</p>}
+                    <div className="wa-res-actions">
+                      <button className="wa-btn wa-danger wa-sm" onClick={() => handleDelete(r)}>
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -911,6 +1231,72 @@ const Availability = () => {
             </section>
           </aside>
         </div>
+
+        {/* ===== ALL BOOKINGS ===== */}
+        <section className="wa-card wa-books">
+          <div className="wa-card-head">
+            <h2><Wallet size={18} /> All Bookings</h2>
+            <button className="wa-btn wa-gold wa-sm" onClick={exportExcel} disabled={bookRows.length === 0}>
+              <Download size={14} /> Export to Excel
+            </button>
+          </div>
+
+          <div className="wa-book-filters">
+            {BOOK_FILTERS.map(([k, label]) => (
+              <button
+                type="button"
+                key={k}
+                className={`wa-chip ${bookFilter === k ? 'on' : ''} ${k === 'out' && bookCounts.out > 0 ? 'alert' : ''}`}
+                onClick={() => setBookFilter(k)}
+              >
+                {label} <b>{bookCounts[k] || 0}</b>
+              </button>
+            ))}
+          </div>
+
+          <div className="wa-search">
+            <Search size={15} />
+            <input
+              type="text"
+              placeholder="Search name, contact or package..."
+              value={bookQ}
+              onChange={(e) => setBookQ(e.target.value)}
+            />
+          </div>
+
+          <div className="wa-book-list">
+            {bookRows.length === 0 && <p className="wa-up-empty">No bookings here.</p>}
+            {bookRows.map(r => {
+              const balance = r.packagePrice - r.downpayment;
+              return (
+                <div key={r.id} className="wa-book">
+                  <button type="button" className="wa-book-main" onClick={() => { setDate(fromKey(r.weddingDate)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+                    <strong>{r.name}</strong>
+                    <span>{r.contact} · {r.packageName}</span>
+                    <span>{fromKey(r.weddingDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {r.pickedUpAt && ` · picked up ${shortDate(r.pickedUpAt)}`}
+                      {r.returnedAt && ` · returned ${shortDate(r.returnedAt)}`}
+                    </span>
+                  </button>
+                  <div className="wa-book-money">
+                    <span>Paid {peso(r.downpayment)}</span>
+                    <span className={balance > 0 ? 'owe' : 'paid'}>{balance > 0 ? `Balance ${peso(balance)}` : 'Fully paid'}</span>
+                  </div>
+                  <span className={`wa-badge ${stageOf(r)}`}>{STATUS_LABEL[stageOf(r)]}</span>
+                  <div className="wa-book-actions">
+                    {stageButtons(r)}
+                    <button className="wa-btn wa-ghost wa-sm" onClick={() => openEdit(r)}>
+                      <Pencil size={14} /> Edit
+                    </button>
+                    <button className="wa-btn wa-danger wa-sm" onClick={() => handleDelete(r)}>
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
         {/* ===== PACKAGE DETAILS MODAL ===== */}
         {viewPkg && (
@@ -1103,8 +1489,8 @@ const Availability = () => {
               <button className="wa-close" onClick={() => setShowForm(false)} aria-label="Close"><X size={16} /></button>
 
               <div className="wa-modal-head">
-                <h2>New Wedding Reservation</h2>
-                <p>Leave the downpayment empty to keep it as a hold. The first downpayment gets the date.</p>
+                <h2>{editingId ? 'Edit Reservation' : 'New Wedding Reservation'}</h2>
+                <p>{editingId ? 'Change the details of this booking. Payments are added from the booking card.' : 'Leave the downpayment empty to keep it as a hold. The first downpayment gets the date.'}</p>
               </div>
 
               <form className="wa-form" onSubmit={handleCreate}>
@@ -1197,11 +1583,18 @@ const Availability = () => {
                       {MOTIF_COLORS.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
                     </select>
                   </div>
-                  <div className="wa-field">
-                    <label>Downpayment <span>(min {peso(MIN_DOWNPAYMENT)})</span></label>
-                    <input type="number" min="0" placeholder="0 = hold only" value={form.downpayment}
-                      onChange={(e) => setForm({ ...form, downpayment: e.target.value })} />
-                  </div>
+                  {editingId ? (
+                    <div className="wa-field">
+                      <label>Paid so far <span>(use "Add payment" to change)</span></label>
+                      <input type="text" readOnly value={peso(reservations.find(r => r.id === editingId)?.downpayment)} />
+                    </div>
+                  ) : (
+                    <div className="wa-field">
+                      <label>Downpayment <span>(min {peso(MIN_DOWNPAYMENT)})</span></label>
+                      <input type="number" min="0" placeholder="0 = hold only" value={form.downpayment}
+                        onChange={(e) => setForm({ ...form, downpayment: e.target.value })} />
+                    </div>
+                  )}
                 </div>
 
                 <div className="wa-field">
@@ -1210,13 +1603,17 @@ const Availability = () => {
                     onChange={(e) => setForm({ ...form, notes: e.target.value })} />
                 </div>
 
+                {formError && (
+                  <p className="wa-form-error" role="alert"><strong>Could not save:</strong> {formError}</p>
+                )}
+
                 <div className="wa-form-total">
                   <span>{formPkg?.name}</span>
                   <strong>{peso(formPkg?.price)}</strong>
                 </div>
 
                 <button type="submit" className="wa-btn wa-gold wa-block" disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Reservation'}
+                  {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Save Reservation'}
                 </button>
               </form>
             </div>

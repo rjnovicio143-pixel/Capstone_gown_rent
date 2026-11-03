@@ -19,6 +19,9 @@ const ACC_CATEGORIES = [
   'Filipina Sleeve', 'Shawl / Alampay', 'Bolero', 'Kimono',
   'Necklace', 'Earrings', 'Gloves', 'Others',
 ];
+// Who wears the item (the 3D Mannequin page only lets the matching avatar wear it)
+const AUDIENCES = [['women', 'Women'], ['men', 'Men'], ['girls', 'Girls'], ['boys', 'Boys'], ['kids', 'Kids (girl or boy)']];
+const defaultAudience = (type) => (type === 'suit' ? 'men' : 'women');
 const LOW_STOCK = 2; // pila na lang = "low stock"
 
 // Gown sizes: one or many (e.g. M to XL), saved as text in the "size" column.
@@ -56,7 +59,7 @@ const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const emptyGownForm = {
-  type: 'gown', name: '', price: '', stock: 1, size: '', category: 'Wedding',
+  type: 'gown', audience: 'women', name: '', price: '', stock: 1, size: '', category: 'Wedding',
   desc: '', image: null,
   petticoat_layer: null,
   included_accessories: [],
@@ -280,6 +283,7 @@ const Inventory = () => {
       stock: gown.stock ?? 1,
       size: gown.size || '',
       type: gown.type || 'gown',
+      audience: gown.audience || defaultAudience(gown.type),
       category: gown.category || 'Wedding',
       desc: gown.desc || '',
       image: gown.image || null,
@@ -325,6 +329,7 @@ const Inventory = () => {
         is_posted: gownForm.is_posted,
         status: Number(gownForm.stock) > 0 ? 'Available' : 'Out of Stock',
         type: gownForm.type || 'gown',
+        audience: gownForm.audience || defaultAudience(gownForm.type),
       };
 
       if (editingGown) {
@@ -886,6 +891,7 @@ const Inventory = () => {
                           onClick={() => setGownForm(p => ({
                             ...p,
                             type: v,
+                            audience: ['women', 'men'].includes(p.audience) ? defaultAudience(v) : p.audience,
                             category: catsFor(v).includes(p.category) ? p.category : catsFor(v)[0],
                           }))}
                         >
@@ -893,6 +899,23 @@ const Inventory = () => {
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="inv-field">
+                    <label>Who wears it</label>
+                    <div className="inv-petticoat-btns">
+                      {AUDIENCES.map(([v, label]) => (
+                        <button
+                          key={v}
+                          type="button"
+                          className={`inv-layer-btn ${gownForm.audience === v ? 'active' : ''}`}
+                          onClick={() => setGownForm(p => ({ ...p, audience: v }))}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="inv-post-desc">The 3D Mannequin only lets the matching avatar wear it (adult gowns cannot go on kids or men).</p>
                   </div>
 
                   <div className="inv-field">

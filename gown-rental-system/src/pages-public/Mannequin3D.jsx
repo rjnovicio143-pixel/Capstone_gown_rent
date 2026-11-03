@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Suspense, Component } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense, Component } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stage, useGLTF, Html } from '@react-three/drei';
@@ -6,6 +6,10 @@ import {
   Sliders, Ruler, Shirt, RotateCcw, Info, Calendar, Search, Crown, Check, X
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import {
+  Scene, CATEGORIES, sizesFor, defaultSizeFor, makeBuild, parseGownSizes, checkSizeFit,
+  audienceOf, audienceFits, AUDIENCE_LABEL,
+} from '../components/MannequinEngine';
 import '../styles-public/Mannequin3D.css';
 
 /* ---------- SAFE MODEL LOADER ----------
@@ -22,26 +26,6 @@ class ModelErrorBoundary extends Component {
 function GLBModel({ modelPath, scale }) {
   const { scene } = useGLTF(modelPath);
   return <primitive object={scene.clone()} scale={scale} />;
-}
-
-function FallbackModel({ scale, color }) {
-  return (
-    <mesh scale={scale}>
-      <cylinderGeometry args={[0.3, 0.4, 2, 16]} />
-      <meshStandardMaterial color={color} roughness={0.5} metalness={0.1} />
-    </mesh>
-  );
-}
-
-function Safe3DModel({ modelPath, scale, color }) {
-  return (
-    <ModelErrorBoundary
-      key={modelPath}
-      fallback={<FallbackModel scale={scale} color={color} />}
-    >
-      <GLBModel modelPath={modelPath} scale={scale} />
-    </ModelErrorBoundary>
-  );
 }
 
 // Accessories: render nothing if the file fails, and load without blanking the whole scene
@@ -67,7 +51,6 @@ function SceneLoader() {
 }
 
 /* ---------- CONSTANTS ---------- */
-const SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 const MODEL_BUCKET = 'gown-models'; // Supabase Storage bucket (public)
 const PAGE_SIZE = 8;                // gowns shown per "Show more" step
 
@@ -91,7 +74,9 @@ const mapGown = (row) => ({
   price: row.price,
   thumbnail: row.image,
   modelPath: resolveModelUrl(row.model_path),
-  sizes: row.size ? [row.size] : [],
+  sizes: parseGownSizes(row.size) || (row.size ? [row.size] : []),
+  type: row.type,
+  audience: row.audience || '',
   stock: Number(row.stock) || 0,
   petticoatLayer: row.petticoat_layer || null,
   includedAccessoryIds: row.included_accessories || [],
@@ -137,6 +122,7 @@ const SLIDERS = [
   { key: 'hip',    label: 'Hip' },
 ];
 
+const SIZE_LIMITS = [0.8, 1.3];   // fine-tune range (80% - 130%)
 const DEFAULT_ADJUST = { height: 1, waist: 1, chest: 1, hip: 1 };
 
 // Tabs shown under the 3D view on tablet and mobile
@@ -152,9 +138,17 @@ const Mannequin3D = () => {
   const stageRef = useRef(null);
 
   // Mannequin settings
-  const [gender, setGender] = useState('Female');
+  const [categoryId, setCategoryId] = useState('Woman');
+  const category = CATEGORIES.find(c => c.id === categoryId) || CATEGORIES[0];
   const [selectedSize, setSelectedSize] = useState('M');
+  const [modelScale, setModelScale] = useState(1.0);   // grows with size / age
+  const [weight, setWeight] = useState(0);              // -1 slim ... +1 heavy
+  const [belly, setBelly] = useState(0);                // 0 ... 1
+  const [muscle, setMuscle] = useState(0);              // 0 ... 1
   const [adjust, setAdjust] = useState(DEFAULT_ADJUST);
+  const [looseness, setLooseness] = useState(1.0);
+  const [length, setLength] = useState(1.0);
+  const [bodyRaw, setBodyRaw] = useState(null);         // measured avatar (from the 3D scene)
   const [activeTab, setActiveTab] = useState('gowns');
 
   // Data
@@ -168,7 +162,7 @@ const Mannequin3D = () => {
 
   // Gown filters
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('All');
+  const [gownCat, setGownCat] = useState('All');
   const [only3D, setOnly3D] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -181,7 +175,7 @@ const Mannequin3D = () => {
       const [gRes, aRes] = await Promise.all([
         supabase
           .from('gowns')
-          .select('id, name, price, category, size, image, stock, model_path, petticoat_layer, included_accessories')
+          .select('*')
           .eq('is_posted', true)
           .gt('price', 0)
           .order('created_at', { ascending: false }),
@@ -215,18 +209,18 @@ const Mannequin3D = () => {
 
   const q = search.trim().toLowerCase();
   const filteredGowns = allGowns.filter(g =>
-    (category === 'All' || g.category === category) &&
+    (gownCat === 'All' || g.category === gownCat) &&
     (!only3D || !!g.modelPath) &&
     (!q || g.name?.toLowerCase().includes(q))
   );
   const visibleGowns = filteredGowns.slice(0, visibleCount);
   const remaining = filteredGowns.length - visibleGowns.length;
-  const hasFilters = !!q || category !== 'All' || only3D;
+  const hasFilters = !!q || gownCat !== 'All' || only3D;
 
   const changeSearch   = (v) => { setSearch(v);   setVisibleCount(PAGE_SIZE); };
-  const changeCategory = (v) => { setCategory(v); setVisibleCount(PAGE_SIZE); };
+  const changeCategory = (v) => { setGownCat(v); setVisibleCount(PAGE_SIZE); };
   const changeOnly3D   = ()  => { setOnly3D(p => !p); setVisibleCount(PAGE_SIZE); };
-  const clearFilters   = ()  => { setSearch(''); setCategory('All'); setOnly3D(false); setVisibleCount(PAGE_SIZE); };
+  const clearFilters   = ()  => { setSearch(''); setGownCat('All'); setOnly3D(false); setVisibleCount(PAGE_SIZE); };
 
   /* ---------- ACCESSORIES ---------- */
   const accCategories = ['All', ...new Set(accessories.map(a => a.category).filter(Boolean))];
@@ -249,25 +243,64 @@ const Mannequin3D = () => {
     setWornIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
 
   /* ---------- MANNEQUIN ---------- */
-  const bodyModelPath = `/mannequin/${gender.toLowerCase()}_${selectedSize.toLowerCase()}.glb`;
+  const bodyModelPath = `/mannequin/${category.file}.glb`;
   const isDefault = Object.keys(DEFAULT_ADJUST).every(k => adjust[k] === DEFAULT_ADJUST[k]);
+  const build = useMemo(
+    () => makeBuild(weight, belly, muscle, category.kids),
+    [weight, belly, muscle, category.kids]
+  );
 
   const resetAdjust = () => setAdjust(DEFAULT_ADJUST);
 
-  const handleSizeChange = (size) => {
-    setSelectedSize(size);
+  // Load a size / age preset: scale + weight, and reset belly / muscle / fine-tune
+  const applyPreset = (cat, label) => {
+    const list = sizesFor(cat);
+    const p = list.find(x => x.label === label) || list[0];
+    setSelectedSize(p.label);
+    setModelScale(p.scale);
+    setWeight(p.weight || 0);
+    setBelly(p.belly || 0);
+    setMuscle(0);
     resetAdjust();
   };
 
-  const handleGenderChange = (value) => {
-    setGender(value);
-    resetAdjust();
+  const handleSizeChange = (size) => applyPreset(category, size);
+
+  const handleCategoryChange = (id) => {
+    const cat = CATEGORIES.find(c => c.id === id) || CATEGORIES[0];
+    setCategoryId(id);
+    applyPreset(cat, defaultSizeFor(cat));
   };
 
-  // Selecting a gown loads its package and brings the 3D view back into sight on small screens
+  /* ---------- CAN THIS AVATAR WEAR THIS GOWN? ---------- */
+  const audienceOk = selectedGown.isExample || audienceFits(audienceOf(selectedGown), category);
+  const gownSizes = useMemo(
+    () => (category.kids || selectedGown.isExample ? null : parseGownSizes(selectedGown.sizes?.join(', '))),
+    [category.kids, selectedGown]
+  );
+  const sizeCheck = useMemo(
+    () => checkSizeFit(bodyRaw, build, gownSizes, adjust.waist * modelScale, adjust.chest * modelScale),
+    [bodyRaw, build, gownSizes, adjust.waist, adjust.chest, modelScale]
+  );
+  const canWear = audienceOk && (!sizeCheck || sizeCheck.ok);
+
+  // Selecting a gown loads its package, switches to the matching avatar, and brings the 3D view into sight on small screens
   const handleSelectGown = (gown) => {
     setSelectedGown(gown);
     setWornIds(gown.includedAccessoryIds || []);
+    setLooseness(1.0);
+    setLength(1.0);
+
+    let cat = category;
+    if (!gown.isExample && !audienceFits(audienceOf(gown), category)) {
+      cat = CATEGORIES.find(c => audienceFits(audienceOf(gown), c)) || category;
+      setCategoryId(cat.id);
+    }
+    const allowed = cat.kids || gown.isExample ? null : parseGownSizes(gown.sizes?.join(', '));
+    const curSize = cat === category ? selectedSize : defaultSizeFor(cat);
+    if (allowed && !allowed.includes(curSize)) applyPreset(cat, allowed[0]);
+    else if (cat !== category) applyPreset(cat, defaultSizeFor(cat));
+
     if (window.innerWidth <= 1100) {
       stageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -282,7 +315,7 @@ const Mannequin3D = () => {
           price: selectedGown.price,
           image: selectedGown.thumbnail,
           category: selectedGown.category,
-          size: selectedGown.sizes?.[0] || '',
+          size: selectedGown.sizes?.includes(selectedSize) ? selectedSize : (selectedGown.sizes?.[0] || ''),
         },
         // Accessories chosen on top of the gown package (charged)
         extras: chargedAccessories.map(a => a.id),
@@ -308,32 +341,58 @@ const Mannequin3D = () => {
 
             <div className="m3d-card m3d-pane-body">
               <h3><Ruler size={18} /> Avatar</h3>
-              <p className="m3d-subtitle">Choose your base avatar type.</p>
+              <p className="m3d-subtitle">Choose who is trying on the gown.</p>
               <div className="m3d-gender-tabs">
-                {['Female', 'Male'].map(g => (
+                {CATEGORIES.map(c => (
                   <button
-                    key={g}
-                    className={`m3d-gender-btn ${gender === g ? 'active' : ''}`}
-                    onClick={() => handleGenderChange(g)}
+                    key={c.id}
+                    className={`m3d-gender-btn ${categoryId === c.id ? 'active' : ''}`}
+                    onClick={() => handleCategoryChange(c.id)}
                   >
-                    {g}
+                    {c.id}
                   </button>
                 ))}
               </div>
             </div>
 
             <div className="m3d-card m3d-pane-body">
-              <h3>Body Size</h3>
-              <p className="m3d-subtitle">Load the {gender.toLowerCase()} model for this size.</p>
+              <h3>{category.kids ? 'Age' : 'Body Size'}</h3>
+              <p className="m3d-subtitle">
+                {category.kids ? `Pick the age of the ${category.id.toLowerCase()}.` : `Load the ${category.id.toLowerCase()} model for this size.`}
+              </p>
               <div className="m3d-presets">
-                {SIZES.map(size => (
+                {sizesFor(category).map(p => (
                   <button
-                    key={size}
-                    className={`m3d-preset-btn ${selectedSize === size ? 'active' : ''}`}
-                    onClick={() => handleSizeChange(size)}
+                    key={p.label}
+                    className={`m3d-preset-btn ${selectedSize === p.label ? 'active' : ''}`}
+                    style={gownSizes && !gownSizes.includes(p.label) && selectedSize !== p.label ? { opacity: 0.45 } : undefined}
+                    onClick={() => handleSizeChange(p.label)}
                   >
-                    {size}
+                    {p.label}
                   </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="m3d-card m3d-pane-body">
+              <h3><Sliders size={18} /> Body Build</h3>
+              <p className="m3d-subtitle">Slim to heavy, belly and muscle. The gown follows the body.</p>
+              <div className="m3d-sliders">
+                {[
+                  ['Weight (slim / heavy)', weight, setWeight, -1, 1],
+                  ['Belly', belly, setBelly, 0, 1],
+                  ['Muscle', muscle, setMuscle, 0, 1],
+                ].map(([label, value, setter, min, max]) => (
+                  <div key={label} className="m3d-slider">
+                    <div className="m3d-slider-label">
+                      <span>{label}</span>
+                      <span>{Math.round(value * 100)}%</span>
+                    </div>
+                    <input
+                      type="range" min={min} max={max} step="0.01" value={value}
+                      onChange={(e) => setter(parseFloat(e.target.value))}
+                    />
+                  </div>
                 ))}
               </div>
             </div>
@@ -345,7 +404,7 @@ const Mannequin3D = () => {
                   <RotateCcw size={13} /> Reset
                 </button>
               </div>
-              <p className="m3d-subtitle">Slightly adjust the {selectedSize} model.</p>
+              <p className="m3d-subtitle">Adjust the {selectedSize} model. The gown follows.</p>
 
               <div className="m3d-sliders">
                 {SLIDERS.map(({ key, label }) => (
@@ -356,11 +415,26 @@ const Mannequin3D = () => {
                     </div>
                     <input
                       type="range"
-                      min="0.9"
-                      max="1.1"
+                      min={SIZE_LIMITS[0]}
+                      max={SIZE_LIMITS[1]}
                       step="0.01"
                       value={adjust[key]}
                       onChange={(e) => setAdjust(prev => ({ ...prev, [key]: parseFloat(e.target.value) }))}
+                    />
+                  </div>
+                ))}
+                {[
+                  ['Gown looseness', looseness, setLooseness, 0.95, 1.2],
+                  ['Gown length', length, setLength, 0.85, 1.15],
+                ].map(([label, value, setter, min, max]) => (
+                  <div key={label} className="m3d-slider">
+                    <div className="m3d-slider-label">
+                      <span>{label}</span>
+                      <span>{Math.round(value * 100)}%</span>
+                    </div>
+                    <input
+                      type="range" min={min} max={max} step="0.01" value={value}
+                      onChange={(e) => setter(parseFloat(e.target.value))}
                     />
                   </div>
                 ))}
@@ -375,41 +449,53 @@ const Mannequin3D = () => {
                 <span className="m3d-live">
                   <span className="m3d-live-dot" /> 3D Studio
                 </span>
-                <span className="m3d-tag">{gender} · {selectedSize}</span>
+                <span className="m3d-tag">{category.id} · {selectedSize}</span>
               </div>
 
               <div className="m3d-viewport">
                 <Canvas
-                  key={`${gender}-${selectedSize}`}
+                  key={category.id}
                   dpr={[1, 2]}
-                  camera={{ position: [0, 0, 4.5], fov: 45 }}
+                  camera={{ position: [0, 0, category.kids ? 3.4 : 4.5], fov: 45 }}
                 >
                   <ambientLight intensity={0.7} />
                   <directionalLight position={[10, 10, 5]} intensity={1} />
 
                   <Suspense fallback={<SceneLoader />}>
-                    <Stage environment="city" intensity={0.5}>
-                      <group
-                        scale={[adjust.waist, adjust.height, adjust.chest]}
-                        position={[0, -1, 0]}
-                      >
-                        <Safe3DModel modelPath={bodyModelPath} scale={[1, 1, 1]} color="#c5a880" />
-
-                        {selectedGown.modelPath && (
-                          <Safe3DModel modelPath={selectedGown.modelPath} scale={[1.02, 1, 1.02]} color="#b33939" />
-                        )}
-
-                        {wornWith3D.map(acc => (
-                          <OptionalModel key={acc.id} modelPath={acc.modelPath} />
-                        ))}
-                      </group>
+                    <Stage environment="city" intensity={0.5} adjustCamera={false}>
+                      <Scene
+                        bodyPath={bodyModelPath}
+                        gownPath={canWear ? selectedGown.modelPath : null}
+                        onMeasured={setBodyRaw}
+                        showBody
+                        build={build}
+                        looseness={looseness}
+                        length={length}
+                        scale={[adjust.waist * modelScale, adjust.height * modelScale, adjust.chest * modelScale]}
+                      />
+                      {wornWith3D.map(acc => (
+                        <group key={acc.id} scale={modelScale} position={[0, -1, 0]}>
+                          <OptionalModel modelPath={acc.modelPath} />
+                        </group>
+                      ))}
                     </Stage>
                   </Suspense>
 
                   <OrbitControls enableZoom minDistance={1.2} maxDistance={6} />
                 </Canvas>
 
-                {!selectedGown.modelPath && (
+                {!audienceOk && (
+                  <div className="m3d-notice warn">
+                    <Info size={14} /> This is for {AUDIENCE_LABEL[audienceOf(selectedGown)]}. Choose the matching avatar to try it on.
+                  </div>
+                )}
+                {audienceOk && sizeCheck && !sizeCheck.ok && (
+                  <div className="m3d-notice warn">
+                    <Info size={14} /> This gown comes in {gownSizes.join(' / ')}. The avatar is about {sizeCheck.now}, so it cannot be worn. Pick a matching size.
+                  </div>
+                )}
+
+                {audienceOk && canWear && !selectedGown.modelPath && (
                   <div className="m3d-notice">
                     <Info size={14} /> The 3D model for this gown is not available yet.
                   </div>
@@ -497,7 +583,7 @@ const Mannequin3D = () => {
                   <button
                     key={c}
                     type="button"
-                    className={`m3d-chip ${category === c ? 'active' : ''}`}
+                    className={`m3d-chip ${gownCat === c ? 'active' : ''}`}
                     onClick={() => changeCategory(c)}
                   >
                     {c}
@@ -540,6 +626,7 @@ const Mannequin3D = () => {
                       <strong>{gown.name}</strong>
                       <span className="m3d-sizes">
                         {gown.sizes.map(s => <span key={s} className="m3d-size-badge">{s}</span>)}
+                        {!gown.isExample && <span className="m3d-example-badge">{AUDIENCE_LABEL[audienceOf(gown)]}</span>}
                         {gown.isExample ? (
                           <span className="m3d-example-badge">Example</span>
                         ) : (

@@ -297,6 +297,11 @@ const KID_SIZES = [
   { label: '9-10y', scale: 1.21, weight: 0 },
   { label: '11-12y', scale: 1.31, weight: 0 },
 ];
+// Kinsa ang mo-sul-ob sa gown / suit: women | men | girls | boys | kids (girl or boy)
+const AUDIENCE_LABEL = { women: 'Women', men: 'Men', girls: 'Girls', boys: 'Boys', kids: 'Kids' };
+const audienceOf = (g) => g.audience || (g.type === 'suit' ? 'men' : 'women');
+const AVATAR_AUDIENCE = { Woman: ['women'], Man: ['men'], Girl: ['girls', 'kids'], Boy: ['boys', 'kids'] };
+const audienceFits = (aud, cat) => (AVATAR_AUDIENCE[cat.id] || []).includes(aud);
 const sizesFor = (cat) => (cat.kids ? KID_SIZES : ADULT_SIZES);
 const defaultSizeFor = (cat) => (cat.kids ? '5-6y' : 'M');
 
@@ -359,6 +364,8 @@ const mapGown = (row) => ({
   name: row.name,
   category: row.category || 'Uncategorized',
   size: row.size,
+  type: row.type,
+  audience: row.audience || '',
   stock: Number(row.stock) || 0,
   thumbnail: row.image,                       // usba kung lahi ang column
   modelPath: resolveModelUrl(row.model_path), // usba kung lahi ang column
@@ -475,7 +482,8 @@ const AdminMannequin = () => {
     pm.forEach((v, i) => { if (Math.abs(v - cur) < Math.abs(pm[near] - cur)) near = i; });
     return { ok: cur >= low && cur <= high, now: ADULT_SIZES[near].label };
   }, [gownSizes, bodyRaw, build, waist, chest, modelScale, selectedGown]);
-  const canWear = !sizeCheck || sizeCheck.ok;
+  const audienceOk = !selectedGown || selectedGown.isExample || audienceFits(audienceOf(selectedGown), category);
+  const canWear = audienceOk && (!sizeCheck || sizeCheck.ok);
   const handleCategoryChange = (id) => {
     const cat = CATEGORIES.find(c => c.id === id) || CATEGORIES[0];
     setCategoryId(id);
@@ -487,8 +495,16 @@ const AdminMannequin = () => {
     setSelectedGown(gown);
     setLooseness(1.0);
     setLength(1.0);
-    const allowed = category.kids ? null : parseGownSizes(gown.size);
-    if (allowed && !allowed.includes(selectedSize)) handleSizeChange(allowed[0]);
+    // Ilisan ang avatar kung dili siya ang para sa gown (e.g. men's suit -> Man, kids gown -> Girl / Boy)
+    let cat = category;
+    if (!gown.isExample && !audienceFits(audienceOf(gown), category)) {
+      cat = CATEGORIES.find(c => audienceFits(audienceOf(gown), c)) || category;
+      setCategoryId(cat.id);
+    }
+    const allowed = cat.kids || gown.isExample ? null : parseGownSizes(gown.size);
+    const curSize = cat === category ? selectedSize : defaultSizeFor(cat);
+    if (allowed && !allowed.includes(curSize)) applyPreset(cat, allowed[0]);
+    else if (cat !== category) applyPreset(cat, defaultSizeFor(cat));
   };
 
   const renderSlider = (label, value, setter, min = 0.9, max = 1.1) => (
@@ -622,7 +638,13 @@ const AdminMannequin = () => {
                 </span>
               </div>
 
-              {sizeCheck && (
+              {!audienceOk && (
+                <p style={{ margin: '0 0 12px', padding: '8px 12px', borderRadius: 10, fontSize: '0.82rem', fontWeight: 600, background: '#fff0f0', color: '#c0392b' }}>
+                  {`Cannot be worn. This item is for ${AUDIENCE_LABEL[audienceOf(selectedGown)]}, but the ${category.id} avatar is selected. Choose the matching avatar.`}
+                </p>
+              )}
+
+              {audienceOk && sizeCheck && (
                 <p
                   style={{
                     margin: '0 0 12px', padding: '8px 12px', borderRadius: 10, fontSize: '0.82rem', fontWeight: 600,
@@ -700,6 +722,7 @@ const AdminMannequin = () => {
                         ) : (
                           <>
                             {gown.size && <span className="size-badge">{gown.size}</span>}
+                            <span className="example-badge">{AUDIENCE_LABEL[audienceOf(gown)]}</span>
                             <span className={`stock-badge ${gown.stock === 0 ? 'out' : 'in'}`}>
                               {gown.stock === 0 ? 'Out of stock' : `${gown.stock} in stock`}
                             </span>

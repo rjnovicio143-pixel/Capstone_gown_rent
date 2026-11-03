@@ -893,3 +893,18 @@
 @media (max-width: 380px) {
   .m3d-tab svg { display: none; }
 }
+
+/* =========================================
+   NEW: 4 avatars, build sliders, fit warnings
+========================================= */
+.m3d-notice { white-space: normal; border-radius: 16px; line-height: 1.4; }
+.m3d-notice.warn { background: #fff5f5; border-color: #f5c6c6; color: #c0392b; }
+
+/* Kids ages (3-4y ... 11-12y) are longer labels: let the preset buttons wrap */
+.m3d-preset-btn { white-space: nowrap; }
+
+@media (max-width: 600px) {
+  .m3d-presets { flex-wrap: wrap; }
+  .m3d-preset-btn { flex: 1 1 56px; padding: 10px 6px; }
+  .m3d-notice { bottom: 8px; font-size: 12px; padding: 8px 12px; }
+}

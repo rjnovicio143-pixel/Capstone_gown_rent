@@ -21,6 +21,37 @@ const ACC_CATEGORIES = [
 ];
 const LOW_STOCK = 2; // pila na lang = "low stock"
 
+// Gown sizes: one or many (e.g. M to XL), saved as text in the "size" column.
+const SIZE_OPTIONS = ['S', 'M', 'L', 'XL', 'XXL'];
+const SIZE_WORDS = [
+  [/extra\s*extra\s*large|2\s*xl|xxl/g, ' XXL '],
+  [/extra\s*large|x-?large|\bxl\b/g, ' XL '],
+  [/medium/g, ' M '],
+  [/large/g, ' L '],
+  [/small/g, ' S '],
+];
+// "M-XL", "Large", "M, L" -> ['M','L','XL']  (kung dili masabtan -> [])
+const parseSizes = (raw) => {
+  if (!raw) return [];
+  let t = String(raw).toLowerCase();
+  SIZE_WORDS.forEach(([re, rep]) => { t = t.replace(re, rep); });
+  const tokens = t.toUpperCase().match(/\b(?:XXL|XL|S|M|L)\b/g);
+  if (!tokens) return [];
+  const idx = tokens.map(x => SIZE_OPTIONS.indexOf(x));
+  const isRange = /-|–|\bto\b|hangtod|until/i.test(String(raw)) && idx.length >= 2;
+  if (isRange) return SIZE_OPTIONS.slice(Math.min(...idx), Math.max(...idx) + 1);
+  return SIZE_OPTIONS.filter((_, i) => idx.includes(i));
+};
+// ['M','L','XL'] -> "M-XL"; ['M','XL'] -> "M, XL"; ['L'] -> "L"
+const formatSizes = (list) => {
+  if (list.length === 0) return '';
+  const idx = list.map(x => SIZE_OPTIONS.indexOf(x)).sort((a, b) => a - b);
+  const contiguous = idx.every((v, i) => i === 0 || v === idx[i - 1] + 1);
+  return contiguous && idx.length > 2
+    ? `${SIZE_OPTIONS[idx[0]]}-${SIZE_OPTIONS[idx[idx.length - 1]]}`
+    : idx.map(i => SIZE_OPTIONS[i]).join(', ');
+};
+
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -814,10 +845,34 @@ const Inventory = () => {
                         onChange={e => setGownForm(p => ({ ...p, stock: e.target.value }))} />
                     </div>
                     <div className="inv-field">
-                      <label>Size</label>
-                      <input type="text" placeholder="S / M / L / XL" value={gownForm.size}
-                        onChange={e => setGownForm(p => ({ ...p, size: e.target.value }))} />
+                      <label>Size (multiple allowed)</label>
+                      <input type="text" value={gownForm.size || 'Pick below'} readOnly />
                     </div>
+                  </div>
+
+                  <div className="inv-field">
+                    <label>Sizes this gown fits</label>
+                    <div className="inv-petticoat-btns">
+                      {SIZE_OPTIONS.map(sz => {
+                        const picked = parseSizes(gownForm.size);
+                        const on = picked.includes(sz);
+                        return (
+                          <button
+                            key={sz}
+                            type="button"
+                            className={`inv-layer-btn ${on ? 'active' : ''}`}
+                            onClick={() => setGownForm(p => {
+                              const cur = parseSizes(p.size);
+                              const next = cur.includes(sz) ? cur.filter(x => x !== sz) : [...cur, sz];
+                              return { ...p, size: formatSizes(next) };
+                            })}
+                          >
+                            {sz}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="inv-post-desc">Example: pick M, L and XL if the gown fits Medium to Extra Large.</p>
                   </div>
 
                   <div className="inv-field">

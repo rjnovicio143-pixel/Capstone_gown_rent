@@ -201,3 +201,17 @@
 }
 
 .am-empty { font-size: 13px; color: #aaa; font-style: italic; }
+
+/* ================= SHOW AVATAR CHECKBOX ================= */
+.am-check {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 14px; font-size: 0.85rem; font-weight: 600;
+  color: var(--m3d-text-dark); cursor: pointer;
+}
+.am-check input { accent-color: var(--m3d-gold); cursor: pointer; }
+
+/* 4 ka avatar tabs (Woman, Man, Girl, Boy) */
+.gender-tabs { grid-template-columns: 1fr 1fr; }
+
+/* Reset build button */
+.am-section-card .preset-btn { margin-top: 4px; }

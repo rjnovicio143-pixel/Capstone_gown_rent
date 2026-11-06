@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo, Component } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Component } from 'react';
 import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
 
 /* ==========================================================
    MannequinEngine.jsx
@@ -46,6 +47,20 @@ const FIT = {
   minXZ: 0.8,       // limit sa pag-lapdon / pag-pig-ot sa gown
   maxXZ: 1.6,
 };
+
+// Sukdon ang gown sa iyang kaugalingong luna: ibulag sa dali ang parent (ang group nga naay fit scale / position),
+// kay kung dili, ang world matrix naay sakop na nga scale ug mausab ang sukod matag higayon nga i-slide.
+function withDetached(root, fn) {
+  const parent = root.parent;
+  root.parent = null;
+  root.updateMatrixWorld(true);
+  try {
+    return fn();
+  } finally {
+    root.parent = parent;
+    root.updateMatrixWorld(true);
+  }
+}
 
 // Moagi sa tanang vertices (sa world coordinates)
 function eachVertex(root, fn) {
@@ -94,6 +109,7 @@ function measureBody(root) {
       cz: 0,
       coverTop: meta.coverTop,
       slices: meta.slices,
+      arm: meta.arm || null,          // abaga (pivot) + anggulo sa bukton
       morphs: meta.morphs || {},      // pila ang madugang sa matag slice kung i-slide ang weight / belly / muscle
     };
   }
@@ -143,6 +159,14 @@ export function applyBuild(raw, build) {
 
 // Sukdon ang gown sa mga gitas-on sa lawas (usa ra, kay dili mausab ang gitas-on sa pag-slide sa build)
 function gownProfile(root, body, length) {
+  // balika ang orihinal nga porma (kung na-isbog na kini kaniadto) aron husto ang sukod
+  root.traverse((o) => {
+    const pos = o.isMesh && o.geometry?.attributes?.position;
+    if (pos && o.userData.origPos) { pos.array.set(o.userData.origPos); pos.needsUpdate = true; }
+  });
+  return withDetached(root, () => gownProfileInner(root, body, length));
+}
+function gownProfileInner(root, body, length) {
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   if (box.isEmpty() || !(size.y > 0)) return null;
@@ -158,8 +182,21 @@ function gownProfile(root, body, length) {
   return { box, s, rows };
 }
 
+/* ----------------------------------------------------------
+   POSISYON NGA GI-SAVE SA ADMIN (matag gown)
+   Gi-butang sa admin ang gown sa mannequin (M) ug gi-save. Kini nga mga numero
+   gidugang ibabaw sa auto-fit, mao nga parehas ang posisyon sa tanang customer.
+   s = gidak-on (1 = sama), y = pataas / paubos (metros), w = lapad, d = gibag-on
+   ---------------------------------------------------------- */
+export const DEFAULT_TWEAK = { s: 1, y: 0, w: 1, d: 1 };
+export const parseTweak = (v) => {
+  const n = (x, def) => (Number.isFinite(Number(x)) && x !== null && x !== '' ? Number(x) : def);
+  const o = v && typeof v === 'object' ? v : {};
+  return { s: n(o.s, 1), y: n(o.y, 0), w: n(o.w, 1), d: n(o.d, 1) };
+};
+
 // Kuhaon ang scale + position sa gown aron mo-fit sa avatar (paspas, mahimo matag slide)
-function gownFit(profile, body, looseness) {
+function gownFit(profile, body, looseness, tweak) {
   const identity = { scale: [1, 1, 1], position: [0, 0, 0] };
   if (!profile || !body?.ok) return identity;
   const { box, s, rows } = profile;
@@ -176,15 +213,17 @@ function gownFit(profile, body, looseness) {
   if (fx === 0) fx = 1;   // wala'y slice nga na-tandi -> ayaw usba
   if (fz === 0) fz = 1;
   const clamp = (n) => Math.min(FIT.maxXZ, Math.max(FIT.minXZ, n));
-  const sx = s * clamp(fx * looseness);
-  const sz = s * clamp(fz * looseness);
+  const tw = tweak || DEFAULT_TWEAK;
+  const sx = s * clamp(fx * looseness) * tw.s * tw.w;
+  const sz = s * clamp(fz * looseness) * tw.s * tw.d;
+  const sy = s * tw.s;
 
   // Posisyon: hem sa salog, sentro sa avatar
   const gcx = (box.min.x + box.max.x) / 2;
   const gcz = (box.min.z + box.max.z) / 2;
   return {
-    scale: [sx, s, sz],
-    position: [body.cx - sx * gcx, body.minY - s * box.min.y, body.cz - sz * gcz],
+    scale: [sx, sy, sz],
+    position: [body.cx - sx * gcx, body.minY - sy * box.min.y + tw.y, body.cz - sz * gcz],
   };
 }
 
@@ -195,11 +234,100 @@ function useClonedGLB(path) {
   return useMemo(() => scene.clone(true), [scene]);
 }
 
+/* ----------------------------------------------------------
+   HIDE THE TORSO UNDER THE GOWN
+   Kung naay gown, dili na i-render ang bahin sa lawas nga naa sulod sa gown
+   (gikan sa salog hangtod sa taas sa bodice). Mao nga dili na mo-gawas ang
+   dughan / hawak / tiyan latas sa gown, bisan pa ang gown mas pig-ot gamay
+   taliwala sa mga slice nga gisukod. Ang ulo, liog, abaga ug mga bukton kay
+   makita gihapon.
+   ---------------------------------------------------------- */
+const HIDE_N = 6;
+const makeHideUniforms = () => ({
+  uHideOn: { value: 0 },
+  uHideInv: { value: new THREE.Matrix4() },
+  uHideYTop: { value: 0 },
+  uHideY: { value: new Array(HIDE_N).fill(0) },
+  uHideW: { value: new Array(HIDE_N).fill(1) },
+  uHideD: { value: new Array(HIDE_N).fill(1) },
+  uHideCz: { value: new Array(HIDE_N).fill(0) },
+  uHideCx: { value: 0 },
+  // Mga bukton: uArmRot = pila ka radian ang pag-taas, uArmP = abaga (pivot), uArmHide = tagoa
+  uArmRot: { value: 0 },
+  uArmP: { value: new THREE.Vector2(0.2, 1.4) },
+  uArmHide: { value: 0 },
+});
+
+function patchMaterial(mat) {
+  if (mat.userData.hideUni) return mat.userData.hideUni;
+  const uni = makeHideUniforms();
+  mat.userData.hideUni = uni;
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uni);
+    shader.vertexShader = shader.vertexShader
+      .replace('void main() {', 'varying vec3 vHidePos;\nvarying float vArmW;\nuniform mat4 uHideInv;\nuniform float uArmRot;\nuniform vec2 uArmP;\nattribute float _arm;\nvoid main() {')
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+float armSide = position.x >= 0.0 ? 1.0 : -1.0;
+float armA = uArmRot * _arm;
+float armC = cos(armA); float armS = sin(armA);
+vArmW = _arm;
+vec2 armN = vec2(objectNormal.x * armSide, objectNormal.y);
+armN = vec2(armC * armN.x - armS * armN.y, armS * armN.x + armC * armN.y);
+objectNormal.x = armN.x * armSide; objectNormal.y = armN.y;`)
+      .replace('#include <project_vertex>', `{
+  vec2 armQ = vec2(transformed.x * armSide - uArmP.x, transformed.y - uArmP.y);
+  armQ = vec2(armC * armQ.x - armS * armQ.y, armS * armQ.x + armC * armQ.y);
+  transformed.x = armSide * (armQ.x + uArmP.x); transformed.y = armQ.y + uArmP.y;
+}
+vHidePos = (uHideInv * modelMatrix * vec4(transformed, 1.0)).xyz;
+#include <project_vertex>`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('void main() {', `varying vec3 vHidePos;
+varying float vArmW; uniform float uArmHide;
+uniform float uHideOn; uniform float uHideYTop; uniform float uHideCx;
+uniform float uHideY[${HIDE_N}]; uniform float uHideW[${HIDE_N}];
+uniform float uHideD[${HIDE_N}]; uniform float uHideCz[${HIDE_N}];
+void main() {`)
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+if (uArmHide > 0.5 && vArmW > 0.08) discard;
+if (uHideOn > 0.5 && vHidePos.y < uHideYTop) {
+  float y = vHidePos.y;
+  float w = uHideW[0]; float d = uHideD[0]; float cz = uHideCz[0];
+  for (int i = 0; i < ${HIDE_N - 1}; i++) {
+    if (y > uHideY[i]) {
+      float t = clamp((y - uHideY[i]) / max(uHideY[i + 1] - uHideY[i], 0.0001), 0.0, 1.0);
+      w = mix(uHideW[i], uHideW[i + 1], t);
+      d = mix(uHideD[i], uHideD[i + 1], t);
+      cz = mix(uHideCz[i], uHideCz[i + 1], t);
+    }
+  }
+  float ex = (vHidePos.x - uHideCx) / w;
+  float ez = (vHidePos.z - cz) / d;
+  if (ex * ex + ez * ez < 1.0) discard;
+}`);
+  };
+  mat.customProgramCacheKey = () => 'hide-torso-v2';
+  mat.needsUpdate = true;
+  return uni;
+}
+
 // Ang avatar. Ang "build" (weight / belly / muscle) mao ang morph targets sulod sa .glb
-function Body({ modelPath, visible, build, onProfile }) {
+// hide = ang sukod sa lawas (body) kung naay gown nga gisul-ob, kung wala = null
+function Body({ modelPath, visible, build, hide, arms, onProfile }) {
   const scene = useClonedGLB(modelPath);
+  const wrap = useRef(null);
   const profile = useMemo(() => measureBody(scene), [scene]);
   useEffect(() => { onProfile(profile); }, [profile, onProfile]);
+
+  const unis = useMemo(() => {
+    const list = [];
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach((m) => { if (m) list.push(patchMaterial(m)); });
+    });
+    return list;
+  }, [scene]);
 
   useEffect(() => {
     scene.traverse((o) => {
@@ -213,7 +341,46 @@ function Body({ modelPath, visible, build, onProfile }) {
     });
   }, [scene, build]);
 
-  return <primitive object={scene} visible={visible} />;
+  // I-set ang mga numero sa "hide" (slice sa lawas, taas sa bodice)
+  useEffect(() => {
+    const on = !!(hide?.ok && hide.slices?.length);
+    unis.forEach((u) => {
+      u.uHideOn.value = on ? 1 : 0;
+      if (!on) return;
+      const sl = [...hide.slices].sort((a, b) => a.y - b.y);
+      // 6 ka punto: pun-on pinaagi sa pagbalik sa katapusan
+      for (let i = 0; i < HIDE_N; i++) {
+        const k = sl[Math.min(i, sl.length - 1)];
+        u.uHideY.value[i] = i < sl.length ? k.y : k.y + 0.001 * (i - sl.length + 1);
+        u.uHideW.value[i] = Math.max(k.halfW, 0.01) * 1.03;
+        u.uHideD.value[i] = Math.max(k.halfD, 0.01) * 1.12;
+        u.uHideCz.value[i] = k.cz ?? hide.cz ?? 0;
+      }
+      u.uHideCx.value = hide.cx || 0;
+      u.uHideYTop.value = hide.minY + (hide.coverTop || FIT.coverTop) * hide.height - 0.02 * hide.height;
+    });
+  }, [unis, hide]);
+
+  // Mga bukton: down (orihinal) | away | tpose | hide
+  useEffect(() => {
+    const a = profile?.arm;
+    unis.forEach((u) => {
+      u.uArmHide.value = arms === 'hide' ? 1 : 0;
+      if (!a) { u.uArmRot.value = 0; return; }
+      u.uArmP.value.set(a.pivot[0], a.pivot[1]);
+      const deg = arms === 'tpose' ? 90 - a.rest : arms === 'away' ? 28 : 0;
+      u.uArmRot.value = (deg * Math.PI) / 180;
+    });
+  }, [unis, profile, arms]);
+
+  // Ang matrix: world -> Scene group (parehas nga luna sa gown ug slices)
+  useFrame(() => {
+    if (!wrap.current) return;
+    wrap.current.updateWorldMatrix(true, false);
+    unis.forEach((u) => u.uHideInv.value.copy(wrap.current.matrixWorld).invert());
+  });
+
+  return <group ref={wrap}><primitive object={scene} visible={visible} /></group>;
 }
 
 // Kung dili ma-load ang avatar file
@@ -227,7 +394,86 @@ function FallbackBody({ onProfile }) {
   );
 }
 
-function FittedGown({ modelPath, body, looseness, length }) {
+/* ----------------------------------------------------------
+   I-ISBOG ANG GOWN (dili tagoan ang lawas)
+   Ang matag vertex sa gown nga naa sulod sa lawas gi-tulod paggawas hangtod
+   mo-gawas sa porma sa lawas (ellipse sa matag gitas-on). Mao nga ang gown
+   mo-dako lang kung asa kini kinahanglan, ug ang lawas makita gyud sa sulod.
+   ---------------------------------------------------------- */
+const PUSH = { mw: 1.05, md: 1.10 };   // dugang nga luna palibot sa lawas (lapad / lalom)
+
+function expandGownAroundBody(root, fit, body, length, tweak) {
+  withDetached(root, () => expandInner(root, fit, body, length, tweak));
+}
+function expandInner(root, fit, body, length, tweak) {
+  const sl = [...body.slices].sort((a, b) => a.y - b.y);
+  if (!sl.length) return;
+  const last = sl[sl.length - 1];
+  const tw = tweak || DEFAULT_TWEAK;
+  const topY = body.minY + (body.coverTop || FIT.coverTop) * body.height * length * tw.s + tw.y;
+  const cx = body.cx || 0;
+  const [sx, sy, sz] = fit.scale;
+  const [px, py, pz] = fit.position;
+
+  const profile = (y) => {
+    let a = sl[0];
+    let b = sl[0];
+    if (y >= last.y) { a = last; b = last; }
+    else if (y > sl[0].y) {
+      for (let i = 0; i < sl.length - 1; i += 1) {
+        if (y <= sl[i + 1].y) { a = sl[i]; b = sl[i + 1]; break; }
+      }
+    }
+    let t = b.y > a.y ? (y - a.y) / (b.y - a.y) : 0;
+    t = t * t * (3 - 2 * t);
+    const az = a.cz ?? body.cz ?? 0;
+    const bz = b.cz ?? body.cz ?? 0;
+    let w = a.halfW + (b.halfW - a.halfW) * t;
+    const d = a.halfD + (b.halfD - a.halfD) * t;
+    if (y > last.y) w *= 1 + 0.08 * Math.min(1, (y - last.y) / Math.max(topY - last.y, 1e-3));   // mas lapad paingon sa abaga
+    return [w * PUSH.mw, d * PUSH.md, az + (bz - az) * t];
+  };
+
+  root.updateWorldMatrix(true, true);
+  const m = new THREE.Matrix4();
+  const mi = new THREE.Matrix4();
+  const v = new THREE.Vector3();
+  root.traverse((o) => {
+    const pos = o.isMesh && o.geometry?.attributes?.position;
+    if (!pos) return;
+    if (!o.userData.origPos) o.userData.origPos = pos.array.slice();
+    const orig = o.userData.origPos;
+    m.copy(o.matrixWorld);
+    mi.copy(m).invert();
+    for (let i = 0; i < pos.count; i += 1) {
+      v.set(orig[3 * i], orig[3 * i + 1], orig[3 * i + 2]).applyMatrix4(m);
+      let bx = px + sx * v.x;
+      const by = py + sy * v.y;
+      let bz = pz + sz * v.z;
+      if (by >= sl[0].y && by <= topY) {
+        const [w, d, cz] = profile(by);
+        let ex = (bx - cx) / w;
+        let ez = (bz - cz) / d;
+        const r2 = ex * ex + ez * ez;
+        if (r2 < 1) {
+          let r = Math.sqrt(r2);
+          if (r < 1e-3) { ex = 0; ez = 1; r = 1; }
+          bx = cx + (ex / r) * w;
+          bz = cz + (ez / r) * d;
+        }
+      }
+      v.set((bx - px) / sx, (by - py) / sy, (bz - pz) / sz).applyMatrix4(mi);
+      pos.array[3 * i] = v.x;
+      pos.array[3 * i + 1] = v.y;
+      pos.array[3 * i + 2] = v.z;
+    }
+    pos.needsUpdate = true;
+    o.geometry.computeBoundingSphere();
+    o.frustumCulled = false;
+  });
+}
+
+function FittedGown({ modelPath, body, looseness, length, tweak }) {
   const scene = useClonedGLB(modelPath);
   const ysKey = body.ok ? body.slices.map(sl => sl.y).join(',') : '';
 
@@ -237,7 +483,30 @@ function FittedGown({ modelPath, body, looseness, length }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scene, body.ok, body.height, body.minY, body.coverTop, ysKey, length]
   );
-  const fit = useMemo(() => gownFit(profile, body, looseness), [profile, body, looseness]);
+  const tw = useMemo(() => parseTweak(tweak), [tweak?.s, tweak?.y, tweak?.w, tweak?.d]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fit = useMemo(() => gownFit(profile, body, looseness, tw), [profile, body, looseness, tw]);
+
+  // Kada gown naay kaugalingon nga geometry (dili mausab ang gi-cache nga original)
+  useMemo(() => {
+    scene.traverse((o) => {
+      if (o.isMesh && !o.userData.ownGeo) { o.geometry = o.geometry.clone(); o.userData.ownGeo = true; }
+    });
+  }, [scene]);
+
+  // I-isbog ang gown aron ang lawas makasulod gyud
+  useEffect(() => {
+    if (body.ok && profile) expandGownAroundBody(scene, fit, body, length, tw);
+  }, [scene, fit, body, profile, length, tw]);
+
+  // Ang sulod sa gown makita (walay "butang" kung ang mesh usa ra ka-side)
+  useEffect(() => {
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
+        if (m && m.side !== THREE.DoubleSide) { m.side = THREE.DoubleSide; m.needsUpdate = true; }
+      });
+    });
+  }, [scene]);
 
   return (
     <group position={fit.position} scale={fit.scale}>
@@ -256,7 +525,7 @@ function FallbackGown() {
 }
 
 // Ang tibuok eksena: avatar + gown nga na-fit sa iyang sukod
-export function Scene({ bodyPath, gownPath, showBody, build, looseness, length, scale, onMeasured }) {
+export function Scene({ bodyPath, gownPath, showBody, build, looseness, length, scale, arms = 'down', tweak, onMeasured }) {
   const [raw, setRaw] = useState(null);   // null = wala pa na-sukod ang avatar
   useEffect(() => { if (onMeasured) onMeasured(raw); }, [raw, onMeasured]);
   const body = useMemo(() => applyBuild(raw, build), [raw, build]);
@@ -264,12 +533,12 @@ export function Scene({ bodyPath, gownPath, showBody, build, looseness, length, 
   return (
     <group scale={scale} position={[0, -1, 0]}>
       <ModelErrorBoundary key={bodyPath} fallback={<FallbackBody onProfile={setRaw} />}>
-        <Body modelPath={bodyPath} visible={showBody} build={build} onProfile={setRaw} />
+        <Body modelPath={bodyPath} visible={showBody} build={build} hide={null} arms={arms} onProfile={setRaw} />
       </ModelErrorBoundary>
 
       {gownPath && body && (
         <ModelErrorBoundary key={gownPath} fallback={<FallbackGown />}>
-          <FittedGown modelPath={gownPath} body={body} looseness={looseness} length={length} />
+          <FittedGown modelPath={gownPath} body={body} looseness={looseness} length={length} tweak={tweak} />
         </ModelErrorBoundary>
       )}
     </group>

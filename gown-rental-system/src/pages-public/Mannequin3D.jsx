@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stage, useGLTF, Html } from '@react-three/drei';
 import {
-  Sliders, Ruler, Shirt, RotateCcw, Info, Calendar, Search, Crown, Check, X
+  Sliders, Ruler, Shirt, RotateCcw, Info, Calendar, Search, Crown, Check, X, Sun, Moon
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import {
   Scene, CATEGORIES, sizesFor, defaultSizeFor, makeBuild, parseGownSizes, checkSizeFit,
-  audienceOf, audienceFits, AUDIENCE_LABEL,
+  audienceOf, audienceFits, AUDIENCE_LABEL, parseTweak,
 } from '../components/MannequinEngine';
 import '../styles-public/Mannequin3D.css';
 
@@ -80,6 +80,7 @@ const mapGown = (row) => ({
   stock: Number(row.stock) || 0,
   petticoatLayer: row.petticoat_layer || null,
   includedAccessoryIds: row.included_accessories || [],
+  fitAdjust: parseTweak(row.fit_adjust),   // gown position saved by the admin
   isExample: false,
 });
 
@@ -149,7 +150,17 @@ const Mannequin3D = () => {
   const [looseness, setLooseness] = useState(1.0);
   const [length, setLength] = useState(1.0);
   const [bodyRaw, setBodyRaw] = useState(null);         // measured avatar (from the 3D scene)
-  const [activeTab, setActiveTab] = useState('gowns');
+  const [activeTab, setActiveTab] = useState('closed');   // mobile bottom sheet: closed | gowns | extras | body | fit
+  const [arms, setArms] = useState('down');             // down | away | tpose | hide
+  const [bgMode, setBgMode] = useState(() => {         // 3D background: dark | light
+    try { return localStorage.getItem('mannequin-bg') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; }
+  });
+  const toggleBg = () => setBgMode((m) => {
+    const next = m === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('mannequin-bg', next); } catch (e) { /* ignore */ }
+    return next;
+  });
+  const [adjTab, setAdjTab] = useState('build');        // desktop: Build / Fine-tune switch
 
   // Data
   const [gowns, setGowns] = useState([]);
@@ -302,6 +313,7 @@ const Mannequin3D = () => {
     else if (cat !== category) applyPreset(cat, defaultSizeFor(cat));
 
     if (window.innerWidth <= 1100) {
+      setActiveTab('closed');   // close the sheet so the gown is visible
       stageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
@@ -340,8 +352,8 @@ const Mannequin3D = () => {
           <aside className="m3d-controls">
 
             <div className="m3d-card m3d-pane-body">
-              <h3><Ruler size={18} /> Avatar</h3>
-              <p className="m3d-subtitle">Choose who is trying on the gown.</p>
+              <h3><span className="m3d-step">1</span> Who is trying it on?</h3>
+              <p className="m3d-subtitle">Pick an avatar, then its size or age.</p>
               <div className="m3d-gender-tabs">
                 {CATEGORIES.map(c => (
                   <button
@@ -356,7 +368,7 @@ const Mannequin3D = () => {
             </div>
 
             <div className="m3d-card m3d-pane-body">
-              <h3>{category.kids ? 'Age' : 'Body Size'}</h3>
+              <h3><Ruler size={17} /> {category.kids ? 'Age' : 'Body size'}</h3>
               <p className="m3d-subtitle">
                 {category.kids ? `Pick the age of the ${category.id.toLowerCase()}.` : `Load the ${category.id.toLowerCase()} model for this size.`}
               </p>
@@ -375,7 +387,24 @@ const Mannequin3D = () => {
             </div>
 
             <div className="m3d-card m3d-pane-body">
-              <h3><Sliders size={18} /> Body Build</h3>
+              <h3><Ruler size={17} /> Arms</h3>
+              <p className="m3d-subtitle">Move the arms away from the gown, or hide them.</p>
+              <div className="m3d-seg">
+                {[['down', 'Down'], ['away', 'Away'], ['tpose', 'T-pose'], ['hide', 'Hide']].map(([id, label]) => (
+                  <button key={id} type="button" className={arms === id ? 'active' : ''} onClick={() => setArms(id)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="m3d-adj-switch" role="tablist" aria-label="Adjust">
+              <button type="button" className={adjTab === 'build' ? 'active' : ''} onClick={() => setAdjTab('build')}>Body build</button>
+              <button type="button" className={adjTab === 'fit' ? 'active' : ''} onClick={() => setAdjTab('fit')}>Fine-tune</button>
+            </div>
+
+            <div className={`m3d-card m3d-pane-body m3d-adj ${adjTab === 'build' ? 'on' : ''}`}>
+              <h3><Sliders size={17} /> Body build</h3>
               <p className="m3d-subtitle">Slim to heavy, belly and muscle. The gown follows the body.</p>
               <div className="m3d-sliders">
                 {[
@@ -397,9 +426,9 @@ const Mannequin3D = () => {
               </div>
             </div>
 
-            <div className="m3d-card m3d-pane-fit">
+            <div className={`m3d-card m3d-pane-fit m3d-adj ${adjTab === 'fit' ? 'on' : ''}`}>
               <div className="m3d-card-head">
-                <h3><Sliders size={18} /> Fine-Tune</h3>
+                <h3><Sliders size={17} /> Fine-tune</h3>
                 <button className="m3d-reset" onClick={resetAdjust} disabled={isDefault}>
                   <RotateCcw size={13} /> Reset
                 </button>
@@ -449,25 +478,37 @@ const Mannequin3D = () => {
                 <span className="m3d-live">
                   <span className="m3d-live-dot" /> 3D Studio
                 </span>
-                <span className="m3d-tag">{category.id} · {selectedSize}</span>
+                <span className="m3d-head-tags">
+                  <button type="button" className="m3d-bg-toggle" onClick={toggleBg} aria-label="Switch 3D background">
+                    {bgMode === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
+                    {bgMode === 'dark' ? 'Light' : 'Dark'}
+                  </button>
+                  <span className={`m3d-status ${canWear ? 'ok' : 'no'}`}>
+                    {canWear ? <><Check size={12} /> Fits</> : <><X size={12} /> Can't wear</>}
+                  </span>
+                  <span className="m3d-tag">{category.id} · {selectedSize}</span>
+                </span>
               </div>
 
-              <div className="m3d-viewport">
+              <div className={`m3d-viewport ${bgMode}`}>
                 <Canvas
                   key={category.id}
                   dpr={[1, 2]}
-                  camera={{ position: [0, 0, category.kids ? 3.4 : 4.5], fov: 45 }}
+                  camera={{ position: [0, 0.1, category.kids ? 2.7 : 3.5], fov: 45 }}
                 >
-                  <ambientLight intensity={0.7} />
-                  <directionalLight position={[10, 10, 5]} intensity={1} />
+                  <ambientLight intensity={0.35} />
+                  <directionalLight position={[6, 9, 6]} intensity={0.8} />
+                  <directionalLight position={[-6, 4, -4]} intensity={0.5} color="#9db4ff" />
 
                   <Suspense fallback={<SceneLoader />}>
-                    <Stage environment="city" intensity={0.5} adjustCamera={false}>
+                    <Stage environment="studio" intensity={0.22} shadows="contact" adjustCamera={false}>
                       <Scene
                         bodyPath={bodyModelPath}
                         gownPath={canWear ? selectedGown.modelPath : null}
                         onMeasured={setBodyRaw}
                         showBody
+                        arms={arms}
+                        tweak={selectedGown.fitAdjust}
                         build={build}
                         looseness={looseness}
                         length={length}
@@ -538,7 +579,7 @@ const Mannequin3D = () => {
                 key={id}
                 type="button"
                 className={`m3d-tab ${activeTab === id ? 'active' : ''}`}
-                onClick={() => setActiveTab(id)}
+                onClick={() => setActiveTab(prev => (prev === id ? 'closed' : id))}
               >
                 <Icon size={16} /> {label}
                 {id === 'extras' && chargedAccessories.length > 0 && (
@@ -553,8 +594,8 @@ const Mannequin3D = () => {
 
             {/* ---------- GOWN SELECTION ---------- */}
             <div className="m3d-card m3d-card-fill m3d-pane-gowns">
-              <h3><Shirt size={18} /> Gown Selection</h3>
-              <p className="m3d-subtitle">Select a gown to try on the {selectedSize} mannequin.</p>
+              <h3><span className="m3d-step">2</span> Choose a gown</h3>
+              <p className="m3d-subtitle">Tap a gown to see it on the mannequin.</p>
 
               <div className="m3d-search">
                 <Search size={15} />
@@ -656,7 +697,7 @@ const Mannequin3D = () => {
 
             {/* ---------- ACCESSORIES ---------- */}
             <div className="m3d-card m3d-pane-extras">
-              <h3><Crown size={18} /> Accessories</h3>
+              <h3><span className="m3d-step">3</span> Add accessories</h3>
               <p className="m3d-subtitle">
                 Add accessories to your look. Items included with the gown are already in its price.
               </p>

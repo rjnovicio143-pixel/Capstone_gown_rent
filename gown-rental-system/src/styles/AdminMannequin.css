@@ -215,3 +215,71 @@
 
 /* Reset build button */
 .am-section-card .preset-btn { margin-top: 4px; }
+/* ================= 3D BACKGROUND: DARK / LIGHT ================= */
+.canvas-viewport-container.dark {
+  background: radial-gradient(ellipse at 50% 38%, #3a4256 0%, #232938 48%, #12151e 100%);
+  border-color: #0f121a;
+}
+.canvas-viewport-container.light {
+  background: radial-gradient(circle, #ffffff 40%, #ece8dc 100%);
+}
+.am-head-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.am-bg-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 30px; cursor: pointer;
+  background: #f8fafc; border: 1px solid var(--m3d-border); color: var(--m3d-text-gray);
+  font-size: .78rem; font-weight: 700; transition: all .2s;
+}
+.am-bg-toggle:hover { border-color: var(--m3d-gold); color: var(--m3d-gold); }
+
+/* ================= MOBILE: bottom bar + bottom sheet (same idea as the customer page) ================= */
+.am-nav { display: none; }
+
+@media (max-width: 900px) {
+  :root { --am-bottom-nav: 0px; }  /* if your app already has a fixed bottom menu, put its height here (e.g. 64px) */
+
+  .am-page-container { padding: 12px 10px calc(96px + var(--am-bottom-nav)); }
+  .am-hero { margin-bottom: 10px; }
+  .am-hero p { display: none; }
+
+  .am-canvas-wrapper { height: auto; padding: 10px; border-radius: 18px; }
+  .canvas-viewport-container { flex: none; height: clamp(420px, 64dvh, 760px); }
+
+  .am-tabstrip { display: none; }
+
+  /* Bottom bar */
+  .am-nav {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+    position: fixed; left: 8px; right: 8px; z-index: 60;
+    bottom: calc(8px + var(--am-bottom-nav) + env(safe-area-inset-bottom, 0px));
+    padding: 5px; border-radius: 18px;
+    background: rgba(18, 21, 30, 0.96); border: 1px solid #2d3448;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  }
+  .am-nav button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    padding: 8px 2px; border: none; border-radius: 13px; background: transparent;
+    font-family: inherit; font-size: 11.5px; font-weight: 800; color: #aab3c5; cursor: pointer;
+  }
+  .am-nav button.active { background: var(--m3d-gold); color: #fff; }
+
+  /* Panels open as a sheet over the 3D view */
+  .am-control-panel, .am-gown-panel {
+    position: fixed; left: 0; right: 0; z-index: 50;
+    bottom: calc(78px + var(--am-bottom-nav) + env(safe-area-inset-bottom, 0px));
+    max-height: 44dvh; overflow-y: auto; overscroll-behavior: contain;
+    padding: 14px 12px 16px;
+    background: #f6f4ee; border-radius: 22px 22px 0 0;
+    box-shadow: 0 -12px 34px rgba(0, 0, 0, 0.28);
+  }
+  .am-control-panel .am-section-card, .am-gown-panel .am-section-card { box-shadow: none; margin-bottom: 10px; }
+  .am-control-panel .am-section-card:last-child, .am-gown-panel .am-section-card:last-child { margin-bottom: 0; }
+  .am-grid-layout[data-sheet="closed"] .am-control-panel,
+  .am-grid-layout[data-sheet="closed"] .am-gown-panel,
+  .am-grid-layout[data-sheet="gowns"] .am-control-panel,
+  .am-grid-layout[data-sheet="controls"] .am-gown-panel { display: none; }
+  .am-gown-panel .gown-grid-selector {
+    max-height: none; overflow: visible;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+}

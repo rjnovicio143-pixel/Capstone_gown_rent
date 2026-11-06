@@ -412,12 +412,12 @@ const AdminMannequin = () => {
               <div className={`canvas-viewport-container ${bgMode}`}>
                 <Suspense fallback={<div className="m3d-loading-text">Loading 3D Scene...</div>}>
                   <Canvas key={category.id} camera={{ position: [0, 0, category.kids ? 3.4 : 4.5], fov: 45 }}>
-                    <ambientLight intensity={0.35} />
-                    <directionalLight position={[6, 9, 6]} intensity={0.8} />
-                    <directionalLight position={[-6, 4, -4]} intensity={0.5} color="#9db4ff" />
+                    <ambientLight intensity={0.6} />
+                    <directionalLight position={[6, 9, 6]} intensity={1.3} />
+                    <directionalLight position={[-6, 4, -4]} intensity={0.6} color="#9db4ff" />
 
                     <Suspense fallback={null}>
-                      <Stage environment="studio" intensity={0.22} adjustCamera={false}>
+                      <Stage environment={null} intensity={0.4} adjustCamera={false}>
                         <Scene
                           bodyPath={bodyModelPath}
                           gownPath={canWear ? selectedGown?.modelPath : null}

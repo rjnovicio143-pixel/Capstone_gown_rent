@@ -1059,3 +1059,7 @@
   font-family: inherit; font-size: 0.78rem; font-weight: 800; transition: all 0.2s ease;
 }
 .m3d-bg-toggle:hover { border-color: var(--m3d-gold); color: var(--m3d-gold-dark); }
+
+/* Take-off (unequip) button */
+.m3d-unequip{display:inline-flex;align-items:center;gap:5px;margin-left:auto;padding:6px 12px;border-radius:999px;border:1px solid rgba(220,38,38,.45);background:rgba(220,38,38,.08);color:#dc2626;font-size:12px;font-weight:600;cursor:pointer}
+.m3d-unequip:hover{background:rgba(220,38,38,.16)}

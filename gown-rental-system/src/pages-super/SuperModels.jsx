@@ -1,12 +1,22 @@
-import { useState, useEffect } from 'react';
-import { Box, Upload, Search, Link2 } from 'lucide-react';
+import { useState, useEffect, Suspense } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, Stage } from '@react-three/drei';
+import { Box, Upload, Search, Link2, Eye, Trash2, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import Header from '../components/Header';
 import '../styles/SuperAdmin.css';
+import { Scene, CATEGORIES, makeBuild, DEFAULT_TWEAK, parseTweak, ModelErrorBoundary } from '../components/MannequinEngine';
 
 const MODEL_BUCKET = 'gown-models';
 const MAX_UPLOAD_MB = 45;               // Supabase free plan allows 50 MB per file
 const PUBLIC_DIR = '/gown/';            // files in your project's public/gown folder
+
+// Turn model_path into a real URL the 3D viewer can load
+const toUrl = (path) => {
+  if (!path) return null;
+  if (path.startsWith('http') || path.startsWith('/')) return path;
+  return supabase.storage.from(MODEL_BUCKET).getPublicUrl(path).data.publicUrl;
+};
 
 // Where does this model live?
 const sourceOf = (path) => {
@@ -25,10 +35,18 @@ const SuperModels = () => {
   const [linkMsg, setLinkMsg] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
 
+  // Preview / adjust window
+  const [pv, setPv] = useState(null);                 // gown being previewed
+  const [pvCat, setPvCat] = useState(CATEGORIES[0]);  // which mannequin
+  const [tweak, setTweak] = useState(DEFAULT_TWEAK);
+  const [pvMsg, setPvMsg] = useState('');
+  const [pvBusy, setPvBusy] = useState(false);
+  const [pvDark, setPvDark] = useState(true);
+
   const fetchGowns = async () => {
     const { data, error } = await supabase
       .from('gowns')
-      .select('id, name, category, image, is_posted, model_path')
+      .select('id, name, category, image, is_posted, model_path, fit_adjust')
       .order('name', { ascending: true });
     if (error) console.error(error);
     else setGowns(data);
@@ -127,6 +145,47 @@ const SuperModels = () => {
     fetchGowns();
   };
 
+  /* ---------- PREVIEW + ADJUST ---------- */
+  const openPreview = (g) => {
+    setPv(g);
+    setTweak(parseTweak(g.fit_adjust));
+    setPvMsg('');
+    const t = `${g.category || ''} ${g.name || ''}`.toLowerCase();
+    setPvCat(CATEGORIES.find(c => c.id === 'Man') && /suit|tux|barong|\bman\b|\bmen\b|groom/.test(t) ? CATEGORIES[1] : CATEGORIES[0]);
+  };
+  const closePreview = () => setPv(null);
+  const setT = (k) => (v) => { setTweak(prev => ({ ...prev, [k]: v })); setPvMsg(''); };
+
+  const savePosition = async () => {
+    setPvBusy(true);
+    const { error } = await supabase.from('gowns').update({ fit_adjust: tweak }).eq('id', pv.id);
+    setPvBusy(false);
+    if (error) { setPvMsg('Saving failed: ' + error.message); return; }
+    setPvMsg('Position saved. Customers will see it.');
+    setGowns(prev => prev.map(g => (g.id === pv.id ? { ...g, fit_adjust: tweak } : g)));
+    setPv(p => ({ ...p, fit_adjust: tweak }));
+  };
+
+  /* ---------- DELETE THE 3D MODEL (the gown itself stays) ---------- */
+  const handleDelete = async (g) => {
+    const where = sourceOf(g.model_path);
+    const note =
+      where === 'Storage' ? 'The file will also be removed from Supabase storage.'
+      : where === 'Public folder' ? 'The file stays in your public/gown folder (delete it from GitHub if you do not need it).'
+      : 'Only the link is removed.';
+    if (!window.confirm(`Remove the 3D model of "${g.name}"?\n\nThe gown stays in Inventory. ${note}`)) return;
+
+    const { error } = await supabase.from('gowns').update({ model_path: null, fit_adjust: null }).eq('id', g.id);
+    if (error) { alert('Could not remove: ' + error.message); return; }
+
+    if (where === 'Storage') {
+      const { error: rmErr } = await supabase.storage.from(MODEL_BUCKET).remove([g.model_path]);
+      if (rmErr) alert('The 3D model was unlinked, but the storage file could not be deleted: ' + rmErr.message);
+    }
+    if (pv?.id === g.id) setPv(null);
+    fetchGowns();
+  };
+
   const filtered = gowns.filter((g) =>
     g.name?.toLowerCase().includes(search.toLowerCase()) ||
     g.category?.toLowerCase().includes(search.toLowerCase())
@@ -178,6 +237,16 @@ const SuperModels = () => {
                   </div>
 
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {g.model_path && (
+                      <>
+                        <button type="button" className="sa-upload-btn" onClick={() => openPreview(g)} title="See it on the mannequin and adjust the position">
+                          <Eye size={14} /> View / Adjust
+                        </button>
+                        <button type="button" className="sa-upload-btn" onClick={() => handleDelete(g)} title="Remove the 3D model" style={{ background: '#dc2626', border: 'none' }}>
+                          <Trash2 size={14} /> Remove 3D
+                        </button>
+                      </>
+                    )}
                     <button
                       type="button"
                       className={`sa-upload-btn ${!g.is_posted ? 'disabled' : ''}`}
@@ -224,6 +293,74 @@ const SuperModels = () => {
           </div>
         </div>
       </div>
+
+      {pv && (
+        <div className="sm-overlay" onClick={closePreview}>
+          <div className="sm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sm-head">
+              <strong>{pv.name}</strong>
+              <button type="button" className="sm-x" onClick={closePreview} aria-label="Close"><X size={18} /></button>
+            </div>
+
+            <div className="sm-body">
+              <div className={`sm-view ${pvDark ? 'dark' : 'light'}`}>
+                <ModelErrorBoundary key={pv.id + pvCat.id}>
+                  <Suspense fallback={<div className="sm-loading">Loading 3D…</div>}>
+                    <Canvas key={pvCat.id} dpr={[1, 2]} camera={{ position: [0, 0.1, pvCat.kids ? 2.7 : 3.5], fov: 45 }}>
+                      <ambientLight intensity={0.6} />
+                      <directionalLight position={[6, 9, 6]} intensity={1.3} />
+                      <directionalLight position={[-6, 4, -4]} intensity={0.6} color="#9db4ff" />
+                      <Suspense fallback={null}>
+                        <Stage environment={null} intensity={0.4} adjustCamera={false}>
+                          <Scene
+                            bodyPath={`/mannequin/${pvCat.file}.glb`}
+                            gownPath={toUrl(pv.model_path)}
+                            showBody
+                            build={makeBuild(0, 0, 0, pvCat.kids)}
+                            looseness={1}
+                            length={1}
+                            scale={[1, 1, 1]}
+                            arms="down"
+                            tweak={tweak}
+                          />
+                        </Stage>
+                      </Suspense>
+                      <OrbitControls enableZoom minDistance={1.2} maxDistance={6} />
+                    </Canvas>
+                  </Suspense>
+                </ModelErrorBoundary>
+              </div>
+
+              <div className="sm-panel">
+                <div className="sm-row">
+                  {CATEGORIES.map((c) => (
+                    <button key={c.id} type="button" className={`sa-upload-btn ${pvCat.id === c.id ? 'sm-on' : ''}`} onClick={() => setPvCat(c)}>{c.id}</button>
+                  ))}
+                  <button type="button" className="sa-upload-btn" onClick={() => setPvDark(d => !d)}>{pvDark ? 'Light bg' : 'Dark bg'}</button>
+                </div>
+
+                <label className="sm-check">
+                  <input type="checkbox" checked={!!tweak.exact} onChange={(e) => { setTweak(prev => ({ ...prev, exact: e.target.checked })); setPvMsg(''); }} />
+                  Exact position (gown placed in Blender)
+                </label>
+
+                {[['Size (whole gown)', 's', 0.7, 1.3], ['Up / down', 'y', -0.3, 0.3], ['Width', 'w', 0.7, 1.4], ['Depth (front to back)', 'd', 0.7, 1.4]].map(([label, k, min, max]) => (
+                  <label key={k} className="sm-slider">
+                    <span>{label} <b>{Number(tweak[k]).toFixed(2)}</b></span>
+                    <input type="range" min={min} max={max} step="0.01" value={tweak[k]} onChange={(e) => setT(k)(parseFloat(e.target.value))} />
+                  </label>
+                ))}
+
+                <div className="sm-row">
+                  <button type="button" className="sa-upload-btn" onClick={savePosition} disabled={pvBusy}>{pvBusy ? 'Saving…' : 'Save position'}</button>
+                  <button type="button" className="sa-upload-btn" onClick={() => { setTweak(DEFAULT_TWEAK); setPvMsg(''); }}>Reset</button>
+                </div>
+                {pvMsg && <p className="sa-msg" style={{ margin: 0 }}>{pvMsg}</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

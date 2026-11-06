@@ -170,6 +170,7 @@ const Mannequin3D = () => {
   // Selection
   const [selectedGown, setSelectedGown] = useState(EXAMPLE_GOWNS[0]);
   const [wornIds, setWornIds] = useState([]); // accessories shown on the mannequin
+  const [wearing, setWearing] = useState(false); // nothing is worn until the customer picks a gown
 
   // Gown filters
   const [search, setSearch] = useState('');
@@ -204,11 +205,6 @@ const Mannequin3D = () => {
       setGowns(mapped);
       setAccessories((aRes.data || []).map(mapAccessory));
 
-      const firstWith3D = mapped.find(g => g.modelPath);
-      if (firstWith3D) {
-        setSelectedGown(firstWith3D);
-        setWornIds(firstWith3D.includedAccessoryIds);
-      }
       setLoadingData(false);
     };
     load();
@@ -298,6 +294,7 @@ const Mannequin3D = () => {
   // Selecting a gown loads its package, switches to the matching avatar, and brings the 3D view into sight on small screens
   const handleSelectGown = (gown) => {
     setSelectedGown(gown);
+    setWearing(true);
     setWornIds(gown.includedAccessoryIds || []);
     setLooseness(1.0);
     setLength(1.0);
@@ -483,9 +480,11 @@ const Mannequin3D = () => {
                     {bgMode === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
                     {bgMode === 'dark' ? 'Light' : 'Dark'}
                   </button>
-                  <span className={`m3d-status ${canWear ? 'ok' : 'no'}`}>
-                    {canWear ? <><Check size={12} /> Fits</> : <><X size={12} /> Can't wear</>}
-                  </span>
+                  {wearing && (
+                    <span className={`m3d-status ${canWear ? 'ok' : 'no'}`}>
+                      {canWear ? <><Check size={12} /> Fits</> : <><X size={12} /> Can't wear</>}
+                    </span>
+                  )}
                   <span className="m3d-tag">{category.id} · {selectedSize}</span>
                 </span>
               </div>
@@ -496,15 +495,15 @@ const Mannequin3D = () => {
                   dpr={[1, 2]}
                   camera={{ position: [0, 0.1, category.kids ? 2.7 : 3.5], fov: 45 }}
                 >
-                  <ambientLight intensity={0.35} />
-                  <directionalLight position={[6, 9, 6]} intensity={0.8} />
-                  <directionalLight position={[-6, 4, -4]} intensity={0.5} color="#9db4ff" />
+                  <ambientLight intensity={0.6} />
+                  <directionalLight position={[6, 9, 6]} intensity={1.3} />
+                  <directionalLight position={[-6, 4, -4]} intensity={0.6} color="#9db4ff" />
 
                   <Suspense fallback={<SceneLoader />}>
-                    <Stage environment="studio" intensity={0.22} shadows="contact" adjustCamera={false}>
+                    <Stage environment={null} intensity={0.4} shadows="contact" adjustCamera={false}>
                       <Scene
                         bodyPath={bodyModelPath}
-                        gownPath={canWear ? selectedGown.modelPath : null}
+                        gownPath={wearing && !loadingData && canWear ? selectedGown.modelPath : null}
                         onMeasured={setBodyRaw}
                         showBody
                         arms={arms}
@@ -525,18 +524,18 @@ const Mannequin3D = () => {
                   <OrbitControls enableZoom minDistance={1.2} maxDistance={6} />
                 </Canvas>
 
-                {!audienceOk && (
+                {wearing && !audienceOk && (
                   <div className="m3d-notice warn">
                     <Info size={14} /> This is for {AUDIENCE_LABEL[audienceOf(selectedGown)]}. Choose the matching avatar to try it on.
                   </div>
                 )}
-                {audienceOk && sizeCheck && !sizeCheck.ok && (
+                {wearing && audienceOk && sizeCheck && !sizeCheck.ok && (
                   <div className="m3d-notice warn">
                     <Info size={14} /> This gown comes in {gownSizes.join(' / ')}. The avatar is about {sizeCheck.now}, so it cannot be worn. Pick a matching size.
                   </div>
                 )}
 
-                {audienceOk && canWear && !selectedGown.modelPath && (
+                {wearing && audienceOk && canWear && !selectedGown.modelPath && (
                   <div className="m3d-notice">
                     <Info size={14} /> The 3D model for this gown is not available yet.
                   </div>
@@ -545,10 +544,23 @@ const Mannequin3D = () => {
 
               <div className="m3d-canvas-foot">
                 <span className="m3d-hint"><Info size={13} /> Drag to rotate · Scroll or pinch to zoom</span>
-                <span className="m3d-current">{selectedGown.name}</span>
+                {wearing ? (
+                  <>
+                    <span className="m3d-current">{selectedGown.name}</span>
+                    <button
+                      type="button"
+                      className="m3d-unequip"
+                      onClick={() => { setWearing(false); setWornIds([]); }}
+                    >
+                      <X size={13} /> Take off
+                    </button>
+                  </>
+                ) : (
+                  <span className="m3d-current">No gown · pick one below</span>
+                )}
               </div>
 
-              {!selectedGown.isExample && (
+              {wearing && !selectedGown.isExample && (
                 <>
                   <div className="m3d-summary">
                     <div className="m3d-summary-text">
@@ -650,7 +662,7 @@ const Mannequin3D = () => {
                   <button
                     type="button"
                     key={gown.id}
-                    className={`m3d-gown-card ${selectedGown.id === gown.id ? 'selected' : ''}`}
+                    className={`m3d-gown-card ${wearing && selectedGown.id === gown.id ? 'selected' : ''}`}
                     onClick={() => handleSelectGown(gown)}
                   >
                     <span className="m3d-thumb">
@@ -702,7 +714,7 @@ const Mannequin3D = () => {
                 Add accessories to your look. Items included with the gown are already in its price.
               </p>
 
-              {!selectedGown.isExample && hasPackage && (
+              {wearing && !selectedGown.isExample && hasPackage && (
                 <div className="m3d-included">
                   <p className="m3d-included-title">Included with this gown</p>
                   <div className="m3d-included-list">

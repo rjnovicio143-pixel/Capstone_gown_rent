@@ -1,17 +1,23 @@
 import { NavLink } from 'react-router-dom';
-import { UserCog, Box, ChevronLeft, LogOut } from 'lucide-react';
+import { UserCog, Box, HardDrive, ChevronLeft, LogOut } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 import '../styles/Sidebar.css';
 
 const menuItems = [
-  { name: 'Accounts',  icon: UserCog, path: '/super/accounts' },
-  { name: '3D Models', icon: Box,     path: '/super/models'   },
+  { name: 'Accounts',  icon: UserCog,   path: '/super/accounts' },
+  { name: '3D Models', icon: Box,       path: '/super/models'   },
+  { name: 'Storage',   icon: HardDrive, path: '/super/storage'  },
 ];
 
 const SuperSidebar = ({ isCollapsed, setIsCollapsed }) => {
 
-  const handleLogout = () => {
+  // I-sign out sab ang Google session sa Supabase, kay kung dili, ang Login page
+  // mo-login dayon pag-usab gamit ang daan nga session.
+  const handleLogout = async () => {
+    try { await supabase.auth.signOut(); } catch (_) { /* ignore */ }
     localStorage.removeItem('userToken');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('admin');
     window.location.href = '/login';
   };
 

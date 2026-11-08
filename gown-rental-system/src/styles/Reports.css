@@ -66,7 +66,7 @@
   transform: translateY(-5px);
 }
 
-/* Updated Gold Border with Gradient Effect */
+/* Gold border with gradient effect */
 .gold-border-active {
   border-left: 5px solid;
   border-image: linear-gradient(to bottom, #ffd000, #f09800) 1 100%;
@@ -81,9 +81,9 @@
   justify-content: center;
 }
 
-/* Updated Gradients */
+/* Gradients */
 .orange-bg { background: linear-gradient(135deg, #ff8c00, #ffae00); }
-.gold-bg { background: linear-gradient(135deg, #ffd000, #f09800); } /* Golden Gradient */
+.gold-bg { background: linear-gradient(135deg, #ffd000, #f09800); }
 .red-bg { background: linear-gradient(135deg, #ff4b2b, #ff416c); }
 .blue-bg { background: linear-gradient(135deg, #2193b0, #6dd5ed); }
 .gray-bg { background: linear-gradient(135deg, #757f9a, #d7dde8); }
@@ -113,12 +113,15 @@
   padding: 25px;
   border-radius: 15px;
   box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+  min-width: 0; /* lets charts and tables shrink inside the grid */
 }
 
 .report-visual-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 25px;
 }
 
@@ -134,7 +137,7 @@
   color: #444;
 }
 
-/* Updated Filters with Gold Gradient */
+/* Filters with gold gradient */
 .rep-filter-btn {
   padding: 6px 12px;
   margin-left: 5px;
@@ -174,15 +177,18 @@
   padding: 8px 12px 8px 35px;
   border-radius: 20px;
   border: 1px solid #eee;
+  background: #fff;
   font-size: 13px;
   width: 250px;
   transition: 0.3s;
 }
 
+/* Focus only highlights the border. The old rule filled the box with the orange gradient. */
 .rep-search-wrapper input:focus {
   outline: none;
-  background: linear-gradient(135deg, #ffd000, #f09800);
-  box-shadow: 0 0 5px rgba(212, 175, 55, 0.2);
+  background: #fff;
+  border-color: #f09800;
+  box-shadow: 0 0 5px rgba(212, 175, 55, 0.25);
 }
 
 .rep-table-container {
@@ -201,6 +207,7 @@
   font-size: 12px;
   text-transform: uppercase;
   border-bottom: 1px solid #f0f0f0;
+  white-space: nowrap;
 }
 
 .rep-main-table td {
@@ -212,7 +219,7 @@
 .customer-name { font-weight: 600; color: #333; }
 .total-cell { font-weight: 700; color: #333; }
 
-/* Updated Text Colors with Gradient-ish Gold */
+/* Text colors */
 .color-gold { color: #f7b100; font-weight: 600; }
 .color-red { color: #ff416c; font-weight: 600; }
 .color-orange { color: #ff8c00; font-weight: 600; }
@@ -239,13 +246,15 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .dot-gold { background: linear-gradient(135deg, #d4af37, #ffb700); }
 .dot-red { background: linear-gradient(135deg, #ff4b2b, #ff416c); }
 .dot-blue { background: linear-gradient(135deg, #2193b0, #6dd5ed); }
+.dot-purple { background: linear-gradient(135deg, #9333ea, #c084fc); }
 
-/* --- Summary Lists (Active Reservations / Penalty Summary / Out of Stock) --- */
+/* --- Summary Lists (Active Renters / Penalty Summary / Out of Stock) --- */
 .reports-summary-layout {
   grid-template-columns: 1fr 1fr;
 }
@@ -263,6 +272,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   background: #fafafa;
   border-radius: 10px;
   padding: 10px 14px;
@@ -273,10 +283,11 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 .rep-summary-right { align-items: flex-end; }
 
-.rep-summary-name { font-size: 13px; font-weight: 700; color: #333; }
+.rep-summary-name { font-size: 13px; font-weight: 700; color: #333; word-break: break-word; }
 .rep-summary-sub { font-size: 11px; color: #999; }
 .rep-summary-amount { font-size: 13px; font-weight: 700; color: #333; }
 
@@ -295,6 +306,7 @@
   padding: 4px 10px;
   border-radius: 20px;
   letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 .badge-reserved { background: #fff4e0; color: #f09800; }
 .badge-claimed { background: #e6f7ff; color: #1890ff; }
@@ -307,4 +319,9 @@
   .reports-summary-layout {
     grid-template-columns: 1fr;
   }
+}
+
+@media (max-width: 600px) {
+  .rep-search-wrapper { width: 100%; }
+  .rep-search-wrapper input { width: 100%; box-sizing: border-box; }
 }

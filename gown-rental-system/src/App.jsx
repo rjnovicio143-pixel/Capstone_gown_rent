@@ -16,6 +16,7 @@ import AdminMannequin from './pages-admin/AdminMannequin';
 // Super admin pages
 import SuperAccounts from './pages-super/SuperAccounts';
 import SuperModels from './pages-super/SuperModels';
+import SuperStorage from './pages-super/Superstorage';
 
 // Public pages
 import Home from './pages-public/Home';
@@ -179,6 +180,7 @@ function App() {
                     <Route path="/" element={<Navigate to="accounts" replace />} />
                     <Route path="accounts" element={<SuperAccounts />} />
                     <Route path="models" element={<SuperModels />} />
+                    <Route path="storage" element={<SuperStorage />} />
                     <Route path="*" element={<Navigate to="accounts" replace />} />
                   </Routes>
                 </main>

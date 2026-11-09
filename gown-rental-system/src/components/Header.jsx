@@ -2,40 +2,42 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Bell, Settings as SettingsIcon, History,
-  AlertTriangle, Clock4, ChevronDown, ShieldCheck,
+  AlertTriangle, Clock4, ChevronDown, ShieldCheck, CalendarPlus, CheckCheck, X,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { useNotifications, timeAgo } from '../hooks/useNotifications';
 import '../styles/Header.css';
+
+const PREVIEW_COUNT = 5;   // how many show before "See all"
 
 const Header = () => {
   const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
   const [adminName, setAdminName] = useState('Loading...');
   const [adminEmail, setAdminEmail] = useState('');
+  const role = localStorage.getItem('userRole');
+  const roleLabel = role === 'super_admin' ? 'Super Admin' : 'Admin';
 
-  const [notifications, setNotifications] = useState([]);
+  const { notifications, readIds, unreadCount, markRead, markAllRead, dismiss } = useNotifications();
+  const [tab, setTab] = useState('all');   // all | unread
+  const [seeAll, setSeeAll] = useState(false);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const notifPanelRef = useRef(null);
   const profileMenuRef = useRef(null);
 
-  // 1. Digital clock
+  // 1. Digital clock (also refreshes the "5m ago" labels)
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // 2. Kuhaon ang naka-login nga admin (userToken = admins.id)
+  // 2. Logged-in account (userToken = admins.id) - works for admin and super admin
   useEffect(() => {
     const loadAdmin = async () => {
       try {
         const userToken = localStorage.getItem('userToken');
-        const userRole = localStorage.getItem('userRole');
-
-        if (userRole !== 'admin' || !userToken) {
-          setAdminName('Admin Account');
-          return;
-        }
+        if (!userToken) { setAdminName('Admin Account'); return; }
 
         const { data, error } = await supabase
           .from('admins')
@@ -57,71 +59,29 @@ const Header = () => {
     loadAdmin();
   }, []);
 
-  // 3. Notifications: due tomorrow + overdue nga "claimed" bookings
-  const buildNotifications = (bookings) => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const filtered = tab === 'unread' ? notifications.filter((n) => !readIds.has(n.id)) : notifications;
+  const visible = seeAll ? filtered : filtered.slice(0, PREVIEW_COUNT);
 
-    const notifs = [];
-
-    bookings.forEach((b) => {
-      if (b.return_status !== 'claimed' || !b.return_date) return;
-
-      const returnDate = new Date(b.return_date); returnDate.setHours(0, 0, 0, 0);
-
-      if (returnDate.getTime() === tomorrow.getTime()) {
-        notifs.push({
-          id: `due-${b.id}`,
-          type: 'due',
-          message: `Ugma na ang return date ni ${b.name} para sa "${b.gown_name}".`,
-        });
-      } else if (returnDate.getTime() < today.getTime()) {
-        const daysLate = Math.floor((today.getTime() - returnDate.getTime()) / 86400000);
-        notifs.push({
-          id: `overdue-${b.id}`,
-          type: 'overdue',
-          message: `Overdue na ${daysLate} ka adlaw ang booking ni ${b.name} para sa "${b.gown_name}" — wala pa gyapon nag-uli.`,
-        });
-      }
-    });
-
-    return notifs.sort((a, b) => (a.type === b.type ? 0 : a.type === 'overdue' ? -1 : 1));
+  const openNotif = (n) => {
+    markRead(n.id);
+    setShowNotifPanel(false);
+    navigate('/admin/customers');
   };
 
-  const fetchNotifications = async () => {
-    const { data, error } = await supabase
-      .from('bookings')
-      .select('id, name, gown_name, return_date, return_status')
-      .eq('return_status', 'claimed');
-
-    if (error) {
-      console.error('Error fetching notifications:', error);
-      return;
-    }
-    setNotifications(buildNotifications(data));
+  // Admin: "See all" opens the Notifications page. Super admin has no such page, so it expands in place.
+  const handleSeeAll = () => {
+    if (role === 'admin') { setShowNotifPanel(false); navigate('/admin/notifications'); }
+    else setSeeAll(!seeAll);
   };
 
-  useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Close dropdowns kung mag-click sa gawas o mag-Escape
+  // Close dropdowns on outside click / Escape
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target)) {
-        setShowNotifPanel(false);
-      }
-      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
-        setShowProfileMenu(false);
-      }
+      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target)) setShowNotifPanel(false);
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) setShowProfileMenu(false);
     };
     const handleEscape = (e) => {
-      if (e.key === 'Escape') {
-        setShowNotifPanel(false);
-        setShowProfileMenu(false);
-      }
+      if (e.key === 'Escape') { setShowNotifPanel(false); setShowProfileMenu(false); }
     };
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleEscape);
@@ -138,16 +98,13 @@ const Header = () => {
 
   const handleLogoutClick = async () => {
     setShowProfileMenu(false);
-    const confirmLogout = window.confirm('Sigurado ka nga gusto ka mo-logout?');
-    if (!confirmLogout) return;
+    if (!window.confirm('Are you sure you want to log out?')) return;
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        await supabase.auth.signOut(); // Google OAuth session
-      }
+      if (session) await supabase.auth.signOut(); // Google OAuth session
     } catch (error) {
-      console.error('Error sa pag-logout:', error);
+      console.error('Logout error:', error);
     }
 
     localStorage.clear();
@@ -156,11 +113,16 @@ const Header = () => {
   };
 
   const initial = (adminName || 'A').trim().charAt(0).toUpperCase();
+  const iconFor = (type) => {
+    if (type === 'online') return <CalendarPlus size={16} />;
+    if (type === 'overdue') return <AlertTriangle size={16} />;
+    return <Clock4 size={16} />;
+  };
 
   return (
-    <header className="app-header-modern">
+    <header className="app-header-modern" data-tick={time.getMinutes()}>
       <div className="header-left-section">
-        {/* Breadcrumb o Page Title puhon */}
+        {/* Breadcrumb / page title later */}
       </div>
 
       <div className="header-right-section">
@@ -174,16 +136,13 @@ const Header = () => {
         <div className="notif-wrapper" ref={notifPanelRef}>
           <button
             className={`control-btn notif-trigger ${showNotifPanel ? 'active' : ''}`}
-            onClick={() => {
-              setShowNotifPanel(!showNotifPanel);
-              setShowProfileMenu(false);
-            }}
+            onClick={() => { setShowNotifPanel(!showNotifPanel); setShowProfileMenu(false); setSeeAll(false); }}
             title="Notifications"
-            aria-label="Notifications"
+            aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
           >
             <Bell size={18} />
-            {notifications.length > 0 && (
-              <span className="notif-count-badge">{notifications.length}</span>
+            {unreadCount > 0 && (
+              <span className="notif-count-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
             )}
           </button>
 
@@ -191,22 +150,58 @@ const Header = () => {
             <div className="notif-dropdown-panel">
               <div className="notif-panel-header">
                 <span>Notifications</span>
-                <span className="notif-panel-count">{notifications.length}</span>
+                <button
+                  type="button"
+                  className="notif-markall"
+                  onClick={markAllRead}
+                  disabled={unreadCount === 0}
+                >
+                  <CheckCheck size={14} /> Mark all as read
+                </button>
               </div>
+
+              <div className="notif-tabs">
+                <button type="button" className={tab === 'all' ? 'active' : ''} onClick={() => setTab('all')}>
+                  All
+                </button>
+                <button type="button" className={tab === 'unread' ? 'active' : ''} onClick={() => setTab('unread')}>
+                  Unread{unreadCount > 0 && <span className="notif-tab-count">{unreadCount}</span>}
+                </button>
+              </div>
+
               <div className="notif-panel-list">
-                {notifications.length > 0 ? (
-                  notifications.map((n) => (
-                    <div key={n.id} className={`notif-item ${n.type}`}>
-                      <div className="notif-item-icon">
-                        {n.type === 'overdue' ? <AlertTriangle size={16} /> : <Clock4 size={16} />}
+                {visible.length > 0 ? (
+                  visible.map((n) => {
+                    const unread = !readIds.has(n.id);
+                    return (
+                      <div key={n.id} className={`notif-item ${n.type} ${unread ? 'unread' : ''}`}>
+                        <button type="button" className="notif-item-main" onClick={() => openNotif(n)}>
+                          <div className="notif-item-icon">{iconFor(n.type)}</div>
+                          <div className="notif-item-body">
+                            <span className="notif-item-title">{n.title}</span>
+                            <p>{n.message}</p>
+                            <span className="notif-item-time">{timeAgo(n.at)}</span>
+                          </div>
+                          {unread && <span className="notif-unread-dot" aria-label="Unread" />}
+                        </button>
+                        <button type="button" className="notif-item-del" onClick={() => dismiss(n.id)} title="Delete" aria-label="Delete notification">
+                          <X size={14} />
+                        </button>
                       </div>
-                      <p>{n.message}</p>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
-                  <p className="notif-empty-text">Walay bag-ong notification.</p>
+                  <p className="notif-empty-text">
+                    {tab === 'unread' ? "You're all caught up." : 'No notifications yet.'}
+                  </p>
                 )}
               </div>
+
+              {(role === 'admin' ? filtered.length > 0 : filtered.length > PREVIEW_COUNT) && (
+                <button type="button" className="notif-seeall" onClick={handleSeeAll}>
+                  {role !== 'admin' && seeAll ? 'See less' : `See all (${filtered.length})`}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -215,17 +210,14 @@ const Header = () => {
         <div className="profile-wrapper" ref={profileMenuRef}>
           <button
             className={`profile-trigger ${showProfileMenu ? 'open' : ''}`}
-            onClick={() => {
-              setShowProfileMenu(!showProfileMenu);
-              setShowNotifPanel(false);
-            }}
+            onClick={() => { setShowProfileMenu(!showProfileMenu); setShowNotifPanel(false); }}
             aria-haspopup="menu"
             aria-expanded={showProfileMenu}
           >
             <span className="profile-avatar">{initial}</span>
             <span className="profile-meta">
               <span className="profile-name">{adminName}</span>
-              <span className="profile-role">Super Admin</span>
+              <span className="profile-role">{roleLabel}</span>
             </span>
             <ChevronDown size={16} className="profile-chevron" />
           </button>
@@ -238,7 +230,7 @@ const Header = () => {
                   <span className="profile-card-name">{adminName}</span>
                   {adminEmail && <span className="profile-card-email">{adminEmail}</span>}
                   <span className="profile-card-badge">
-                    <ShieldCheck size={12} /> Admin
+                    <ShieldCheck size={12} /> {roleLabel}
                   </span>
                 </div>
               </div>
@@ -270,4 +262,4 @@ const Header = () => {
   );
 };
 
-export default Header;  
+export default Header;

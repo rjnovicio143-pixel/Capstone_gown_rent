@@ -12,6 +12,7 @@ import Reports from './pages-admin/Reports';
 import Settings from './pages-admin/Settings';
 import ActivityLog from './pages-admin/ActivityLog';
 import AdminMannequin from './pages-admin/AdminMannequin';
+import AdminStorage from './pages-admin/Adminstorage';
 
 // Super admin pages
 import SuperAccounts from './pages-super/SuperAccounts';
@@ -154,6 +155,7 @@ function App() {
                     <Route path="reports" element={<Reports isCollapsed={isCollapsed} />} />
                     <Route path="settings" element={<Settings isCollapsed={isCollapsed} />} />
                     <Route path="mannequin" element={<AdminMannequin isCollapsed={isCollapsed} />} />
+                    <Route path="storage" element={<AdminStorage />} />
                     <Route path="activity-log" element={<ActivityLog isCollapsed={isCollapsed} />} />
                     <Route path="*" element={<Navigate to="dashboard" replace />} />
                   </Routes>

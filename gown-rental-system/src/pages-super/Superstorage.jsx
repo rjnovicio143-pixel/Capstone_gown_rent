@@ -23,6 +23,15 @@ const fmtSize = (b) => {
 
 const MARK = '/storage/v1/object/public/';
 
+// Decode a name until no %XX is left ("Gown%2520images" / "Gown%20images" -> "Gown images")
+const decodeAll = (v) => {
+  let out = v;
+  for (let i = 0; i < 3 && /%[0-9A-Fa-f]{2}/.test(out); i++) {
+    try { out = decodeURIComponent(out); } catch { break; }
+  }
+  return out;
+};
+
 // Find every storage file referenced by a database value
 const collectRefs = (value, key, out) => {
   if (value == null) return;
@@ -32,9 +41,9 @@ const collectRefs = (value, key, out) => {
       const rest = value.slice(i + MARK.length).split('?')[0];
       const slash = rest.indexOf('/');
       if (slash > 0) {
-        let path = rest.slice(slash + 1);
-        try { path = decodeURIComponent(path); } catch { /* keep the original */ }
-        out.add(`${rest.slice(0, slash)}/${path}`);
+        const path = decodeAll(rest.slice(slash + 1));
+        const b = decodeAll(rest.slice(0, slash));   // "Gown%20images" -> "Gown images"
+        out.add(`${b}/${path}`);
       }
     } else if (key === 'model_path' && !value.startsWith('http') && !value.startsWith('/')) {
       out.add(`${MODEL_BUCKET}/${value}`);   // just a file name, stored in gown-models
@@ -61,7 +70,13 @@ const listAll = async (bucket, prefix = '') => {
   return out;
 };
 
-const SuperStorage = () => {
+// Project's storage base URL, taken from the Supabase client (no env variable needed)
+const baseUrl = (() => {
+  const u = supabase.storage.from('x').getPublicUrl('x').data.publicUrl;
+  return u.slice(0, u.indexOf(MARK));
+})();
+
+const SuperStorage = ({ imagesOnly = false }) => {
   const [buckets, setBuckets] = useState([MODEL_BUCKET]);
   const [bucket, setBucket] = useState(MODEL_BUCKET);
   const [files, setFiles] = useState([]);
@@ -91,10 +106,12 @@ const SuperStorage = () => {
     usedSet.forEach((k) => found.add(k.split('/')[0]));
     try {
       const { data } = await supabase.storage.listBuckets();
-      (data || []).forEach((b) => found.add(b.name));
+      (data || []).forEach((b) => found.add(decodeAll(b.name)));
     } catch { /* may not be allowed, that is fine */ }
-    setBuckets([...found]);
-  }, []);
+    const list = [...found].filter((b) => !imagesOnly || b !== MODEL_BUCKET);
+    setBuckets(list);
+    setBucket((cur) => (list.includes(cur) ? cur : list[0] || cur));
+  }, [imagesOnly]);
 
   /* ---------- LIST THE FILES IN THE BUCKET ---------- */
   const loadFiles = useCallback(async (b) => {
@@ -102,13 +119,13 @@ const SuperStorage = () => {
     setSelected(new Set());
     try {
       const list = await listAll(b);
-      setFiles(list.filter((f) => f.name !== '.emptyFolderPlaceholder'));
+      setFiles(list.filter((f) => f.name !== '.emptyFolderPlaceholder' && (!imagesOnly || kindOf(f.name) === 'image')));
     } catch (err) {
       setFiles([]);
       setMsg('Could not list the files: ' + err.message + '. A select policy on storage.objects is needed (see the SQL).');
     }
     setLoadingFiles(false);
-  }, []);
+  }, [imagesOnly]);
 
   useEffect(() => { scan(); }, [scan]);
   useEffect(() => { setMsg(''); loadFiles(bucket); }, [bucket, loadFiles]);
@@ -120,7 +137,8 @@ const SuperStorage = () => {
     ...f,
     inUse: used.has(`${bucket}/${f.path}`),
     kind: kindOf(f.name),
-    url: supabase.storage.from(bucket).getPublicUrl(f.path).data.publicUrl,
+    // build the URL ourselves so a bucket name with spaces is encoded exactly once
+    url: `${baseUrl}${MARK}${encodeURIComponent(bucket)}/${f.path.split('/').map(encodeURIComponent).join('/')}`,
   })), [files, used, bucket]);
 
   const totalSize = rows.reduce((s, r) => s + r.size, 0);

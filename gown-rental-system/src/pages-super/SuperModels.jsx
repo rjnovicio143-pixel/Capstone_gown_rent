@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stage } from '@react-three/drei';
 import { Box, Upload, Search, Link2, Eye, Trash2, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
-import Header from '../components/Header';
+import SuperHeader from '../components/SuperHeader';
 import '../styles/SuperAdmin.css';
 import { Scene, CATEGORIES, makeBuild, DEFAULT_TWEAK, parseTweak, ModelErrorBoundary } from '../components/MannequinEngine';
 
@@ -193,7 +193,7 @@ const SuperModels = () => {
 
   return (
     <>
-      <Header />
+      <SuperHeader />
       <div className="sa-page">
         <div className="sa-hero">
           <h1><Box size={22} /> 3D Models</h1>

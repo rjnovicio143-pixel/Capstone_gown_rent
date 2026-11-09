@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { UserCog, Plus, Pencil, Trash2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
-import Header from '../components/Header';
+import SuperHeader from '../components/SuperHeader';
 import '../styles/SuperAdmin.css';
 
 // Who is logged in right now (saved by Login.jsx)
@@ -153,7 +153,7 @@ const SuperAccounts = () => {
 
   return (
     <>
-      <Header />
+      <SuperHeader />
       <div className="sa-page">
         <div className="sa-hero">
           <h1><UserCog size={22} /> Admin Accounts</h1>

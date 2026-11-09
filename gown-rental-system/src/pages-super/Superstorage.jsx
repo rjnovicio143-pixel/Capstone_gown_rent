@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { HardDrive, Trash2, RefreshCw, Search, Box, Image as ImageIcon, FileText, Eye, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import Header from '../components/Header';
+import SuperHeader from '../components/SuperHeader';
 import '../styles/SuperAdmin.css';
 
 const MODEL_BUCKET = 'gown-models';
@@ -197,7 +198,7 @@ const SuperStorage = ({ imagesOnly = false }) => {
 
   return (
     <>
-      <Header />
+      {imagesOnly ? <Header /> : <SuperHeader />}
       <div className="sa-page">
         <div className="sa-hero">
           <h1><HardDrive size={22} /> Storage</h1>

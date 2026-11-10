@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Mail, Phone, MapPin, Send, Clock, MessageCircle,
-  Navigation, ChevronDown, CheckCircle, Sparkles, AlertCircle
+  Mail, Phone, MapPin, Clock, MessageCircle,
+  Navigation, ChevronDown, Sparkles
 } from 'lucide-react';
-import { supabase } from '../supabaseClient';
 import '../styles-public/ContactUs.css';
 
 /* ---------- SHOP DETAILS ----------
@@ -33,8 +32,6 @@ const MAPS_URL = SHOP.mapsLink;                                                 
 const DIRECTIONS_URL = `https://www.google.com/maps/dir/?api=1&destination=${SHOP.lat},${SHOP.lng}`; // route from the visitor
 const EMBED_URL = `https://www.google.com/maps?q=${SHOP.lat},${SHOP.lng}&z=17&output=embed`;         // map preview
 
-const SUBJECTS = ['Rental inquiry', 'Sizing and fitting', 'Pricing', 'Reservation follow-up', 'Other'];
-
 const FAQS = [
   {
     q: 'How do I reserve a gown?',
@@ -42,7 +39,7 @@ const FAQS = [
   },
   {
     q: 'Do I need to pay to reserve online?',
-    a: 'No. Online reservations are a free hold. Your online hold is kept for 24 hours while our team confirms it. Payment is settled with our staff.',
+    a: 'No. Online reservations are a free hold. Your online hold is kept for 2 days while our team confirms it. Payment is settled with our staff.',
   },
   {
     q: 'Can I try the gown before renting?',
@@ -54,15 +51,9 @@ const FAQS = [
   },
 ];
 
-const MAX_MESSAGE = 500;
-
-const emptyForm = { name: '', phone: '', email: '', subject: SUBJECTS[0], message: '' };
-
 const Contact = () => {
   const navigate = useNavigate();
 
-  const [form, setForm] = useState(emptyForm);
-  const [status, setStatus] = useState('idle'); // 'idle' | 'sending' | 'sent' | 'error'
   const [openFaq, setOpenFaq] = useState(0);
 
   // Open now / Closed badge, based on the visitor's clock
@@ -94,35 +85,6 @@ const Contact = () => {
     return () => io.disconnect();
   }, []);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
-    if (status === 'error') setStatus('idle');
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (status === 'sending') return;
-
-    setStatus('sending');
-    const { error } = await supabase.from('contact_messages').insert([{
-      name: form.name.trim(),
-      phone: form.phone.trim(),
-      email: form.email.trim() || null,
-      subject: form.subject,
-      message: form.message.trim(),
-    }]);
-
-    if (error) {
-      console.error('Contact message error:', error);
-      setStatus('error');
-      return;
-    }
-
-    setStatus('sent');
-    setForm(emptyForm);
-  };
-
   const quickActions = [
     { icon: Phone,         label: 'Call us',    value: SHOP.phoneDisplay, href: `tel:${SHOP.phoneLink}` },
     { icon: MessageCircle, label: 'Message us', value: 'Facebook page',   href: SHOP.facebook,         external: true },
@@ -139,7 +101,7 @@ const Contact = () => {
           <span className="ct-badge"><Sparkles size={14} /> Get In Touch</span>
           <h1>Contact <span>Us</span></h1>
           <p>
-            Questions about bookings, sizes, or rental rates? Send us a message and we will reply as soon as we can.
+            Questions about bookings, sizes, or rental rates? Message us on our social media, call us, or visit the shop.
           </p>
         </div>
       </section>
@@ -165,117 +127,8 @@ const Contact = () => {
       {/* ── FORM + INFO ── */}
       <section className="ct-wrap ct-main">
 
-        {/* Form */}
-        <div className="ct-card ct-form-card" data-reveal>
-          {status === 'sent' ? (
-            <div className="ct-sent">
-              <span className="ct-sent-icon"><CheckCircle size={44} /></span>
-              <h2>Message sent!</h2>
-              <p>Thank you for reaching out. Our team will get back to you soon using the contact details you gave.</p>
-              <button className="ct-btn ct-btn-gold" onClick={() => setStatus('idle')}>
-                Send another message
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="ct-card-head">
-                <h2>Send Us a Message</h2>
-                <p>Fill in the form and we will reply shortly.</p>
-              </div>
-
-              <form className="ct-form" onSubmit={handleSubmit}>
-                <div className="ct-row">
-                  <div className="ct-field">
-                    <label htmlFor="ct-name">Full name</label>
-                    <input
-                      id="ct-name"
-                      name="name"
-                      type="text"
-                      value={form.name}
-                      onChange={handleChange}
-                      placeholder="e.g. Maria Santos"
-                      autoComplete="name"
-                      required
-                    />
-                  </div>
-                  <div className="ct-field">
-                    <label htmlFor="ct-phone">Phone number</label>
-                    <input
-                      id="ct-phone"
-                      name="phone"
-                      type="tel"
-                      value={form.phone}
-                      onChange={handleChange}
-                      placeholder="09XXXXXXXXX"
-                      autoComplete="tel"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="ct-row">
-                  <div className="ct-field">
-                    <label htmlFor="ct-email">Email <span className="ct-optional">(optional)</span></label>
-                    <input
-                      id="ct-email"
-                      name="email"
-                      type="email"
-                      value={form.email}
-                      onChange={handleChange}
-                      placeholder="you@example.com"
-                      autoComplete="email"
-                    />
-                  </div>
-                  <div className="ct-field">
-                    <label htmlFor="ct-subject">Subject</label>
-                    <div className="ct-select">
-                      <select id="ct-subject" name="subject" value={form.subject} onChange={handleChange}>
-                        {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                      <ChevronDown size={15} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="ct-field">
-                  <label htmlFor="ct-message">Message</label>
-                  <textarea
-                    id="ct-message"
-                    name="message"
-                    rows="5"
-                    maxLength={MAX_MESSAGE}
-                    value={form.message}
-                    onChange={handleChange}
-                    placeholder="Tell us about your event, preferred gown, or any question..."
-                    required
-                  />
-                  <span className="ct-count">{form.message.length}/{MAX_MESSAGE}</span>
-                </div>
-
-                {status === 'error' && (
-                  <div className="ct-error" role="alert">
-                    <AlertCircle size={16} />
-                    Something went wrong while sending. Please try again, or call us instead.
-                  </div>
-                )}
-
-                <button type="submit" className="ct-btn ct-btn-gold ct-submit" disabled={status === 'sending'}>
-                  {status === 'sending'
-                    ? <><span className="ct-spin" /> Sending...</>
-                    : <><Send size={16} /> Send Message</>}
-                </button>
-              </form>
-            </>
-          )}
-        </div>
-
         {/* Info */}
-        <aside className="ct-card ct-info-card" data-reveal style={{ '--d': '100ms' }}>
-          <div className="ct-card-head">
-            <h2>Visit Our Shop</h2>
-            <p>Browse and fit our collection in person.</p>
-          </div>
-
+        <aside className="ct-card ct-info-card" data-reveal>
           {/* Map preview */}
           <div className="ct-map">
             <iframe
@@ -285,6 +138,12 @@ const Contact = () => {
               referrerPolicy="no-referrer-when-downgrade"
               allowFullScreen
             />
+          </div>
+
+          <div className="ct-info-details">
+          <div className="ct-card-head">
+            <h2>Visit Our Shop</h2>
+            <p>Browse and fit our collection in person.</p>
           </div>
 
           <div className="ct-info-item">
@@ -320,6 +179,7 @@ const Contact = () => {
             <a className="ct-btn ct-btn-ghost" href={MAPS_URL} target="_blank" rel="noreferrer">
               <MapPin size={16} /> View on Google Maps
             </a>
+          </div>
           </div>
         </aside>
       </section>

@@ -534,3 +534,20 @@
 @media (max-width: 600px) {
   .ct-map { height: 190px; }
 }
+
+/* ---- Visit card: map on the left, details on the right (the message form was removed) ---- */
+.ct-main { grid-template-columns: minmax(0, 1fr); }
+.ct-info-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 28px;
+  align-items: stretch;
+}
+.ct-info-card .ct-map { height: 100%; min-height: 320px; margin-bottom: 0; }
+.ct-info-details { display: flex; flex-direction: column; min-width: 0; }
+.ct-info-details .ct-info-item:first-of-type { border-top: 1px solid #f1f5f9; }
+
+@media (max-width: 960px) {
+  .ct-info-card { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .ct-info-card .ct-map { height: 220px; min-height: 0; }
+}

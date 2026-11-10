@@ -3,9 +3,15 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import {
   ArrowLeft, Send, User, Phone, Mail,
-  MessageSquare, CheckCircle, Clock, Layers, Crown
+  MessageSquare, CheckCircle, Clock, Layers, Crown, AlertCircle
 } from 'lucide-react';
 import '../styles-public/ReservationForm.css';
+
+const HOLD_DAYS = 2;                         // how long a pencil booking is kept
+const COOLDOWN_MS = 60 * 1000;               // wait time between two reservations from this browser
+const COOLDOWN_KEY = 'mrs_g_last_reservation';
+const MAX_MESSAGE = 500;
+const SHOW_DEBUG = true;                      // TEMPORARY: shows the technical error under the message. Set to false when everything works.
 
 const ReservationForm = () => {
   const location = useLocation();
@@ -18,10 +24,12 @@ const ReservationForm = () => {
     gmail: '',
     altContact: '',
     customerMessage: '',
+    website: '',          // honeypot (named hp_company_ref on the page so browsers do not autofill it)
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted]       = useState(false);
+  const [errorMsg, setErrorMsg]         = useState('');
 
   // Package included with the gown (petticoat + accessories)
   const [pkg, setPkg]               = useState({ petticoat: null, accessories: [] });
@@ -74,25 +82,52 @@ const ReservationForm = () => {
     );
   }
 
-  const handleChange = (field) => (e) =>
+  const handleChange = (field) => (e) => {
     setFormData(prev => ({ ...prev, [field]: e.target.value }));
+    if (errorMsg) setErrorMsg('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (pkgLoading || pkgError) return;
+    if (pkgLoading || pkgError || isSubmitting) return;
+    setErrorMsg('');
+
+    // Honeypot: a real person never sees this field. Pretend it worked so bots learn nothing.
+    if (formData.website) { setSubmitted(true); return; }
+
+    // Clean up the values
+    const name    = formData.name.trim();
+    const contact = formData.contact.replace(/[\s-]/g, '');
+    const alt     = formData.altContact.replace(/[\s-]/g, '');
+    const gmail   = formData.gmail.trim().toLowerCase();
+
+    if (name.length < 2) { setErrorMsg('Please enter your full name.'); return; }
+    if (!/^(09|\+639)\d{9}$/.test(contact)) { setErrorMsg('Please enter a valid mobile number, for example 09123456789.'); return; }
+    if (alt && !/^(09|\+639)\d{9}$/.test(alt)) { setErrorMsg('The alternative contact must also be a valid mobile number.'); return; }
+
+    // Cooldown on this browser (the database has its own check too)
+    try {
+      const last = Number(localStorage.getItem(COOLDOWN_KEY) || 0);
+      const wait = COOLDOWN_MS - (Date.now() - last);
+      if (wait > 0) {
+        setErrorMsg(`Please wait ${Math.ceil(wait / 1000)} seconds before sending another reservation.`);
+        return;
+      }
+    } catch { /* localStorage may be blocked; the database check still applies */ }
+
     setIsSubmitting(true);
 
     try {
       const now        = new Date();
-      const expiryDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const expiryDate = new Date(now.getTime() + HOLD_DAYS * 24 * 60 * 60 * 1000);
       const gownPrice  = Number(gown.price);
 
       const { error } = await supabase.from('bookings').insert([{
-        name:               formData.name,
-        contact:            formData.contact,
-        gmail:              formData.gmail,
-        facebook:           formData.altContact,   // reusing altContact as secondary
-        customer_message:   formData.customerMessage,
+        name:               name,
+        contact:            contact,
+        gmail:              gmail,
+        facebook:           alt,                   // reusing altContact as secondary
+        customer_message:   formData.customerMessage.trim(),
         gown_id:            gown.id,
         gown_name:          gown.name,
         rental_price:       gownPrice,
@@ -128,10 +163,17 @@ const ReservationForm = () => {
 
       if (error) throw error;
 
+      try { localStorage.setItem(COOLDOWN_KEY, String(Date.now())); } catch { /* ignore */ }
       setSubmitted(true);
     } catch (error) {
       console.error(error);
-      alert('Something went wrong while submitting. Please try again.');
+      // Messages raised by the database checks (code P0001) are written for customers, so show them as they are
+      setErrorMsg(
+        error?.code === 'P0001' && error.message
+          ? error.message
+          : 'Something went wrong while submitting. Please try again.'
+            + (SHOW_DEBUG ? ` [${error?.code || 'no code'}] ${error?.message || ''}` : '')
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -149,6 +191,7 @@ const ReservationForm = () => {
           <p>
             Your hold request for <strong>{gown.name}</strong> has been sent.
             Our admin will review and confirm your reservation soon.
+            Your hold is kept for {HOLD_DAYS} days.
           </p>
           <div className="rf-success-note">
             <Clock size={16} />
@@ -217,7 +260,7 @@ const ReservationForm = () => {
             <Clock size={15} />
             <div>
               <strong>Pencil Booking</strong>
-              <span>Admin will confirm your reservation. No payment required yet.</span>
+              <span>Admin will confirm your reservation. No payment required yet. Your hold is kept for {HOLD_DAYS} days.</span>
             </div>
           </div>
         </div>
@@ -237,6 +280,8 @@ const ReservationForm = () => {
                 type="text"
                 placeholder="e.g. Maria Santos"
                 required
+                maxLength={80}
+                autoComplete="name"
                 value={formData.name}
                 onChange={handleChange('name')}
               />
@@ -249,6 +294,8 @@ const ReservationForm = () => {
                   type="tel"
                   placeholder="09XXXXXXXXX"
                   required
+                  maxLength={16}
+                  autoComplete="tel"
                   value={formData.contact}
                   onChange={handleChange('contact')}
                 />
@@ -258,6 +305,7 @@ const ReservationForm = () => {
                 <input
                   type="tel"
                   placeholder="09XXXXXXXXX (optional)"
+                  maxLength={16}
                   value={formData.altContact}
                   onChange={handleChange('altContact')}
                 />
@@ -279,10 +327,33 @@ const ReservationForm = () => {
               <textarea
                 placeholder="Write your requests, preferred date, or questions here..."
                 rows="4"
+                maxLength={MAX_MESSAGE}
                 value={formData.customerMessage}
                 onChange={handleChange('customerMessage')}
               />
+              <span className="rf-count">{formData.customerMessage.length}/{MAX_MESSAGE}</span>
             </div>
+
+            {/* Honeypot (hidden from people) */}
+            <div className="rf-hp" aria-hidden="true">
+              <label>Leave this empty
+                <input
+                  type="text"
+                  name="hp_company_ref"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={formData.website}
+                  onChange={handleChange('website')}
+                />
+              </label>
+            </div>
+
+            {errorMsg && (
+              <div className="rf-error" role="alert">
+                <AlertCircle size={16} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
 
             <button
               type="submit"

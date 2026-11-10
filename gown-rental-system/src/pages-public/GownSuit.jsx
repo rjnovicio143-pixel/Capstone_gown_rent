@@ -284,10 +284,12 @@ const GownSuit = () => {
                       <Sparkles size={11} /> Includes {label}
                     </span>
                   )}
-                  <div className="gs-card-foot">
-                    <span className="gs-price">{peso(item.price)}</span>
-                    {item.size && <span className="gs-size">{item.size}</span>}
-                  </div>
+                  {/* The price is only shown inside the detail modal */}
+                  {item.size && (
+                    <div className="gs-card-foot">
+                      <span className="gs-size">Size {item.size}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             );

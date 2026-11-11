@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&display=swap');
 /* =========================================
    PAGE
 ========================================= */
@@ -734,3 +735,134 @@
 
   .gs-float-wish { right: 14px; bottom: 20px; width: 52px; height: 52px; }
 }
+
+/* =========================================
+   WEDDING PACKAGES
+========================================= */
+.gs-pkg-best {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+}
+.gs-pkg-best-inline { position: static; box-shadow: none; }
+
+.gs-pkg-tagline {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #64748b;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.gs-pkg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.gs-pkg-chip {
+  padding: 4px 10px;
+  background: #fefce8;
+  border: 1px solid #fef3c7;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b8860b;
+}
+.gs-pkg-more {
+  margin-top: auto;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #f59e0b;
+}
+
+.gs-pkg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.gs-pkg-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.45; color: #475569; }
+.gs-pkg-list li svg { flex-shrink: 0; margin-top: 2px; color: #16a34a; }
+.gs-pkg-free { background: #f0fdf4; border-color: #bbf7d0; }
+.gs-pkg-free .gs-included-label { color: #15803d; }
+.gs-pkg-free .gs-pkg-list li svg { color: #15803d; }
+
+.gs-pkg-sub { margin: 0 0 8px; font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #94a3b8; }
+.gs-pkg-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; }
+.gs-pkg-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: default;
+}
+.gs-pkg-thumb img,
+.gs-pkg-thumb-ph {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  object-position: center 18%;
+  background: #f1f5f9;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  transition: border-color 0.2s;
+}
+.gs-pkg-thumb span:last-child { font-size: 11.5px; font-weight: 700; line-height: 1.3; color: #475569; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.gs-pkg-thumb-link { cursor: pointer; }
+.gs-pkg-thumb-link:hover img { border-color: #f59e0b; }
+
+.gs-pkg-note { margin: 0; padding: 12px 14px; background: #f8fafc; border-left: 3px solid #f59e0b; border-radius: 8px; font-size: 12.5px; line-height: 1.6; color: #64748b; }
+
+@media (max-width: 480px) {
+  .gs-pkg-chip { font-size: 10px; padding: 3px 8px; }
+  .gs-pkg-tagline { font-size: 12px; }
+}
+
+/* Wedding packages board (poster style) */
+.gs-pkg-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; align-items: stretch; padding: 22px 16px 16px; background: linear-gradient(160deg,#fff7f5,#fdeef2 55%,#fff6e8); border: 1px solid #fbd5dc; border-radius: 24px; }
+.gs-pkgc { position: relative; display: flex; flex-direction: column; padding: 18px 14px 16px; background: rgba(255,255,255,0.85); border: 1.5px solid #e9c46a; border-radius: 18px; }
+.gs-pkgc-best { box-shadow: 0 8px 26px rgba(190,24,93,0.18); }
+.gs-pkgc-ribbon { position: absolute; top: -14px; left: -8px; z-index: 2; padding: 5px 9px; background: #b91c1c; border-radius: 999px; transform: rotate(-12deg); font-size: 9px; font-weight: 800; line-height: 1.1; text-align: center; text-transform: uppercase; color: #fff; box-shadow: 0 3px 10px rgba(185,28,28,0.4); }
+.gs-pkgc-crown { display: flex; justify-content: center; color: #c9962b; }
+.gs-pkgc-name { margin: 2px 0 0; text-align: center; font-family: 'Cinzel', Georgia, serif; font-size: 22px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #1e3a8a; }
+.gs-pkgc-sub { text-align: center; font-family: 'Cinzel', Georgia, serif; font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #1e3a8a; }
+.gs-pkgc-price { margin: 12px auto 10px; padding: 6px 18px; width: fit-content; background: #fff; border: 2px solid #d4a53a; border-radius: 999px; font-family: 'Cinzel', Georgia, serif; font-size: 24px; font-weight: 800; color: #9f1239; }
+.gs-pkgc-premium .gs-pkgc-price { background: linear-gradient(135deg,#be123c,#9f1239); border-color: #e9c46a; color: #fff; }
+.gs-pkgc-tag { margin: 0 0 14px; text-align: center; font-size: 12px; font-style: italic; line-height: 1.5; color: #be185d; }
+.gs-pkgc-head { margin: 0 0 8px; padding: 6px 8px; background: #fbd5e3; border-radius: 999px; text-align: center; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #1e3a8a; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.gs-pkgc-head-free { margin-top: 14px; }
+.gs-pkgc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.gs-pkgc-list li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: #1e3a8a; }
+.gs-pkgc-dot { flex-shrink: 0; width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 35%,#f4d27a,#b8860b); }
+.gs-pkgc-free li { color: #1e3a8a; }
+.gs-pkgc-free li svg { flex-shrink: 0; color: #ec4899; }
+.gs-pkgc-note { margin: 14px 0 0; padding: 8px 10px; background: #fde7ec; border-radius: 12px; text-align: center; font-size: 10.5px; line-height: 1.45; color: #9f1239; }
+.gs-pkgc-btn { margin-top: auto; align-self: stretch; padding: 11px; background: linear-gradient(135deg,#d4a53a,#b8860b); border: none; border-radius: 12px; font-family: inherit; font-size: 13px; font-weight: 800; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
+.gs-pkgc-btn:hover { filter: brightness(1.07); }
+.gs-pkgc .gs-pkgc-btn { margin-top: 16px; }
+@media (max-width: 1100px) { .gs-pkg-board { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px)  { .gs-pkg-board { grid-template-columns: 1fr; } }
+
+/* booked dates on package cards */
+.gs-pkgc-booked { margin-top: 14px; }
+.gs-pkgc-head-booked { background: #fff1d6; color: #92400e; }
+.gs-pkgc-open { margin: 0; text-align: center; font-size: 11.5px; color: #15803d; font-weight: 700; }
+.gs-pkgc-dates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.gs-pkgc-dates li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; background: #fff; border: 1px solid #fde68a; border-radius: 10px; font-size: 12px; }
+.gs-pkgc-date { font-weight: 800; color: #9f1239; }
+.gs-pkgc-motif { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: #475569; text-align: right; }
+.gs-pkgc-motif i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.15); flex-shrink: 0; }
+.gs-pkgc-dates li.gs-pkgc-more { justify-content: center; border: none; background: none; color: #94a3b8; }
+.gs-pkgc-full { color: #b91c1c; font-weight: 800; }

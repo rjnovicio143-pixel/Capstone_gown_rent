@@ -2,12 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Heart, X, Calendar, ChevronDown,
-  Layers, Crown, Ruler, Check, Sparkles
+  Layers, Crown, Ruler, Check, Sparkles, Package, Gift, Star, Gem, Heart as HeartIcon
 } from 'lucide-react';
 import '../styles-public/GownSuit.css';
 import { supabase } from '../supabaseClient';
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
+
+const PKG_TAB = 'Wedding Packages';   // name of the category tab that shows the wedding packages
+
+// jsonb columns can come back as an array, a JSON string or null: always give back an array
+const toList = (v) => {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') {
+    try { const p = JSON.parse(v); return Array.isArray(p) ? p : [v]; } catch { return v ? [v] : []; }
+  }
+  return [];
+};
+// an item can be a plain text or an object like { text } / { label } / { name }
+const fmtDate = (d) => {
+  const [y, m, day] = String(d).split('-').map(Number);
+  return new Date(y, (m || 1) - 1, day || 1).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+const MOTIF_HEX = {
+  'dusty blue': '#8fb2d4', 'royal blue': '#1e40af', 'peach': '#f9a98b', 'sage green': '#8faf9a',
+  'lilac/lavender': '#b79ce6', 'beige/nude': '#d9c3a5', 'rose gold': '#d9a29b', 'old rose': '#c27c86',
+  'gray': '#8a8a8a', 'burgundy/maroon': '#7a1230', 'yellow': '#f2c80f', 'emerald green': '#0b7a55',
+};
+const colorOf = (v) => MOTIF_HEX[String(v).trim().toLowerCase()] || (isColor(v) ? String(v).trim() : null);
+const isColor = (v) => typeof CSS !== 'undefined' && CSS.supports && CSS.supports('color', String(v).trim());
+const labelOf = (x) => {
+  if (x == null) return '';
+  if (typeof x === 'string' || typeof x === 'number') return String(x);
+  return String(x.text || x.label || x.name || x.title || Object.values(x).find(v => typeof v === 'string') || '');
+};
 
 const GownSuit = () => {
   const navigate = useNavigate();
@@ -21,6 +49,10 @@ const GownSuit = () => {
   const [sortBy, setSortBy]             = useState('default');
   const [availableOnly, setAvailableOnly] = useState(false);
   const [loading, setLoading]           = useState(true);
+  const [packages, setPackages]         = useState([]);      // wedding packages
+  const [pkgGowns, setPkgGowns]         = useState({});      // id -> gown, for the gowns/attire listed in packages
+  const [selectedPkg, setSelectedPkg]   = useState(null);
+  const [pkgBookings, setPkgBookings]   = useState({});      // package key -> upcoming booked dates
 
   // Wishlist is stored in localStorage only, no login needed
   const [wishlist, setWishlist] = useState(() => {
@@ -37,7 +69,7 @@ const GownSuit = () => {
     const fetchData = async () => {
       setLoading(true);
 
-      const [gRes, pRes, aRes] = await Promise.all([
+      const [gRes, pRes, aRes, wRes] = await Promise.all([
         supabase
           .from('gowns')
           .select('id, name, price, stock, category, desc, size, image, status, petticoat_layer, included_accessories')
@@ -46,11 +78,34 @@ const GownSuit = () => {
           .order('created_at', { ascending: false }),
         supabase.from('petticoats').select('layer, price'),
         supabase.from('accessories').select('id, name, price, category'),
+        supabase.from('wedding_packages').select('*')
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true }),
       ]);
 
       if (gRes.error) console.error(gRes.error);
       if (pRes.error) console.error(pRes.error);
       if (aRes.error) console.error(aRes.error);
+      if (wRes.error) console.error(wRes.error);
+
+      // Packages + the gowns / groom attire they list (looked up by id)
+      const pk = wRes.data || [];
+      setPackages(pk);
+      const ids = [...new Set(pk.flatMap(p => [...toList(p.bridal_gown_ids), ...toList(p.groom_attire_ids)]))]
+        .filter(v => v !== null && v !== undefined && v !== '');
+      if (ids.length) {
+        const gwRes = await supabase.from('gowns').select('id, name, image, category').in('id', ids);
+        if (gwRes.error) console.error(gwRes.error);
+        setPkgGowns(Object.fromEntries((gwRes.data || []).map(g => [String(g.id), g])));
+      }
+
+      // Upcoming wedding bookings per package (public view: date + color only)
+      const bkRes = await supabase.from('public_package_bookings')
+        .select('package_key, wedding_date, motif_color, date_full').order('wedding_date', { ascending: true });
+      if (bkRes.error) console.error(bkRes.error);
+      const byKey = {};
+      (bkRes.data || []).forEach(b => { (byKey[b.package_key] = byKey[b.package_key] || []).push(b); });
+      setPkgBookings(byKey);
 
       setItems(gRes.data || []);
       setPetticoats(pRes.data || []);
@@ -63,8 +118,8 @@ const GownSuit = () => {
 
   // ── Close the modal with Esc and lock the page scroll while it is open ──
   useEffect(() => {
-    if (!selectedGown) return;
-    const onKey = (e) => { if (e.key === 'Escape') setSelectedGown(null); };
+    if (!selectedGown && !selectedPkg) return;
+    const onKey = (e) => { if (e.key === 'Escape') { setSelectedGown(null); setSelectedPkg(null); } };
     document.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -72,7 +127,7 @@ const GownSuit = () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [selectedGown]);
+  }, [selectedGown, selectedPkg]);
 
   // ── Package helpers (petticoat + accessories included with a gown) ──
   const packageOf = (gown) => {
@@ -89,6 +144,16 @@ const GownSuit = () => {
     if (petti) parts.push(`Petticoat L${petti.layer}`);
     if (accs.length) parts.push(`${accs.length} ${accs.length === 1 ? 'accessory' : 'accessories'}`);
     return parts.join(' + ');
+  };
+
+  // ── Wedding package helpers ──
+  const gownsOf = (ids) => toList(ids).map(id => pkgGowns[String(id)]).filter(Boolean);
+  const coverOf = (p) => [...gownsOf(p.bridal_gown_ids), ...gownsOf(p.groom_attire_ids)].find(g => g.image)?.image || null;
+  const openGownFromPkg = (g) => {
+    const full = items.find(i => String(i.id) === String(g.id));
+    if (!full) return;                      // not posted, so there is no detail page for it
+    setSelectedPkg(null);
+    setSelectedGown(full);
   };
 
   // ── Wishlist toggle ──
@@ -143,6 +208,9 @@ const GownSuit = () => {
       return 0;
     });
 
+  const showingPkgs = activeCategory === PKG_TAB;
+  const filteredPkgs = packages.filter(p => (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()));
+
   const hasFilters = searchQuery || activeCategory !== 'All' || availableOnly;
   const modalPkg = selectedGown ? packageOf(selectedGown) : null;
   const modalHasPkg = modalPkg && (modalPkg.petti || modalPkg.accs.length > 0);
@@ -163,7 +231,7 @@ const GownSuit = () => {
           <Search size={16} className="gs-search-icon" />
           <input
             type="text"
-            placeholder="Search for your dream gown..."
+            placeholder={showingPkgs ? 'Search wedding packages...' : 'Search for your dream gown...'}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
@@ -174,7 +242,7 @@ const GownSuit = () => {
           )}
         </div>
 
-        <button
+        {!showingPkgs && <button
           type="button"
           className={`gs-toggle ${availableOnly ? 'gs-toggle-on' : ''}`}
           onClick={() => setAvailableOnly(v => !v)}
@@ -182,26 +250,27 @@ const GownSuit = () => {
         >
           <span className="gs-toggle-box">{availableOnly && <Check size={11} />}</span>
           Available only
-        </button>
+        </button>}
 
-        <div className="gs-sort">
+        {!showingPkgs && <div className="gs-sort">
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
             <option value="default">Sort by</option>
             <option value="low-high">Price: Low → High</option>
             <option value="high-low">Price: High → Low</option>
           </select>
           <ChevronDown size={14} className="gs-sort-icon" />
-        </div>
+        </div>}
       </div>
 
       {/* ── CATEGORY TABS ── */}
       <div className="gs-cats">
-        {[...categories, 'Wishlist'].map(cat => (
+        {[...categories, PKG_TAB, 'Wishlist'].map(cat => (
           <button
             key={cat}
             className={`gs-cat ${activeCategory === cat ? 'gs-cat-active' : ''} ${cat === 'Wishlist' ? 'gs-cat-wish' : ''}`}
             onClick={() => setActiveCategory(cat)}
           >
+            {cat === PKG_TAB && <Package size={13} />}
             {cat === 'Wishlist' && (
               <Heart
                 size={12}
@@ -220,7 +289,9 @@ const GownSuit = () => {
       {/* ── RESULTS COUNT ── */}
       {!loading && (
         <p className="gs-count">
-          {filteredItems.length} gown{filteredItems.length !== 1 ? 's' : ''} found
+          {showingPkgs
+            ? `${filteredPkgs.length} package${filteredPkgs.length !== 1 ? 's' : ''} found`
+            : `${filteredItems.length} gown${filteredItems.length !== 1 ? 's' : ''} found`}
         </p>
       )}
 
@@ -238,6 +309,77 @@ const GownSuit = () => {
             </div>
           ))}
         </div>
+      ) : showingPkgs ? (
+        filteredPkgs.length === 0 ? (
+          <div className="gs-empty">
+            <span className="gs-empty-icon">💍</span>
+            <p>{packages.length === 0 ? 'No wedding packages yet. Please check back soon.' : 'No packages found.'}</p>
+            {searchQuery && <button onClick={() => setSearchQuery('')}>Clear search</button>}
+          </div>
+        ) : (
+          <div className="gs-pkg-board">
+            {filteredPkgs.map(p => {
+              const inclusions = toList(p.inclusions).map(labelOf).filter(Boolean);
+              const freebies   = toList(p.freebies).map(labelOf).filter(Boolean);
+              const words = String(p.name || '').trim().split(/\s+/);
+              const sub = words.length > 1 ? words.pop() : 'Package';
+              const title = words.join(' ');
+              return (
+                <div key={p.id} className={`gs-pkgc gs-pkgc-${p.key || ''} ${p.best_seller ? 'gs-pkgc-best' : ''}`}>
+                  {p.best_seller && <span className="gs-pkgc-ribbon">Best<br />Seller</span>}
+                  <div className="gs-pkgc-crown">{p.best_seller ? <Gem size={22} /> : <Crown size={22} />}</div>
+                  <h3 className="gs-pkgc-name">{title}</h3>
+                  <div className="gs-pkgc-sub">{sub}</div>
+                  <div className="gs-pkgc-price">{peso(p.price)}</div>
+                  {p.tagline && <p className="gs-pkgc-tag">{p.tagline}</p>}
+
+                  <p className="gs-pkgc-head">Package Inclusions</p>
+                  <ul className="gs-pkgc-list">
+                    {inclusions.map((x, i) => <li key={i}><span className="gs-pkgc-dot" />{x}</li>)}
+                  </ul>
+
+                  <p className="gs-pkgc-head gs-pkgc-head-free"><Gift size={13} /> With Freebies</p>
+                  <ul className="gs-pkgc-list gs-pkgc-free">
+                    {freebies.map((x, i) => <li key={i}><HeartIcon size={11} fill="currentColor" />{x}</li>)}
+                  </ul>
+
+                  {p.note && <p className="gs-pkgc-note">{p.note}</p>}
+
+                  {(() => {
+                    const booked = pkgBookings[p.key] || [];
+                    return (
+                      <div className="gs-pkgc-booked">
+                        <p className="gs-pkgc-head gs-pkgc-head-booked"><Calendar size={13} /> Already booked</p>
+                        {booked.length === 0 ? (
+                          <p className="gs-pkgc-open">No bookings yet. All dates are open.</p>
+                        ) : (
+                          <ul className="gs-pkgc-dates">
+                            {booked.slice(0, 5).map((b, i) => (
+                              <li key={i}>
+                                <span className="gs-pkgc-date">{fmtDate(b.wedding_date)}{b.date_full && <b className="gs-pkgc-full"> · Full</b>}</span>
+                                {b.motif_color && (
+                                  <span className="gs-pkgc-motif">
+                                    {colorOf(b.motif_color) && <i style={{ background: colorOf(b.motif_color) }} />}
+                                    {b.motif_color}
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                            {booked.length > 5 && <li className="gs-pkgc-more">+{booked.length - 5} more dates</li>}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  <button type="button" className="gs-pkgc-btn" onClick={() => navigate('/contact')}>
+                    <Calendar size={16} /> Inquire
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )
       ) : filteredItems.length === 0 ? (
         <div className="gs-empty">
           <span className="gs-empty-icon">{activeCategory === 'Wishlist' ? '💛' : '👗'}</span>
@@ -413,6 +555,7 @@ const GownSuit = () => {
           </div>
         </div>
       )}
+
     </div>
   );
 };

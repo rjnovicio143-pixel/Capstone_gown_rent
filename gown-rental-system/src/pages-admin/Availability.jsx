@@ -1346,6 +1346,51 @@ const Availability = () => {
                   </div>
                 </div>
 
+                {(() => {
+                  const rows = reservations
+                    .filter(r => r.packageKey === viewPkg.key &&
+                      (r.status === 'pending' || r.status === 'confirmed') && r.weddingDate >= todayKey)
+                    .sort((a, b) => String(a.weddingDate).localeCompare(String(b.weddingDate)));
+                  return (
+                    <div className="wa-box">
+                      <h4><CalendarDays size={14} /> Booked dates of this package ({rows.length})</h4>
+                      {rows.length === 0 ? (
+                        <p style={{ margin: 0, fontSize: 13, color: '#15803d', fontWeight: 600 }}>No upcoming bookings yet.</p>
+                      ) : (
+                        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {rows.map(r => {
+                            const hex = MOTIF_COLORS.find(c => c.name === r.motifColor)?.hex;
+                            const full = (dayInfo[r.weddingDate]?.taken || 0) >= MAX_WEDDINGS_PER_DAY;
+                            return (
+                              <li key={r.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => { setDate(fromKey(r.weddingDate)); setViewPkg(null); }}
+                                  style={{ width: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, font: 'inherit', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
+                                >
+                                  <span><strong>{shortDate(r.weddingDate + 'T00:00:00')}</strong> · {r.name}</span>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#64748b' }}>
+                                    {r.motifColor && (
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                        {hex && <i style={{ width: 12, height: 12, borderRadius: '50%', background: hex, border: '1px solid rgba(0,0,0,.15)' }} />}
+                                        {r.motifColor}
+                                      </span>
+                                    )}
+                                    <em style={{ fontStyle: 'normal', fontWeight: 700, color: r.status === 'pending' ? '#b45309' : '#15803d' }}>
+                                      {STATUS_LABEL[stageOf(r)]}
+                                    </em>
+                                    {full && <em style={{ fontStyle: 'normal', fontWeight: 800, color: '#b91c1c' }}>Date full</em>}
+                                  </span>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div className="wa-box">
                   <h4><Palette size={14} /> Available motif colors</h4>
                   <div className="wa-swatches">

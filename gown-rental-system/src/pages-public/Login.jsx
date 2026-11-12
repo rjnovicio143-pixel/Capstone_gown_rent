@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, ArrowLeft, LogIn, Mail, Lock } from 'lucide-react';
+import { Sparkles, ArrowLeft, LogIn } from 'lucide-react';
 import '../styles-public/Login.css';
 
 // Supabase client instance configuration driver
@@ -25,10 +25,6 @@ const Login = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // Form input control configuration states
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
 
   // ================= LISTEN TO GOOGLE REDIRECT SUCCESS =================
   useEffect(() => {
@@ -79,12 +75,12 @@ const Login = ({ onLoginSuccess }) => {
 
       // Dili admin ang Google account nga ni-login — i-reject ug i-sign out
       await supabase.auth.signOut();
-      setError('Kining Gmail account dili admin. Dili ka pwede mo-access dinhi.');
+      setError('This Gmail account is not registered as an admin. You are not allowed to access this portal.');
       setLoading(false);
     } catch (adminCheckErr) {
       console.error("Admin lookup via Google session failed:", adminCheckErr);
       await supabase.auth.signOut();
-      setError('Naay sayop sa pag-verify sa imong account. Palihug sulayi pag-usab.');
+      setError('Something went wrong while verifying your account. Please try again.');
       setLoading(false);
     }
   };
@@ -109,53 +105,9 @@ const Login = ({ onLoginSuccess }) => {
 
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Verification system encountered an error routing context parameters.');
+      setError(err.message || 'Something went wrong while signing in with Google. Please try again.');
       setLoading(false);
     }
-  };
-
-  /// ================= MANUAL EMAIL & PASSWORD LOGIN (ADMIN ONLY) =================
-  const handleEmailLogin = async (e) => {
-    e.preventDefault();
-    if (!email || !password) {
-      setError('Please fill in all fields.');
-      return;
-    }
-
-    setError('');
-    setLoading(true);
-
-    try {
-      const { data: adminData, error: adminError } = await supabase
-        .from('admins')
-        .select('*')
-        .eq('email', email.trim().toLowerCase())
-        .eq('password', password)
-        .single();
-
-      if (adminError || !adminData) {
-        throw new Error('Invalid email or password.');
-      }
-
-      if (adminData.auth_provider === 'google') {
-        throw new Error('Naka-link na ni nga account sa Google. Palihug gamit ang "Continue with Gmail" para mo-login.');
-      }
-
-      const role = adminData.role || 'admin';
-      saveAdminSession({ ...adminData, role });
-
-      if (typeof onLoginSuccess === 'function') onLoginSuccess(role);
-      navigate(roleHome(role));
-    } catch (err) {
-      console.error(err);
-      setError(err.message || 'Invalid email or password.');
-      setLoading(false);
-    }
-  };
-
-  // ================= FORGOT PASSWORD FUNCTION (LOCAL STABILITY BYPASS) =================
-  const handleForgotPassword = () => {
-    setError('System structural notice: Dynamic email notification parameters are adjusted for demo environment presentation.');
   };
 
   return (
@@ -182,7 +134,7 @@ const Login = ({ onLoginSuccess }) => {
         <div className="login-form-side" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <div className="login-form-header">
             <h3>Admin Secure Gateway</h3>
-            <p>Please sign in using your admin credentials to access the portal.</p>
+            <p>Sign in with your authorized Gmail account to access the portal.</p>
           </div>
 
           <div className="role-selector" style={{ marginBottom: '25px' }}>
@@ -197,59 +149,6 @@ const Login = ({ onLoginSuccess }) => {
               {error}
             </div>
           )}
-
-          {/* ================= MANUAL EMAIL & PASSWORD FORM INPUTS ================= */}
-          <form onSubmit={handleEmailLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
-
-            <div style={{ position: 'relative' }}>
-              <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-              <input
-                type="email"
-                placeholder="Email Address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
-                required
-              />
-            </div>
-
-            <div style={{ position: 'relative' }}>
-              <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
-                required
-              />
-            </div>
-
-            <div style={{ textAlign: 'right' }}>
-              <button
-                type="button"
-                onClick={handleForgotPassword}
-                style={{ background: 'none', border: 'none', color: '#f59e0b', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
-              >
-                Forgot Password?
-              </button>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', background: '#f59e0b', color: '#fff', fontWeight: '600', fontSize: '15px', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
-            >
-              {loading ? 'Processing...' : 'Sign In with Password'}
-            </button>
-          </form>
-
-          {/* OAUTH OR DIVIDER */}
-          <div style={{ display: 'flex', alignItems: 'center', textAlign: 'center', margin: '15px 0', color: '#94a3b8', fontSize: '13px' }}>
-            <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }}></div>
-            <span style={{ padding: '0 10px' }}>or</span>
-            <div style={{ flex: 1, height: '1px', background: '#e2e8f0' }}></div>
-          </div>
 
           {/* GOOGLE ACCESS BUTTON */}
           <button
@@ -271,7 +170,7 @@ const Login = ({ onLoginSuccess }) => {
           </button>
 
           <p style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', marginTop: '25px', lineHeight: '1.5' }}>
-            The system automatically conducts integrated cross-layer verification using your registered identity parameters.
+            Only Gmail accounts registered by the Super Admin can sign in.
           </p>
 
           <p className="login-footer-text" style={{ marginTop: '30px' }}>Protected by GownRent Security. © 2026</p>

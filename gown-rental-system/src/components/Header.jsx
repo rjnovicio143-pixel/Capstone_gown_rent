@@ -107,7 +107,10 @@ const Header = () => {
       console.error('Logout error:', error);
     }
 
+    // keep the notification cache so read items do not flash as unread after logging in again
+    const keep = ['notifReadIds', 'notifDismissedIds'].map(k => [k, localStorage.getItem(k)]);
     localStorage.clear();
+    keep.forEach(([k, v]) => { if (v !== null) localStorage.setItem(k, v); });
     sessionStorage.clear();
     window.location.href = '/login';
   };

@@ -10,9 +10,28 @@ const load = (key) => {
   try { return new Set(JSON.parse(localStorage.getItem(key) || '[]')); }
   catch { return new Set(); }
 };
-const save = (key, set) => {
+// local cache only (fast first paint); the real copy lives in the `notification_state` table
+const cache = (key, set) => {
   try { localStorage.setItem(key, JSON.stringify([...set])); } catch { /* ignore */ }
   window.dispatchEvent(new Event(SYNC_EVENT));   // tell the other components (Header <-> Notifications page)
+};
+
+// write-through to the database, so it survives logout / other browsers / other devices
+const persist = async (ids, state) => {
+  const rows = [...ids].map((notif_id) => ({ notif_id, state, updated_at: new Date().toISOString() }));
+  if (!rows.length) return;
+  const { error } = await supabase.from('notification_state').upsert(rows, { onConflict: 'notif_id' });
+  if (error) console.error('Could not save the notification state:', error);
+};
+
+const pullState = async () => {
+  const { data, error } = await supabase.from('notification_state').select('notif_id, state');
+  if (error) { console.error('Could not load the notification state:', error); return; }
+  const read = new Set();
+  const gone = new Set();
+  (data || []).forEach((r) => (r.state === 'dismissed' ? gone : read).add(r.notif_id));
+  cache(READ_KEY, read);
+  cache(DISMISS_KEY, gone);
 };
 
 export const timeAgo = (date) => {
@@ -77,6 +96,7 @@ export const useNotifications = () => {
       .or('return_status.eq.claimed,and(return_status.eq.pending,is_online_hold.eq.true)');
     if (!error) setRaw(build(data || []));
     else console.error('Error fetching notifications:', error);
+    await pullState();
     setLoading(false);
   }, []);
 
@@ -99,18 +119,6 @@ export const useNotifications = () => {
     return () => { window.removeEventListener(SYNC_EVENT, sync); window.removeEventListener('storage', sync); };
   }, []);
 
-  // forget marks of notifications that no longer exist
-  useEffect(() => {
-    if (loading) return;
-    const ids = new Set(raw.map((n) => n.id));
-    const prune = (key, set) => {
-      const next = new Set([...set].filter((id) => ids.has(id)));
-      if (next.size !== set.size) save(key, next);
-    };
-    prune(READ_KEY, load(READ_KEY));
-    prune(DISMISS_KEY, load(DISMISS_KEY));
-  }, [raw, loading]);
-
   const notifications = useMemo(
     () => raw.filter((n) => !dismissed.has(n.id)).sort((a, b) => {
       const ua = readIds.has(a.id) ? 1 : 0;
@@ -124,11 +132,17 @@ export const useNotifications = () => {
 
   const unreadCount = notifications.filter((n) => !readIds.has(n.id)).length;
 
-  const markRead = (id) => { const s = load(READ_KEY); s.add(id); save(READ_KEY, s); };
-  const markAllRead = () => { const s = load(READ_KEY); notifications.forEach((n) => s.add(n.id)); save(READ_KEY, s); };
-  const dismiss = (id) => { const s = load(DISMISS_KEY); s.add(id); save(DISMISS_KEY, s); };
-  const dismissAll = () => { const s = load(DISMISS_KEY); notifications.forEach((n) => s.add(n.id)); save(DISMISS_KEY, s); };
-  const dismissRead = () => { const s = load(DISMISS_KEY); notifications.filter((n) => readIds.has(n.id)).forEach((n) => s.add(n.id)); save(DISMISS_KEY, s); };
+  const mark = (key, state, ids) => {
+    const set = load(key);
+    ids.forEach((id) => set.add(id));
+    cache(key, set);
+    persist(ids, state);
+  };
+  const markRead = (id) => mark(READ_KEY, 'read', [id]);
+  const markAllRead = () => mark(READ_KEY, 'read', notifications.filter((n) => !readIds.has(n.id)).map((n) => n.id));
+  const dismiss = (id) => mark(DISMISS_KEY, 'dismissed', [id]);
+  const dismissAll = () => mark(DISMISS_KEY, 'dismissed', notifications.map((n) => n.id));
+  const dismissRead = () => mark(DISMISS_KEY, 'dismissed', notifications.filter((n) => readIds.has(n.id)).map((n) => n.id));
 
   return { notifications, readIds, unreadCount, loading, refresh, markRead, markAllRead, dismiss, dismissAll, dismissRead };
 };

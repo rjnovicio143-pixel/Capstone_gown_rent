@@ -16,13 +16,13 @@ const Home = () => {
     const fetchGowns = async () => {
       const { data: top } = await supabase
         .from('gowns')
-        .select('id, name, price, category, desc, size, image, stock')
+        .select('id, name, category, desc, size, image, stock')
         .eq('is_posted', true).gt('price', 0)
         .order('price', { ascending: false }).limit(3);
 
       const { data: all } = await supabase
         .from('gowns')
-        .select('id, name, price, category, image, stock, size')
+        .select('id, name, category, image, stock, size')
         .eq('is_posted', true).gt('price', 0)
         .order('created_at', { ascending: false }).limit(8);
 
@@ -77,7 +77,6 @@ const Home = () => {
               {/* Badges */}
               <div className="hp-card-badges">
                 <span className="hp-badge-feat"><Sparkles size={11} /> Featured</span>
-                <span className="hp-badge-amt">₱{Number(g.price).toLocaleString()}</span>
               </div>
 
               {/* Info + button */}
@@ -181,7 +180,6 @@ const Home = () => {
                   <span className="hp-gcat">{gown.category}</span>
                   <h3 className="hp-gname">{gown.name}</h3>
                   <div className="hp-gfoot">
-                    <span className="hp-gprice">₱{Number(gown.price).toLocaleString()}</span>
                     {gown.size && <span className="hp-gsize">{gown.size}</span>}
                   </div>
                 </div>

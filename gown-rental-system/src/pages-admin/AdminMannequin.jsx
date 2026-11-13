@@ -7,7 +7,7 @@ import Header from '../components/Header';
 import '../styles/AdminMannequin.css';
 import {
   Scene, CATEGORIES, ADULT_SIZES, SIZE_ORDER, sizesFor, defaultSizeFor, makeBuild, bodyGirth,
-  parseGownSizes, parseKidAges, audienceOf, audienceFits, AUDIENCE_LABEL, DEFAULT_TWEAK, parseTweak,
+  parseGownSizes, parseKidAges, nearestAdultSize, audienceOf, audienceFits, AUDIENCE_LABEL, DEFAULT_TWEAK, parseTweak,
 } from '../components/MannequinEngine';
 
 
@@ -166,6 +166,13 @@ const AdminMannequin = () => {
     return { ok: cur >= low && cur <= high, now: ADULT_SIZES[near].label };
   }, [gownSizes, bodyRaw, build, waist, chest, modelScale, selectedGown]);
   const audienceOk = !selectedGown || selectedGown.isExample || audienceFits(audienceOf(selectedGown), category);
+  // The Body size buttons follow the body: moving Weight / Belly / Muscle or the scale sliders picks the matching size
+  useEffect(() => {
+    if (category.kids) return;
+    const near = nearestAdultSize(bodyRaw, build, waist * modelScale, chest * modelScale);
+    if (near && near !== selectedSize) setSelectedSize(near);
+  }, [bodyRaw, build, waist, chest, modelScale, category.kids]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const canWear = audienceOk && ageOk && (!sizeCheck || sizeCheck.ok);
   const handleCategoryChange = (id) => {
     const cat = CATEGORIES.find(c => c.id === id) || CATEGORIES[0];

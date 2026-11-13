@@ -8,7 +8,7 @@ import {
 import { supabase } from '../supabaseClient';
 import {
   Scene, CATEGORIES, sizesFor, defaultSizeFor, makeBuild, parseGownSizes, checkSizeFit,
-  audienceOf, audienceFits, AUDIENCE_LABEL, parseTweak, parseKidAges,
+  audienceOf, audienceFits, AUDIENCE_LABEL, parseTweak, parseKidAges, nearestAdultSize,
 } from '../components/MannequinEngine';
 import '../styles-public/Mannequin3D.css';
 
@@ -297,6 +297,13 @@ const Mannequin3D = () => {
     () => checkSizeFit(bodyRaw, build, gownSizes, adjust.waist * modelScale, adjust.chest * modelScale),
     [bodyRaw, build, gownSizes, adjust.waist, adjust.chest, modelScale]
   );
+  // The Body size buttons follow the body: moving Weight / Belly / Muscle or the fine-tune sliders picks the matching size
+  useEffect(() => {
+    if (category.kids) return;
+    const near = nearestAdultSize(bodyRaw, build, adjust.waist * modelScale, adjust.chest * modelScale);
+    if (near && near !== selectedSize) setSelectedSize(near);
+  }, [bodyRaw, build, adjust.waist, adjust.chest, modelScale, category.kids]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const canWear = audienceOk && ageOk && (!sizeCheck || sizeCheck.ok);
 
   // Selecting a gown loads its package, switches to the matching avatar, and brings the 3D view into sight on small screens

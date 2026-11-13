@@ -639,6 +639,17 @@ export const bodyGirth = (raw, build, sx, sz) => {
   return sum || null;
 };
 
+// Which S-XXL size does the avatar's current body match? (follows the Weight / Belly / Muscle / scale sliders)
+export const nearestAdultSize = (raw, build, sx, sz) => {
+  if (!raw?.ok) return null;
+  const pm = ADULT_SIZES.map(p => bodyGirth(raw, makeBuild(p.weight, p.belly, 0, false), p.scale, p.scale));
+  const cur = bodyGirth(raw, build, sx, sz);
+  if (cur == null || pm.some(v => v == null)) return null;
+  let near = 0;
+  pm.forEach((v, i) => { if (Math.abs(v - cur) < Math.abs(pm[near] - cur)) near = i; });
+  return ADULT_SIZES[near].label;
+};
+
 // Does the avatar's current body reach the size range of the gown?
 // gownSizes: e.g. ['L','XL']; raw: measured avatar; build: weight/belly/muscle; sx, sz: width / depth scale
 export const checkSizeFit = (raw, build, gownSizes, sx, sz) => {

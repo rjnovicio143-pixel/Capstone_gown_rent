@@ -7,7 +7,7 @@ import Header from '../components/Header';
 import '../styles/AdminMannequin.css';
 import {
   Scene, CATEGORIES, ADULT_SIZES, SIZE_ORDER, sizesFor, defaultSizeFor, makeBuild, bodyGirth,
-  parseGownSizes, audienceOf, audienceFits, AUDIENCE_LABEL, DEFAULT_TWEAK, parseTweak,
+  parseGownSizes, parseKidAges, audienceOf, audienceFits, AUDIENCE_LABEL, DEFAULT_TWEAK, parseTweak,
 } from '../components/MannequinEngine';
 
 
@@ -145,7 +145,10 @@ const AdminMannequin = () => {
 
   // Pwede ba ang napili nga gown sa napili nga size sa avatar?
   const gownSizes = category.kids ? null : parseGownSizes(selectedGown?.size);
-  const fitsSize = (label) => (gownSizes ? gownSizes.includes(label) : null);
+  // Kids' gowns are sized by age (set in Inventory)
+  const kidAges = category.kids && selectedGown && !selectedGown.isExample ? parseKidAges(selectedGown.size) : null;
+  const ageOk = !kidAges || kidAges.includes(selectedSize);
+  const fitsSize = (label) => (gownSizes || kidAges ? (gownSizes || kidAges).includes(label) : null);
 
   // Ang tinuod nga sukod sa avatar karon (apil ang weight, belly, muscle ug scale sliders) itandi sa size sa gown.
   // Kung naa sa sakup sa gown size -> ma-sout. Kung dili -> dili ma-sout, gawas kung i-scale hangtod moabot.
@@ -163,7 +166,7 @@ const AdminMannequin = () => {
     return { ok: cur >= low && cur <= high, now: ADULT_SIZES[near].label };
   }, [gownSizes, bodyRaw, build, waist, chest, modelScale, selectedGown]);
   const audienceOk = !selectedGown || selectedGown.isExample || audienceFits(audienceOf(selectedGown), category);
-  const canWear = audienceOk && (!sizeCheck || sizeCheck.ok);
+  const canWear = audienceOk && ageOk && (!sizeCheck || sizeCheck.ok);
   const handleCategoryChange = (id) => {
     const cat = CATEGORIES.find(c => c.id === id) || CATEGORIES[0];
     setCategoryId(id);
@@ -184,7 +187,7 @@ const AdminMannequin = () => {
       cat = CATEGORIES.find(c => audienceFits(audienceOf(gown), c)) || category;
       setCategoryId(cat.id);
     }
-    const allowed = cat.kids || gown.isExample ? null : parseGownSizes(gown.size);
+    const allowed = gown.isExample ? null : (cat.kids ? parseKidAges(gown.size) : parseGownSizes(gown.size));
     const curSize = cat === category ? selectedSize : defaultSizeFor(cat);
     if (allowed && !allowed.includes(curSize)) applyPreset(cat, allowed[0]);
     else if (cat !== category) applyPreset(cat, defaultSizeFor(cat));
@@ -281,7 +284,7 @@ const AdminMannequin = () => {
               <h3><Ruler size={18} /> Arms</h3>
               <p className="section-subtitle">Move the arms away from the gown, or hide them.</p>
               <div className="presets-list">
-                {[['down', 'Down'], ['away', 'Away'], ['tpose', 'T-pose'], ['hide', 'Hide']].map(([id, label]) => (
+                {[['down', 'Down'], ['away', 'Away'], ['hide', 'Hide']].map(([id, label]) => (
                   <button key={id} className={`preset-btn ${arms === id ? 'active' : ''}`} onClick={() => setArms(id)}>{label}</button>
                 ))}
               </div>
@@ -392,6 +395,12 @@ const AdminMannequin = () => {
               {!audienceOk && (
                 <p style={{ margin: '0 0 12px', padding: '8px 12px', borderRadius: 10, fontSize: '0.82rem', fontWeight: 600, background: '#fff0f0', color: '#c0392b' }}>
                   {`Cannot be worn. This item is for ${AUDIENCE_LABEL[audienceOf(selectedGown)]}, but the ${category.id} avatar is selected. Choose the matching avatar.`}
+                </p>
+              )}
+
+              {audienceOk && !ageOk && (
+                <p style={{ margin: '0 0 12px', padding: '8px 12px', borderRadius: 10, fontSize: '0.82rem', fontWeight: 600, background: '#fff0f0', color: '#c0392b' }}>
+                  {`Cannot be worn. This gown is for ages ${kidAges.join(' / ')}, but the avatar is ${selectedSize}. Pick a matching age.`}
                 </p>
               )}
 

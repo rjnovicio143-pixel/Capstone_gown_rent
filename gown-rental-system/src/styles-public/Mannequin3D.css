@@ -1037,7 +1037,7 @@
 }
 
 /* Arms: segmented buttons */
-.m3d-seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.m3d-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .m3d-seg button {
   padding: 10px 4px; background: #f8fafc; border: 1.5px solid var(--m3d-border); border-radius: 10px;
   font-family: inherit; font-size: 13px; font-weight: 800; color: var(--m3d-text-gray); cursor: pointer;
@@ -1061,5 +1061,11 @@
 .m3d-bg-toggle:hover { border-color: var(--m3d-gold); color: var(--m3d-gold-dark); }
 
 /* Take-off (unequip) button */
-.m3d-unequip{display:inline-flex;align-items:center;gap:5px;margin-left:auto;padding:6px 12px;border-radius:999px;border:1px solid rgba(220,38,38,.45);background:rgba(220,38,38,.08);color:#dc2626;font-size:12px;font-weight:600;cursor:pointer}
+.m3d-unequip{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:999px;border:1px solid rgba(220,38,38,.45);background:rgba(220,38,38,.08);color:#dc2626;font-size:12px;font-weight:600;cursor:pointer}
 .m3d-unequip:hover{background:rgba(220,38,38,.16)}
+/* NEW + discount tags */
+.m3d-promo { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.m3d-new-tag { padding: 2px 8px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 0.66rem; font-weight: 900; letter-spacing: 0.05em; }
+.m3d-off-tag { padding: 2px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 0.66rem; font-weight: 900; }
+.m3d-promo-price { font-size: 0.74rem; font-weight: 800; color: var(--m3d-gold-dark); }
+.m3d-promo-price s { color: #94a3b8; font-weight: 600; }

@@ -55,22 +55,56 @@ const formatSizes = (list) => {
     : idx.map(i => SIZE_OPTIONS[i]).join(', ');
 };
 
+// Kids' gowns are sized by age instead of S-XXL
+const KID_AGES = ['3-4y', '5-6y', '7-8y', '9-10y', '11-12y'];
+const isKidAudience = (a) => ['girls', 'boys', 'kids'].includes(a);
+const parseAges = (raw) => {
+  const t = String(raw || '').toLowerCase();
+  const found = KID_AGES.filter(a => t.includes(a));
+  if (found.length >= 2 && /\bto\b/.test(t)) {
+    const i = KID_AGES.indexOf(found[0]), j = KID_AGES.indexOf(found[found.length - 1]);
+    return KID_AGES.slice(Math.min(i, j), Math.max(i, j) + 1);
+  }
+  return found;
+};
+const formatAges = (list) => {
+  if (list.length === 0) return '';
+  const idx = list.map(x => KID_AGES.indexOf(x)).sort((a, b) => a - b);
+  const contiguous = idx.every((v, i) => i === 0 || v === idx[i - 1] + 1);
+  return contiguous && idx.length > 2
+    ? `${KID_AGES[idx[0]]} to ${KID_AGES[idx[idx.length - 1]]}`
+    : idx.map(i => KID_AGES[i]).join(', ');
+};
+
+// "NEW" badge: shown for NEW_DAYS after a gown is posted. Discount: optional, max 50%.
+const NEW_DAYS = 14;
+const MAX_DISCOUNT = 50;
+const DISCOUNT_QUICK = [0, 10, 20, 30, 50];
+const isNewGown = (g) => {
+  if (!g.is_posted) return false;
+  const t = new Date(g.posted_at || g.created_at).getTime();
+  return !!t && Date.now() - t < NEW_DAYS * 86400000;
+};
+const discountOf = (g) => Math.min(MAX_DISCOUNT, Math.max(0, Number(g.discount_percent) || 0));
+const finalPrice = (g) => Math.round(Number(g.price || 0) * (1 - discountOf(g) / 100));
+
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const emptyGownForm = {
-  type: 'gown', audience: 'women', name: '', price: '', stock: 1, size: '', category: 'Wedding',
+  type: 'gown', audience: 'women', name: '', price: '', stock: 1, size: '', category: 'Wedding', customCategory: '',
   desc: '', image: null,
   petticoat_layer: null,
   included_accessories: [],
   is_posted: false,
+  discount_percent: 0,
 };
 
 const emptyAccForm = { name: '', category: 'Others', price: '', swap_fee: '', stock: 1 };
 const emptyPettiForm = { layer: '', price: '', swap_fee: '' };
 
 const Inventory = () => {
-  const [activeTab, setActiveTab] = useState('gowns'); // 'gowns' | 'petticoats' | 'accessories'
+  const [activeTab, setActiveTab] = useState('gowns'); // 'gowns' | 'nophoto' | 'petticoats' | 'accessories'
 
   // Data
   const [gowns, setGowns]             = useState([]);
@@ -147,6 +181,12 @@ const Inventory = () => {
         <div className={`inv-post-badge ${gown.is_posted ? 'posted' : 'draft'}`}>
           {gown.is_posted ? '🌐 Posted' : '📝 Draft'}
         </div>
+        {(isNewGown(gown) || discountOf(gown) > 0) && (
+          <div className="inv-tag-stack">
+            {isNewGown(gown) && <span className="inv-new-tag">NEW</span>}
+            {discountOf(gown) > 0 && <span className="inv-off-tag">{discountOf(gown)}% OFF</span>}
+          </div>
+        )}
 
         <div className="inv-card-img">
           <img src={gown.image} alt={gown.name} />
@@ -156,7 +196,9 @@ const Inventory = () => {
         <div className="inv-card-body">
           <span className="inv-card-cat">{gown.type === 'suit' ? '🤵 ' : ''}{gown.category}</span>
           <h3 className="inv-card-name">{gown.name}</h3>
-          <p className="inv-card-price">{peso(gown.price)}</p>
+          <p className="inv-card-price">
+            {discountOf(gown) > 0 ? (<><s className="inv-old-price">{peso(gown.price)}</s> {peso(finalPrice(gown))}</>) : peso(gown.price)}
+          </p>
 
           <div className="inv-chips">
             {gown.petticoat_layer && (
@@ -210,7 +252,9 @@ const Inventory = () => {
           </div>
           <div className="inv-row-sub">
             <span>{gown.category}</span>
-            <b>{peso(gown.price)}</b>
+            <b>{discountOf(gown) > 0 ? peso(finalPrice(gown)) : peso(gown.price)}</b>
+            {isNewGown(gown) && <span className="inv-new-tag sm">NEW</span>}
+            {discountOf(gown) > 0 && <span className="inv-off-tag sm">{discountOf(gown)}% OFF</span>}
             {gown.petticoat_layer && (
               <span className="inv-chip chip-petticoat"><Layers size={10} /> L{gown.petticoat_layer}</span>
             )}
@@ -285,11 +329,13 @@ const Inventory = () => {
       type: gown.type || 'gown',
       audience: gown.audience || defaultAudience(gown.type),
       category: gown.category || 'Wedding',
+      customCategory: '',
       desc: gown.desc || '',
       image: gown.image || null,
       petticoat_layer: gown.petticoat_layer ?? null,
       included_accessories: gown.included_accessories || [],
       is_posted: gown.is_posted || false,
+      discount_percent: Number(gown.discount_percent) || 0,
     });
     setImageFile(null);
     setImagePreview(gown.image || null);
@@ -321,12 +367,15 @@ const Inventory = () => {
         price: Number(gownForm.price),
         stock: Number(gownForm.stock),
         size: gownForm.size,
-        category: gownForm.category,
+        category: (gownForm.category === 'Others' && gownForm.customCategory.trim()) ? gownForm.customCategory.trim() : gownForm.category,
         desc: gownForm.desc,
         image: imageUrl,
         petticoat_layer: gownForm.type === 'suit' ? null : gownForm.petticoat_layer,
         included_accessories: gownForm.included_accessories,
         is_posted: gownForm.is_posted,
+        discount_percent: Math.min(MAX_DISCOUNT, Math.max(0, Number(gownForm.discount_percent) || 0)),
+        // the NEW badge counts from the moment the gown is posted
+        ...(gownForm.is_posted && !editingGown?.is_posted ? { posted_at: new Date().toISOString() } : {}),
         status: Number(gownForm.stock) > 0 ? 'Available' : 'Out of Stock',
         type: gownForm.type || 'gown',
         audience: gownForm.audience || defaultAudience(gownForm.type),
@@ -364,7 +413,7 @@ const Inventory = () => {
       setGownForm(p => ({ ...p, is_posted: true }));
       return;
     }
-    const { error } = await supabase.from('gowns').update({ is_posted: next }).eq('id', gown.id);
+    const { error } = await supabase.from('gowns').update({ is_posted: next, ...(next ? { posted_at: new Date().toISOString() } : {}) }).eq('id', gown.id);
     if (error) { alert('Error: ' + error.message); return; }
     await logActivity('gown_edited', `${next ? 'Posted' : 'Unpublished'} gown: ${gown.name}`);
     fetchGowns();
@@ -538,7 +587,9 @@ const Inventory = () => {
   };
 
   // ── FILTERED ──
-  const filteredGowns = gowns.filter(g => {
+  const tabGowns = gowns.filter(g => (activeTab === 'nophoto' ? !g.image : !!g.image));
+  const customCats = [...new Set(gowns.map(g => g.category).filter(c => c && !ALL_CATEGORIES.includes(c)))].sort();
+  const filteredGowns = tabGowns.filter(g => {
     const matchSearch = g.name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchPosted =
       filterPosted === 'all'    ? true :
@@ -550,7 +601,7 @@ const Inventory = () => {
 
   // Ihap sa gowns kada category (para sa tabs)
   const categoryCount = (cat) =>
-    cat === 'All' ? gowns.length : gowns.filter(g => g.category === cat).length;
+    cat === 'All' ? tabGowns.length : tabGowns.filter(g => g.category === cat).length;
 
   // Accessory category pills (only categories that really exist)
   const presentCats = [...new Set(accessories.map(a => a.category).filter(Boolean))].sort((a, b) => {
@@ -570,8 +621,10 @@ const Inventory = () => {
   });
 
   // Gowns: with photo -> card, without photo -> compact row
-  const gownsWithPhoto = filteredGowns.filter(g => g.image);
-  const gownsNoPhoto   = filteredGowns.filter(g => !g.image);
+  const gownsWithPhoto = activeTab === 'gowns' ? filteredGowns : [];
+  const gownsNoPhoto   = activeTab === 'nophoto' ? filteredGowns : [];
+  const noPhotoTotal = gowns.filter(g => !g.image).length;
+  const withPhotoTotal = gowns.length - noPhotoTotal;
 
   // Accessory picker inside the gown modal
   const pickList = accessories.filter(a => {
@@ -620,8 +673,11 @@ const Inventory = () => {
 
         {/* ── TABS ── */}
         <div className="inv-tabs">
-          <button className={`inv-tab ${activeTab === 'gowns' ? 'active' : ''}`} onClick={() => setActiveTab('gowns')}>
-            👗 Gowns & Suits
+          <button className={`inv-tab ${activeTab === 'gowns' ? 'active' : ''}`} onClick={() => { setActiveTab('gowns'); setFilterCategory('All'); }}>
+            👗 Gowns & Suits <span className="inv-tab-count">{withPhotoTotal}</span>
+          </button>
+          <button className={`inv-tab ${activeTab === 'nophoto' ? 'active' : ''}`} onClick={() => { setActiveTab('nophoto'); setFilterCategory('All'); }}>
+            📷 No Photo <span className="inv-tab-count">{noPhotoTotal}</span>
           </button>
           <button className={`inv-tab ${activeTab === 'petticoats' ? 'active' : ''}`} onClick={() => setActiveTab('petticoats')}>
             🩱 Petticoats
@@ -632,7 +688,7 @@ const Inventory = () => {
         </div>
 
         {/* ════════ TAB: GOWNS ════════ */}
-        {activeTab === 'gowns' && (
+        {(activeTab === 'gowns' || activeTab === 'nophoto') && (
           <>
             <div className="inv-toolbar">
               <div className="inv-search">
@@ -655,7 +711,7 @@ const Inventory = () => {
 
             {/* Category tabs */}
             <div className="inv-cat-tabs" role="tablist" aria-label="Gown categories">
-              {['All', ...ALL_CATEGORIES].map(cat => (
+              {['All', ...ALL_CATEGORIES, ...customCats].map(cat => (
                 <button
                   key={cat}
                   type="button"
@@ -673,7 +729,9 @@ const Inventory = () => {
             {filteredGowns.length === 0 && (
               <div className="inv-grid">
                 <div className="inv-empty">
-                  {filterCategory === 'All' ? 'No gowns found.' : `No ${filterCategory} items found.`}
+                  {filterCategory === 'All'
+                    ? (activeTab === 'nophoto' ? 'Every gown has a photo. 🎉' : 'No gowns found.')
+                    : `No ${filterCategory} items found.`}
                 </div>
               </div>
             )}
@@ -687,7 +745,7 @@ const Inventory = () => {
             {gownsNoPhoto.length > 0 && (
               <>
                 <div className="inv-section-bar">
-                  <span>📷 No photo yet <b>{gownsNoPhoto.length}</b></span>
+                  <span>📷 Gowns without a photo <b>{gownsNoPhoto.length}</b></span>
                   <small>Add a photo to post these to the public catalog.</small>
                 </div>
                 <div className="inv-row-grid">
@@ -850,34 +908,55 @@ const Inventory = () => {
                         onChange={e => setGownForm(p => ({ ...p, stock: e.target.value }))} />
                     </div>
                     <div className="inv-field">
-                      <label>Size (multiple allowed)</label>
+                      <label>{isKidAudience(gownForm.audience) ? 'Age (multiple allowed)' : 'Size (multiple allowed)'}</label>
                       <input type="text" value={gownForm.size || 'Pick below'} readOnly />
                     </div>
                   </div>
 
                   <div className="inv-field">
-                    <label>Sizes this gown fits</label>
+                    <label>{isKidAudience(gownForm.audience) ? 'Ages this gown fits' : 'Sizes this gown fits'}</label>
                     <div className="inv-petticoat-btns">
-                      {SIZE_OPTIONS.map(sz => {
-                        const picked = parseSizes(gownForm.size);
-                        const on = picked.includes(sz);
-                        return (
-                          <button
-                            key={sz}
-                            type="button"
-                            className={`inv-layer-btn ${on ? 'active' : ''}`}
-                            onClick={() => setGownForm(p => {
-                              const cur = parseSizes(p.size);
-                              const next = cur.includes(sz) ? cur.filter(x => x !== sz) : [...cur, sz];
-                              return { ...p, size: formatSizes(next) };
-                            })}
-                          >
-                            {sz}
-                          </button>
-                        );
-                      })}
+                      {isKidAudience(gownForm.audience)
+                        ? KID_AGES.map(ag => {
+                            const on = parseAges(gownForm.size).includes(ag);
+                            return (
+                              <button
+                                key={ag}
+                                type="button"
+                                className={`inv-layer-btn ${on ? 'active' : ''}`}
+                                onClick={() => setGownForm(p => {
+                                  const cur = parseAges(p.size);
+                                  const next = cur.includes(ag) ? cur.filter(x => x !== ag) : [...cur, ag];
+                                  return { ...p, size: formatAges(next) };
+                                })}
+                              >
+                                {ag}
+                              </button>
+                            );
+                          })
+                        : SIZE_OPTIONS.map(sz => {
+                            const on = parseSizes(gownForm.size).includes(sz);
+                            return (
+                              <button
+                                key={sz}
+                                type="button"
+                                className={`inv-layer-btn ${on ? 'active' : ''}`}
+                                onClick={() => setGownForm(p => {
+                                  const cur = parseSizes(p.size);
+                                  const next = cur.includes(sz) ? cur.filter(x => x !== sz) : [...cur, sz];
+                                  return { ...p, size: formatSizes(next) };
+                                })}
+                              >
+                                {sz}
+                              </button>
+                            );
+                          })}
                     </div>
-                    <p className="inv-post-desc">Example: pick M, L and XL if the gown fits Medium to Extra Large.</p>
+                    <p className="inv-post-desc">
+                      {isKidAudience(gownForm.audience)
+                        ? 'Kids are sized by age. Example: pick 5-6y and 7-8y. The 3D Mannequin only lets those ages wear it.'
+                        : 'Example: pick M, L and XL if the gown fits Medium to Extra Large.'}
+                    </p>
                   </div>
 
                   <div className="inv-field">
@@ -909,7 +988,7 @@ const Inventory = () => {
                           key={v}
                           type="button"
                           className={`inv-layer-btn ${gownForm.audience === v ? 'active' : ''}`}
-                          onClick={() => setGownForm(p => ({ ...p, audience: v }))}
+                          onClick={() => setGownForm(p => ({ ...p, audience: v, size: isKidAudience(v) !== isKidAudience(p.audience) ? '' : p.size }))}
                         >
                           {label}
                         </button>
@@ -920,9 +999,17 @@ const Inventory = () => {
 
                   <div className="inv-field">
                     <label>Category</label>
-                    <select value={gownForm.category} onChange={e => setGownForm(p => ({ ...p, category: e.target.value }))}>
-                      {catsFor(gownForm.type).map(c => <option key={c} value={c}>{c}</option>)}
+                    <select value={gownForm.category} onChange={e => setGownForm(p => ({ ...p, category: e.target.value, customCategory: '' }))}>
+                      {[...catsFor(gownForm.type).filter(c => c !== 'Others'), ...customCats, 'Others'].map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
+                    {gownForm.category === 'Others' && (
+                      <input
+                        type="text"
+                        placeholder="Type a new category name (optional), e.g. Prom, Graduation"
+                        value={gownForm.customCategory}
+                        onChange={e => setGownForm(p => ({ ...p, customCategory: e.target.value }))}
+                      />
+                    )}
                   </div>
 
                   <div className="inv-field">
@@ -1010,6 +1097,36 @@ const Inventory = () => {
                       </div>
                     </>
                   )}
+                </div>
+
+                {/* Discount (optional) */}
+                <div className="inv-form-section">
+                  <h4 className="inv-section-title">🏷️ Discount (optional)</h4>
+                  <div className="inv-petticoat-btns">
+                    {DISCOUNT_QUICK.map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        className={`inv-layer-btn ${Number(gownForm.discount_percent) === d ? 'active' : ''}`}
+                        onClick={() => setGownForm(p => ({ ...p, discount_percent: d }))}
+                      >
+                        {d === 0 ? 'None' : `${d}% off`}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="inv-field" style={{ marginTop: 10 }}>
+                    <label>Custom % (max {MAX_DISCOUNT})</label>
+                    <input
+                      type="number" min="0" max={MAX_DISCOUNT} value={gownForm.discount_percent}
+                      onChange={e => setGownForm(p => ({ ...p, discount_percent: e.target.value }))}
+                    />
+                  </div>
+                  {Number(gownForm.discount_percent) > 0 && Number(gownForm.price) > 0 && (
+                    <p className="inv-post-desc">
+                      Customers pay {peso(Math.round(Number(gownForm.price) * (1 - Math.min(MAX_DISCOUNT, Number(gownForm.discount_percent)) / 100)))} instead of {peso(gownForm.price)}.
+                    </p>
+                  )}
+                  <p className="inv-post-desc">The NEW badge shows automatically for {NEW_DAYS} days after you post the gown.</p>
                 </div>
 
                 {/* Package summary */}

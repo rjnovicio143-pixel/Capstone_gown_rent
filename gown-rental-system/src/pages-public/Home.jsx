@@ -4,6 +4,14 @@ import { ChevronLeft, ChevronRight, Calendar, ArrowRight, Tag, Sparkles } from '
 import { supabase } from '../supabaseClient';
 import '../styles-public/Home.css';
 
+// NEW badge lasts NEW_DAYS after posting; discount is set by the admin (max 50%)
+const NEW_DAYS = 14;
+const isNewGown = (g) => {
+  const t = new Date(g.posted_at || g.created_at).getTime();
+  return !!t && Date.now() - t < NEW_DAYS * 86400000;
+};
+const discountOf = (g) => Math.min(50, Math.max(0, Number(g.discount_percent) || 0));
+
 const Home = () => {
   const navigate = useNavigate();
   const [topGowns, setTopGowns]         = useState([]);
@@ -16,13 +24,13 @@ const Home = () => {
     const fetchGowns = async () => {
       const { data: top } = await supabase
         .from('gowns')
-        .select('id, name, category, desc, size, image, stock')
+        .select('id, name, category, desc, size, image, stock, posted_at, created_at, discount_percent')
         .eq('is_posted', true).gt('price', 0)
         .order('price', { ascending: false }).limit(3);
 
       const { data: all } = await supabase
         .from('gowns')
-        .select('id, name, category, image, stock, size')
+        .select('id, name, category, image, stock, size, posted_at, created_at, discount_percent')
         .eq('is_posted', true).gt('price', 0)
         .order('created_at', { ascending: false }).limit(8);
 
@@ -77,6 +85,8 @@ const Home = () => {
               {/* Badges */}
               <div className="hp-card-badges">
                 <span className="hp-badge-feat"><Sparkles size={11} /> Featured</span>
+                {isNewGown(g) && <span className="hp-new-tag">NEW</span>}
+                {discountOf(g) > 0 && <span className="hp-off-tag">{discountOf(g)}% OFF</span>}
               </div>
 
               {/* Info + button */}
@@ -172,6 +182,12 @@ const Home = () => {
                     ? <img src={gown.image} alt={gown.name} />
                     : <div className="hp-gown-noimg">👗</div>
                   }
+                  {(isNewGown(gown) || discountOf(gown) > 0) && (
+                    <div className="hp-promo-stack">
+                      {isNewGown(gown) && <span className="hp-new-tag">NEW</span>}
+                      {discountOf(gown) > 0 && <span className="hp-off-tag">{discountOf(gown)}% OFF</span>}
+                    </div>
+                  )}
                   <span className={`hp-avail ${gown.stock > 0 ? 'in' : 'out'}`}>
                     {gown.stock > 0 ? 'Available' : 'Rented'}
                   </span>

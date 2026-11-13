@@ -9,6 +9,15 @@ import { supabase } from '../supabaseClient';
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 
+// NEW badge lasts NEW_DAYS after posting; discount is set by the admin (max 50%)
+const NEW_DAYS = 14;
+const isNewGown = (g) => {
+  const t = new Date(g.posted_at || g.created_at).getTime();
+  return !!t && Date.now() - t < NEW_DAYS * 86400000;
+};
+const discountOf = (g) => Math.min(50, Math.max(0, Number(g.discount_percent) || 0));
+const finalPrice = (g) => Math.round(Number(g.price || 0) * (1 - discountOf(g) / 100));
+
 const PKG_TAB = 'Wedding Packages';   // name of the category tab that shows the wedding packages
 
 // jsonb columns can come back as an array, a JSON string or null: always give back an array
@@ -72,7 +81,7 @@ const GownSuit = () => {
       const [gRes, pRes, aRes, wRes] = await Promise.all([
         supabase
           .from('gowns')
-          .select('id, name, price, stock, category, desc, size, image, status, petticoat_layer, included_accessories')
+          .select('id, name, price, stock, category, desc, size, image, status, petticoat_layer, included_accessories, posted_at, created_at, discount_percent')
           .eq('is_posted', true) // only posted gowns are visible to customers
           .gt('price', 0)
           .order('created_at', { ascending: false }),
@@ -173,7 +182,9 @@ const GownSuit = () => {
         gown: {
           id: gown.id,
           name: gown.name,
-          price: gown.price,
+          price: finalPrice(gown),
+          originalPrice: gown.price,
+          discount: discountOf(gown),
           image: gown.image,
           category: gown.category,
           size: gown.size,
@@ -203,8 +214,8 @@ const GownSuit = () => {
       return matchCat && matchSearch && matchStock;
     })
     .sort((a, b) => {
-      if (sortBy === 'low-high') return a.price - b.price;
-      if (sortBy === 'high-low') return b.price - a.price;
+      if (sortBy === 'low-high') return finalPrice(a) - finalPrice(b);
+      if (sortBy === 'high-low') return finalPrice(b) - finalPrice(a);
       return 0;
     });
 
@@ -402,6 +413,12 @@ const GownSuit = () => {
                     ? <img src={item.image} alt={item.name} loading="lazy" />
                     : <div className="gs-no-img">👗</div>
                   }
+                  {(isNewGown(item) || discountOf(item) > 0) && (
+                    <div className="gs-promo-stack">
+                      {isNewGown(item) && <span className="gs-new-tag">NEW</span>}
+                      {discountOf(item) > 0 && <span className="gs-off-tag">{discountOf(item)}% OFF</span>}
+                    </div>
+                  )}
                   <button
                     className={`gs-like ${wishlist.includes(item.id) ? 'gs-liked' : ''}`}
                     onClick={e => toggleWishlist(e, item.id)}
@@ -488,8 +505,16 @@ const GownSuit = () => {
 
                 <h2 className="gs-modal-name">{selectedGown.name}</h2>
 
+                {(isNewGown(selectedGown) || discountOf(selectedGown) > 0) && (
+                  <div className="gs-promo-row">
+                    {isNewGown(selectedGown) && <span className="gs-new-tag">NEW</span>}
+                    {discountOf(selectedGown) > 0 && <span className="gs-off-tag">{discountOf(selectedGown)}% OFF</span>}
+                  </div>
+                )}
+
                 <div className="gs-modal-price">
-                  {peso(selectedGown.price)}
+                  {discountOf(selectedGown) > 0 && <s className="gs-old-price">{peso(selectedGown.price)}</s>}
+                  {peso(finalPrice(selectedGown))}
                   <span className="gs-modal-per"> / rental period</span>
                 </div>
 

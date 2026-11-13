@@ -536,3 +536,10 @@
   .hp-card-shell  { height: 210px; }
   .hp-gown-img    { height: 140px; }
 }
+
+/* NEW + discount tags */
+.hp-gown-img { position: relative; }
+.hp-promo-stack { position: absolute; top: 8px; left: 8px; z-index: 3; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.hp-new-tag { padding: 3px 10px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 10px; font-weight: 900; letter-spacing: .06em; box-shadow: 0 2px 8px rgba(239,68,68,.4); }
+.hp-off-tag { padding: 3px 10px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 10px; font-weight: 900; }
+.hp-card-badges { display: flex; flex-wrap: wrap; gap: 6px; }

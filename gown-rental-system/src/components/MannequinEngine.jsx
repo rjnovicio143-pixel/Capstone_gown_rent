@@ -188,15 +188,19 @@ function gownProfileInner(root, body, length) {
    gidugang ibabaw sa auto-fit, mao nga parehas ang posisyon sa tanang customer.
    s = gidak-on (1 = sama), y = pataas / paubos (metros), w = lapad, d = gibag-on
    ---------------------------------------------------------- */
-export const DEFAULT_TWEAK = { s: 1, y: 0, w: 1, d: 1 };
+export const DEFAULT_TWEAK = { s: 1, y: 0, w: 1, d: 1, exact: false };
 export const parseTweak = (v) => {
   const n = (x, def) => (Number.isFinite(Number(x)) && x !== null && x !== '' ? Number(x) : def);
   const o = v && typeof v === 'object' ? v : {};
-  return { s: n(o.s, 1), y: n(o.y, 0), w: n(o.w, 1), d: n(o.d, 1) };
+  return { s: n(o.s, 1), y: n(o.y, 0), w: n(o.w, 1), d: n(o.d, 1), exact: !!o.exact };
 };
 
 // Kuhaon ang scale + position sa gown aron mo-fit sa avatar (paspas, mahimo matag slide)
 function gownFit(profile, body, looseness, tweak) {
+  // EXACT: ang gown gi-butang na sa Blender sa ibabaw sa mannequin -> gamiton ang iyang posisyon sa Blender, walay auto-fit
+  if (tweak?.exact && body?.ok) {
+    return { scale: [tweak.s * tweak.w, tweak.s, tweak.s * tweak.d], position: [0, tweak.y, 0] };
+  }
   const identity = { scale: [1, 1, 1], position: [0, 0, 0] };
   if (!profile || !body?.ok) return identity;
   const { box, s, rows } = profile;
@@ -483,7 +487,7 @@ function FittedGown({ modelPath, body, looseness, length, tweak }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scene, body.ok, body.height, body.minY, body.coverTop, ysKey, length]
   );
-  const tw = useMemo(() => parseTweak(tweak), [tweak?.s, tweak?.y, tweak?.w, tweak?.d]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tw = useMemo(() => parseTweak(tweak), [tweak?.s, tweak?.y, tweak?.w, tweak?.d, tweak?.exact]); // eslint-disable-line react-hooks/exhaustive-deps
   const fit = useMemo(() => gownFit(profile, body, looseness, tw), [profile, body, looseness, tw]);
 
   // Kada gown naay kaugalingon nga geometry (dili mausab ang gi-cache nga original)
@@ -601,6 +605,21 @@ export const parseGownSizes = (raw) => {
     return SIZE_ORDER.slice(lo, hi + 1);
   }
   return SIZE_ORDER.filter((_, i) => idx.includes(i));
+};
+
+// Kids' gowns are sized by age: "3-4y, 5-6y" or "3-4y to 7-8y" -> ['3-4y','5-6y','7-8y'] (null if no ages found)
+export const KID_AGE_LABELS = ['3-4y', '5-6y', '7-8y', '9-10y', '11-12y'];
+export const parseKidAges = (raw) => {
+  if (!raw) return null;
+  const t = String(raw).toLowerCase();
+  const found = KID_AGE_LABELS.filter((l) => t.includes(l));
+  if (!found.length) return null;
+  if (/\bto\b|~|…|\.\.\./.test(t) && found.length >= 2) {
+    const a = KID_AGE_LABELS.indexOf(found[0]);
+    const b = KID_AGE_LABELS.indexOf(found[found.length - 1]);
+    return KID_AGE_LABELS.slice(Math.min(a, b), Math.max(a, b) + 1);
+  }
+  return found;
 };
 
 // Libut sa lawas (chest + waist + hip, metros) sumala sa build ug scale. Gamiton para sa "pwede ba ma-sout ang gown".

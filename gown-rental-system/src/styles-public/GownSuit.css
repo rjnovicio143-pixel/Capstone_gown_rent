@@ -866,3 +866,11 @@
 .gs-pkgc-motif i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.15); flex-shrink: 0; }
 .gs-pkgc-dates li.gs-pkgc-more { justify-content: center; border: none; background: none; color: #94a3b8; }
 .gs-pkgc-full { color: #b91c1c; font-weight: 800; }
+
+/* NEW + discount tags */
+.gs-card-img, .gs-modal-img { position: relative; }
+.gs-promo-stack { position: absolute; top: 10px; left: 10px; z-index: 3; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.gs-promo-row { display: flex; gap: 6px; margin: 0 0 8px; }
+.gs-new-tag { padding: 3px 10px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 10.5px; font-weight: 900; letter-spacing: .06em; box-shadow: 0 2px 8px rgba(239,68,68,.4); }
+.gs-off-tag { padding: 3px 10px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 10.5px; font-weight: 900; }
+.gs-old-price { color: #94a3b8; font-weight: 600; font-size: .7em; margin-right: 8px; }

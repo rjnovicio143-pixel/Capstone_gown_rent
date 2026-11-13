@@ -8,7 +8,7 @@ import {
 import { supabase } from '../supabaseClient';
 import {
   Scene, CATEGORIES, sizesFor, defaultSizeFor, makeBuild, parseGownSizes, checkSizeFit,
-  audienceOf, audienceFits, AUDIENCE_LABEL, parseTweak,
+  audienceOf, audienceFits, AUDIENCE_LABEL, parseTweak, parseKidAges,
 } from '../components/MannequinEngine';
 import '../styles-public/Mannequin3D.css';
 
@@ -72,9 +72,11 @@ const mapGown = (row) => ({
   name: row.name,
   category: row.category || 'Others',
   price: row.price,
+  discount: Math.min(50, Math.max(0, Number(row.discount_percent) || 0)),
+  isNew: !!row.is_posted && !!(row.posted_at || row.created_at) && Date.now() - new Date(row.posted_at || row.created_at).getTime() < 14 * 86400000,
   thumbnail: row.image,
   modelPath: resolveModelUrl(row.model_path),
-  sizes: parseGownSizes(row.size) || (row.size ? [row.size] : []),
+  sizes: parseKidAges(row.size) || parseGownSizes(row.size) || (row.size ? [row.size] : []),
   type: row.type,
   audience: row.audience || '',
   stock: Number(row.stock) || 0,
@@ -244,7 +246,7 @@ const Mannequin3D = () => {
   // Accessories that are not part of the gown package are charged as extras
   const chargedAccessories = wornAccessories.filter(a => !includedIds.includes(a.id));
   const extrasTotal = chargedAccessories.reduce((sum, a) => sum + a.price, 0);
-  const gownPrice = Number(selectedGown.price) || 0;
+  const gownPrice = Math.round((Number(selectedGown.price) || 0) * (1 - (selectedGown.discount || 0) / 100));
 
   const toggleAccessory = (id) =>
     setWornIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
@@ -285,11 +287,17 @@ const Mannequin3D = () => {
     () => (category.kids || selectedGown.isExample ? null : parseGownSizes(selectedGown.sizes?.join(', '))),
     [category.kids, selectedGown]
   );
+  // Kids: the gown is sized by age (set in Inventory), so the avatar's age must be inside that range
+  const kidAges = useMemo(
+    () => (category.kids && !selectedGown.isExample ? parseKidAges(selectedGown.sizes?.join(', ')) : null),
+    [category.kids, selectedGown]
+  );
+  const ageOk = !kidAges || kidAges.includes(selectedSize);
   const sizeCheck = useMemo(
     () => checkSizeFit(bodyRaw, build, gownSizes, adjust.waist * modelScale, adjust.chest * modelScale),
     [bodyRaw, build, gownSizes, adjust.waist, adjust.chest, modelScale]
   );
-  const canWear = audienceOk && (!sizeCheck || sizeCheck.ok);
+  const canWear = audienceOk && ageOk && (!sizeCheck || sizeCheck.ok);
 
   // Selecting a gown loads its package, switches to the matching avatar, and brings the 3D view into sight on small screens
   const handleSelectGown = (gown) => {
@@ -304,7 +312,7 @@ const Mannequin3D = () => {
       cat = CATEGORIES.find(c => audienceFits(audienceOf(gown), c)) || category;
       setCategoryId(cat.id);
     }
-    const allowed = cat.kids || gown.isExample ? null : parseGownSizes(gown.sizes?.join(', '));
+    const allowed = gown.isExample ? null : (cat.kids ? parseKidAges(gown.sizes?.join(', ')) : parseGownSizes(gown.sizes?.join(', ')));
     const curSize = cat === category ? selectedSize : defaultSizeFor(cat);
     if (allowed && !allowed.includes(curSize)) applyPreset(cat, allowed[0]);
     else if (cat !== category) applyPreset(cat, defaultSizeFor(cat));
@@ -321,7 +329,9 @@ const Mannequin3D = () => {
         gown: {
           id: selectedGown.id,
           name: selectedGown.name,
-          price: selectedGown.price,
+          price: gownPrice,
+          originalPrice: selectedGown.price,
+          discount: selectedGown.discount || 0,
           image: selectedGown.thumbnail,
           category: selectedGown.category,
           size: selectedGown.sizes?.includes(selectedSize) ? selectedSize : (selectedGown.sizes?.[0] || ''),
@@ -374,7 +384,7 @@ const Mannequin3D = () => {
                   <button
                     key={p.label}
                     className={`m3d-preset-btn ${selectedSize === p.label ? 'active' : ''}`}
-                    style={gownSizes && !gownSizes.includes(p.label) && selectedSize !== p.label ? { opacity: 0.45 } : undefined}
+                    style={(gownSizes || kidAges) && !(gownSizes || kidAges).includes(p.label) && selectedSize !== p.label ? { opacity: 0.45 } : undefined}
                     onClick={() => handleSizeChange(p.label)}
                   >
                     {p.label}
@@ -387,7 +397,7 @@ const Mannequin3D = () => {
               <h3><Ruler size={17} /> Arms</h3>
               <p className="m3d-subtitle">Move the arms away from the gown, or hide them.</p>
               <div className="m3d-seg">
-                {[['down', 'Down'], ['away', 'Away'], ['tpose', 'T-pose'], ['hide', 'Hide']].map(([id, label]) => (
+                {[['down', 'Down'], ['away', 'Away'], ['hide', 'Hide']].map(([id, label]) => (
                   <button key={id} type="button" className={arms === id ? 'active' : ''} onClick={() => setArms(id)}>
                     {label}
                   </button>
@@ -481,6 +491,15 @@ const Mannequin3D = () => {
                     {bgMode === 'dark' ? 'Light' : 'Dark'}
                   </button>
                   {wearing && (
+                    <button
+                      type="button"
+                      className="m3d-unequip"
+                      onClick={() => { setWearing(false); setWornIds([]); }}
+                    >
+                      <X size={13} /> Take off
+                    </button>
+                  )}
+                  {wearing && (
                     <span className={`m3d-status ${canWear ? 'ok' : 'no'}`}>
                       {canWear ? <><Check size={12} /> Fits</> : <><X size={12} /> Can't wear</>}
                     </span>
@@ -529,7 +548,12 @@ const Mannequin3D = () => {
                     <Info size={14} /> This is for {AUDIENCE_LABEL[audienceOf(selectedGown)]}. Choose the matching avatar to try it on.
                   </div>
                 )}
-                {wearing && audienceOk && sizeCheck && !sizeCheck.ok && (
+                {wearing && audienceOk && !ageOk && (
+                  <div className="m3d-notice warn">
+                    <Info size={14} /> This gown is for ages {kidAges.join(' / ')}. The avatar is {selectedSize}, so it cannot be worn. Pick a matching age.
+                  </div>
+                )}
+                {wearing && audienceOk && ageOk && sizeCheck && !sizeCheck.ok && (
                   <div className="m3d-notice warn">
                     <Info size={14} /> This gown comes in {gownSizes.join(' / ')}. The avatar is about {sizeCheck.now}, so it cannot be worn. Pick a matching size.
                   </div>
@@ -547,13 +571,6 @@ const Mannequin3D = () => {
                 {wearing ? (
                   <>
                     <span className="m3d-current">{selectedGown.name}</span>
-                    <button
-                      type="button"
-                      className="m3d-unequip"
-                      onClick={() => { setWearing(false); setWornIds([]); }}
-                    >
-                      <X size={13} /> Take off
-                    </button>
                   </>
                 ) : (
                   <span className="m3d-current">No gown · pick one below</span>
@@ -677,6 +694,13 @@ const Mannequin3D = () => {
                     </span>
                     <span className="m3d-gown-info">
                       <strong>{gown.name}</strong>
+                      {!gown.isExample && (gown.isNew || gown.discount > 0) && (
+                        <span className="m3d-promo">
+                          {gown.isNew && <span className="m3d-new-tag">NEW</span>}
+                          {gown.discount > 0 && <span className="m3d-off-tag">{gown.discount}% OFF</span>}
+                          {gown.discount > 0 && <span className="m3d-promo-price"><s>{peso(gown.price)}</s> {peso(Math.round(gown.price * (1 - gown.discount / 100)))}</span>}
+                        </span>
+                      )}
                       <span className="m3d-sizes">
                         {gown.sizes.map(s => <span key={s} className="m3d-size-badge">{s}</span>)}
                         {!gown.isExample && <span className="m3d-example-badge">{AUDIENCE_LABEL[audienceOf(gown)]}</span>}

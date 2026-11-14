@@ -870,3 +870,24 @@
 .inv-off-tag { padding: 3px 10px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 10px; font-weight: 900; }
 .inv-new-tag.sm, .inv-off-tag.sm { padding: 1px 7px; font-size: 9px; box-shadow: none; }
 .inv-old-price { color: #94a3b8; font-weight: 600; font-size: 13px; margin-right: 4px; }
+
+/* =========================================
+   Excel export button + accessory icons
+========================================= */
+.inv-export-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 18px;
+  background: #16a34a; color: #fff;
+  border: none; border-radius: 12px;
+  font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(22,163,74,0.3);
+  transition: transform 0.2s, opacity 0.2s;
+}
+.inv-export-btn:hover { transform: translateY(-1px); opacity: 0.92; }
+.inv-export-btn svg { flex-shrink: 0; }
+.inv-toolbar .inv-export-btn { margin-left: auto; }
+.inv-toolbar .inv-export-btn + .inv-add-btn { margin-left: 0; }
+
+.acc-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; background: #fefce8; font-size: 18px; flex-shrink: 0; }
+.inv-chip-ico { font-size: 11px; line-height: 1; }
+.inv-cat-tab .inv-chip-ico { font-size: 14px; }

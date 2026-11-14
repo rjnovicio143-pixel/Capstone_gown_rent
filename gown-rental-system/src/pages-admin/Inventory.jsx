@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import {
   Search, PlusCircle, X, Upload, Package, AlertCircle,
   Trash2, Edit, Camera, Eye, EyeOff,
-  Crown, Layers, ShoppingBag, Globe
+  Crown, Layers, ShoppingBag, Globe, FileSpreadsheet
 } from 'lucide-react';
 import '../styles/Inventory.css';
 import Header from '../components/Header';
 import { supabase } from '../supabaseClient';
 import { logActivity } from '../utils/activityLogger';
+import { downloadXlsx } from '../utils/exportXlsx';
 
 const GOWN_CATEGORIES = ['Wedding', 'Debut', 'Formal', 'Ball Gown', 'Others'];
 const SUIT_CATEGORIES = ['Wedding', 'Barong', 'Formal', 'Others'];
@@ -22,6 +23,14 @@ const ACC_CATEGORIES = [
 // Who wears the item (the 3D Mannequin page only lets the matching avatar wear it)
 const AUDIENCES = [['women', 'Women'], ['men', 'Men'], ['girls', 'Girls'], ['boys', 'Boys'], ['kids', 'Kids (girl or boy)']];
 const defaultAudience = (type) => (type === 'suit' ? 'men' : 'women');
+// One icon per accessory category, so they are easy to tell apart
+const ACC_ICONS = {
+  'Crown': '👑', 'Hairdressed': '💇', 'Basket': '🧺', 'Veil': '👰', 'Couple Cord': '🪢', 'Pillow': '🛏️',
+  'Suspender': '🩲', 'Bowtie': '🎀', 'Necktie': '👔', 'Vest': '🦺',
+  'Filipina Sleeve': '👘', 'Shawl / Alampay': '🧣', 'Bolero': '🧥', 'Kimono': '🥋',
+  'Necklace': '📿', 'Earrings': '💎', 'Gloves': '🧤', 'Others': '🎁',
+};
+const accIcon = (cat) => ACC_ICONS[cat] || '🏷️';   // custom categories get a tag icon
 const LOW_STOCK = 2; // pila na lang = "low stock"
 
 // Gown sizes: one or many (e.g. M to XL), saved as text in the "size" column.
@@ -100,7 +109,7 @@ const emptyGownForm = {
   discount_percent: 0,
 };
 
-const emptyAccForm = { name: '', category: 'Others', price: '', swap_fee: '', stock: 1 };
+const emptyAccForm = { name: '', category: 'Others', customCategory: '', price: '', swap_fee: '', stock: 1 };
 const emptyPettiForm = { layer: '', price: '', swap_fee: '' };
 
 const Inventory = () => {
@@ -169,6 +178,7 @@ const Inventory = () => {
   }, [gownModalOpen]);
 
   // ── HELPERS ──
+  const accCategory = (id) => accessories.find(a => a.id === id)?.category;
   const accName = (id) => accessories.find(a => a.id === id)?.name || `#${id}`;
   const pettiByLayer = (layer) => petticoats.find(p => Number(p.layer) === Number(layer));
   const itemEmoji = (g) => (g.type === 'suit' ? '🤵' : '👗');
@@ -209,7 +219,7 @@ const Inventory = () => {
             )}
             {(gown.included_accessories || []).map(id => (
               <span key={id} className="inv-chip chip-acc">
-                <Crown size={11} /> {accName(id)}
+                <span className="inv-chip-ico">{accIcon(accCategory(id))}</span> {accName(id)}
               </span>
             ))}
             {!gown.petticoat_layer && (gown.included_accessories || []).length === 0 && (
@@ -259,7 +269,7 @@ const Inventory = () => {
               <span className="inv-chip chip-petticoat"><Layers size={10} /> L{gown.petticoat_layer}</span>
             )}
             {shown.map(id => (
-              <span key={id} className="inv-chip chip-acc"><Crown size={10} /> {accName(id)}</span>
+              <span key={id} className="inv-chip chip-acc"><span className="inv-chip-ico">{accIcon(accCategory(id))}</span> {accName(id)}</span>
             ))}
             {extra > 0 && <span className="inv-chip chip-none">+{extra}</span>}
           </div>
@@ -515,6 +525,7 @@ const Inventory = () => {
     setAccForm({
       name: acc.name,
       category: acc.category || 'Others',
+      customCategory: '',
       price: acc.price ?? '',
       swap_fee: acc.swap_fee ?? '',
       stock: acc.stock ?? 0,
@@ -528,7 +539,7 @@ const Inventory = () => {
     try {
       const payload = {
         name: accForm.name.trim(),
-        category: accForm.category,
+        category: (accForm.category === 'Others' && accForm.customCategory.trim()) ? accForm.customCategory.trim() : accForm.category,
         price: Number(accForm.price) || 0,
         swap_fee: Number(accForm.swap_fee) || 0,
         stock: Math.max(0, Number(accForm.stock) || 0),
@@ -609,6 +620,7 @@ const Inventory = () => {
     const ib = ACC_CATEGORIES.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
+  const customAccCats = presentCats.filter(c => !ACC_CATEGORIES.includes(c));
   const accCatList = ['All', ...presentCats];
   const accCatSel  = accCatList.includes(accCat) ? accCat : 'All';
   const accCatCount = (c) => (c === 'All' ? accessories.length : accessories.filter(a => a.category === c).length);
@@ -631,6 +643,34 @@ const Inventory = () => {
     const t = pickSearch.trim().toLowerCase();
     return !t || a.name?.toLowerCase().includes(t) || a.category?.toLowerCase().includes(t);
   });
+
+  // ── EXPORT TO EXCEL (text only, no photos) ──
+  const stamp = new Date().toISOString().slice(0, 10);
+  const exportExcel = () => {
+    if (activeTab === 'petticoats') {
+      downloadXlsx(`petticoats-${stamp}.xlsx`, 'Petticoats',
+        ['Layer', 'Price (₱)', 'Swap fee (₱)', 'Used by gowns'],
+        petticoats.map(p => [Number(p.layer), Number(p.price) || 0, Number(p.swap_fee) || 0, gowns.filter(g => Number(g.petticoat_layer) === Number(p.layer)).length]));
+    } else if (activeTab === 'accessories') {
+      downloadXlsx(`accessories-${stamp}.xlsx`, 'Accessories',
+        ['Name', 'Category', 'Price (₱)', 'Swap fee (₱)', 'Stock (pcs)', 'Used by gowns'],
+        accessories.map(a => [a.name, a.category, Number(a.price) || 0, Number(a.swap_fee) || 0, Number(a.stock) || 0,
+          gowns.filter(g => (g.included_accessories || []).includes(a.id)).length]));
+    } else {
+      const audLabel = Object.fromEntries(AUDIENCES);
+      downloadXlsx(`gowns-and-suits-${stamp}.xlsx`, 'Gowns & Suits',
+        ['Name', 'Type', 'Category', 'Who wears it', 'Sizes / Ages', 'Price (₱)', 'Discount (%)', 'Price after discount (₱)', 'Stock', 'Status', 'Posted', 'Petticoat layer', 'Included accessories', 'Description'],
+        gowns.map(g => [
+          g.name, g.type === 'suit' ? "Men's suit" : 'Gown', g.category,
+          audLabel[g.audience || defaultAudience(g.type)] || '', g.size || '',
+          Number(g.price) || 0, discountOf(g), finalPrice(g), Number(g.stock) || 0,
+          Number(g.stock) > 0 ? 'Available' : 'Out of stock', g.is_posted ? 'Posted' : 'Draft',
+          g.petticoat_layer ? `Layer ${g.petticoat_layer}` : '',
+          (g.included_accessories || []).map(accName).join(', '), g.desc || '',
+        ]));
+    }
+  };
+  const exportLabel = activeTab === 'petticoats' ? 'Export Petticoats' : activeTab === 'accessories' ? 'Export Accessories' : 'Export to Excel';
 
   // ── STATS ──
   const totalGowns  = gowns.length;
@@ -704,6 +744,9 @@ const Inventory = () => {
                 ))}
               </div>
 
+              <button className="inv-export-btn" onClick={exportExcel} title="Download all gowns and suits as an Excel file (no photos)">
+                <FileSpreadsheet size={18} /> {exportLabel}
+              </button>
               <button className="inv-add-btn" onClick={openAddGown}>
                 <PlusCircle size={18} /> Add Gown
               </button>
@@ -763,6 +806,9 @@ const Inventory = () => {
               <p className="inv-tab-note">
                 Petticoat layers. These appear in the gown package and in Customers (New Rental / Swap).
               </p>
+              <button className="inv-export-btn" onClick={exportExcel} title="Download as an Excel file">
+                <FileSpreadsheet size={18} /> {exportLabel}
+              </button>
               <button className="inv-add-btn" onClick={openAddPetti}>
                 <PlusCircle size={18} /> Add Layer
               </button>
@@ -809,6 +855,9 @@ const Inventory = () => {
                 <Search size={16} />
                 <input placeholder="Search accessories..." value={accSearch} onChange={e => setAccSearch(e.target.value)} />
               </div>
+              <button className="inv-export-btn" onClick={exportExcel} title="Download as an Excel file">
+                <FileSpreadsheet size={18} /> {exportLabel}
+              </button>
               <button className="inv-add-btn" onClick={openAddAcc}>
                 <PlusCircle size={18} /> Add Accessory
               </button>
@@ -824,7 +873,7 @@ const Inventory = () => {
                   className={`inv-cat-tab ${accCatSel === c ? 'active' : ''}`}
                   onClick={() => setAccCat(c)}
                 >
-                  {c}
+                  {c !== 'All' && <span className="inv-chip-ico">{accIcon(c)}</span>}{c}
                   <span className="inv-cat-count">{accCatCount(c)}</span>
                 </button>
               ))}
@@ -840,7 +889,7 @@ const Inventory = () => {
                 return (
                   <div key={acc.id} className="acc-row">
                     <div className="acc-row-info">
-                      <span className="acc-icon">👑</span>
+                      <span className="acc-icon">{accIcon(acc.category)}</span>
                       <div className="acc-row-text">
                         <p className="acc-name" title={acc.name}>{acc.name}</p>
                         <span className="acc-cat">{acc.category} · Used by {plural(used, 'gown')}</span>
@@ -1081,7 +1130,7 @@ const Inventory = () => {
                                 onChange={() => toggleAccInForm(acc.id)}
                               />
                               <span className="inv-check-text">
-                                <span className="inv-check-name">{acc.name}</span>
+                                <span className="inv-check-name">{accIcon(acc.category)} {acc.name}</span>
                                 <span className="inv-check-cat">
                                   {acc.category} ·{' '}
                                   <span className={stock === 0 ? 'inv-check-out' : ''}>
@@ -1240,9 +1289,17 @@ const Inventory = () => {
                 <div className="inv-row-2">
                   <div className="inv-field">
                     <label>Category</label>
-                    <select value={accForm.category} onChange={e => setAccForm(p => ({ ...p, category: e.target.value }))}>
-                      {ACC_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    <select value={accForm.category} onChange={e => setAccForm(p => ({ ...p, category: e.target.value, customCategory: '' }))}>
+                      {[...ACC_CATEGORIES.filter(c => c !== 'Others'), ...customAccCats, 'Others'].map(c => <option key={c} value={c}>{accIcon(c)} {c}</option>)}
                     </select>
+                    {accForm.category === 'Others' && (
+                      <input
+                        type="text"
+                        placeholder="Type a new category name (optional), e.g. Garter, Handfan"
+                        value={accForm.customCategory}
+                        onChange={e => setAccForm(p => ({ ...p, customCategory: e.target.value }))}
+                      />
+                    )}
                   </div>
                   <div className="inv-field">
                     <label>Stock (pcs)</label>

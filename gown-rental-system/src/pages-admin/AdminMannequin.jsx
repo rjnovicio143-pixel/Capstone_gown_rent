@@ -383,6 +383,14 @@ const AdminMannequin = () => {
                 />{' '}
                 Manual: do not reshape the gown around the body
               </label>
+              <label className="am-check" style={{ display: 'block', marginBottom: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={tweak.sleeves !== false}
+                  onChange={(e) => { setTweak(prev => ({ ...prev, sleeves: e.target.checked ? null : false })); setSaveMsg(''); }}
+                />{' '}
+                Sleeves move with the arms (Away)
+              </label>
               {renderSlider('Size (whole gown)', tweak.s, setT('s'), 0.7, 1.3)}
               {renderOffset('Left / right', tweak.x || 0, setT('x'))}
               {renderOffset('Up / down', tweak.y, setT('y'))}

@@ -71,16 +71,17 @@ function eachVertex(root, fn) {
     if (!pos) return;
     for (let i = 0; i < pos.count; i += 1) {
       v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
-      fn(v);
+      fn(v, o, i);
     }
   });
 }
 
 // Gilapdon / gibag-on sa usa ka "hiwa" sa model tali sa y0 ug y1
-function sliceExtents(root, y0, y1, trimX = 0) {
+function sliceExtents(root, y0, y1, trimX = 0, skipSleeves = false) {
   const xs = [];
   const zs = [];
-  eachVertex(root, (v) => {
+  eachVertex(root, (v, o, i) => {
+    if (skipSleeves && o.userData.sleeveW && o.userData.sleeveW[i] > 0.3) return;   // sleeves are not the torso
     if (v.y >= y0 && v.y <= y1) { xs.push(v.x); zs.push(v.z); }
   });
   if (xs.length < 3) return null;
@@ -154,7 +155,144 @@ export function applyBuild(raw, build) {
     return { ...sl, halfW, halfD, cz };
   });
   const mid = slices.length ? slices.reduce((sum, sl) => sum + sl.cz, 0) / slices.length : raw.cz;
-  return { ...raw, slices, cz: mid };
+  return { ...raw, slices, cz: mid, baseSlices: raw.slices };
+}
+
+/* ----------------------------------------------------------
+   SLEEVES
+   A gown / suit with sleeves: find the sleeve vertices once (they are the part of the
+   mesh that sticks out beside the torso and is connected to the cuffs), and give each a
+   weight 0..1 (0 = torso, 1 = sleeve). Then the "Away" arm option can swing the sleeves
+   together with the arms, and the sleeves are ignored when the torso is measured.
+   ---------------------------------------------------------- */
+const smooth01 = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+export const armDegrees = (arms, arm) => (arms === 'tpose' ? 90 - (arm?.rest || 0) : arms === 'away' ? 28 : 0);
+
+function computeSleeveWeights(root, body, s, box) {
+  root.traverse((o) => { if (o.userData) o.userData.sleeveW = null; });
+  const arm = body.arm;
+  const base = body.baseSlices || body.slices;
+  if (!arm?.pivot || !base?.length) return false;
+  const sl = [...base].sort((a, b) => a.y - b.y);
+  const hip = sl.find((t) => t.name === 'hip') || sl[0];
+  const hi = sl[sl.length - 1];
+  const midY = hip.y + 0.5 * (hi.y - hip.y);
+  const pivY = arm.pivot[1];
+  const cx0 = body.cx || 0;
+  const gcx = (box.min.x + box.max.x) / 2;
+  const halfAt = (y) => {
+    if (y <= sl[0].y) return sl[0].halfW;
+    if (y >= hi.y) return hi.halfW;
+    for (let i = 0; i < sl.length - 1; i += 1) {
+      if (y <= sl[i + 1].y) {
+        const t = (y - sl[i].y) / Math.max(sl[i + 1].y - sl[i].y, 1e-6);
+        return sl[i].halfW + (sl[i + 1].halfW - sl[i].halfW) * t;
+      }
+    }
+    return hi.halfW;
+  };
+
+  let found = false;
+  const v = new THREE.Vector3();
+  root.traverse((o) => {
+    const geo = o.isMesh && o.geometry;
+    const pos = geo?.attributes?.position;
+    if (!pos) return;
+    const n = pos.count;
+
+    // weld vertices that share a position (UV seams)
+    const ids = new Map();
+    const wid = new Int32Array(n);
+    let m = 0;
+    for (let i = 0; i < n; i += 1) {
+      const k = `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
+      let id = ids.get(k);
+      if (id === undefined) { id = m; m += 1; ids.set(k, id); }
+      wid[i] = id;
+    }
+    const dSum = new Float64Array(m);
+    const ySum = new Float64Array(m);
+    const cnt = new Uint16Array(m);
+    const wp = new Float32Array(m * 3);
+    for (let i = 0; i < n; i += 1) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      const by = body.minY + s * (v.y - box.min.y);
+      const dd = Math.abs(s * (v.x - gcx)) - halfAt(by);
+      const id = wid[i];
+      dSum[id] += dd; ySum[id] += by; cnt[id] += 1;
+      wp[3 * id] = v.x; wp[3 * id + 1] = v.y; wp[3 * id + 2] = v.z;
+    }
+    const allowed = new Uint8Array(m);
+    const comp = new Uint8Array(m);
+    const queue = new Int32Array(m);
+    let qh = 0; let qt = 0;
+    for (let id = 0; id < m; id += 1) {
+      const d = dSum[id] / cnt[id];
+      const y = ySum[id] / cnt[id];
+      allowed[id] = d > 0.03 && y > hip.y - 0.4 && y < pivY + 0.1 ? 1 : 0;
+      if (allowed[id] && d > 0.10 && y >= midY && y <= pivY) { comp[id] = 1; queue[qt] = id; qt += 1; }
+    }
+    if (qt === 0) return;
+
+    // graph of the welded vertices
+    const idx = geo.index ? geo.index.array : null;
+    const triCount = idx ? idx.length / 3 : n / 3;
+    const adj = Array.from({ length: m }, () => []);
+    const vi = (t, c) => wid[idx ? idx[3 * t + c] : 3 * t + c];
+    for (let t = 0; t < triCount; t += 1) {
+      const a = vi(t, 0); const b = vi(t, 1); const c = vi(t, 2);
+      adj[a].push(b, c); adj[b].push(a, c); adj[c].push(a, b);
+    }
+
+    // grow from the seeds through vertices that stay outside the torso
+    while (qh < qt) {
+      const u = queue[qh]; qh += 1;
+      const nb = adj[u];
+      for (let k = 0; k < nb.length; k += 1) {
+        const w = nb[k];
+        if (!comp[w] && allowed[w]) { comp[w] = 1; queue[qt] = w; qt += 1; }
+      }
+    }
+    if (qt < 30) return;
+
+    // distance (in steps) to the nearest non-sleeve vertex -> soft edge near the armhole
+    const hops = new Int32Array(m).fill(1e9);
+    qh = 0; qt = 0;
+    for (let id = 0; id < m; id += 1) {
+      if (!comp[id]) continue;
+      const nb = adj[id];
+      for (let k = 0; k < nb.length; k += 1) {
+        if (!comp[nb[k]]) { hops[id] = 1; queue[qt] = id; qt += 1; break; }
+      }
+    }
+    while (qh < qt) {
+      const u = queue[qh]; qh += 1;
+      const nb = adj[u];
+      for (let k = 0; k < nb.length; k += 1) {
+        const w = nb[k];
+        if (comp[w] && hops[w] > hops[u] + 1) { hops[w] = hops[u] + 1; queue[qt] = w; qt += 1; }
+      }
+    }
+    // typical edge length -> how many steps make 5 cm
+    const lens = [];
+    for (let id = 0; id < m && lens.length < 3000; id += 7) {
+      const w = adj[id][0];
+      if (w === undefined) continue;
+      lens.push(Math.hypot(wp[3 * id] - wp[3 * w], wp[3 * id + 1] - wp[3 * w + 1], wp[3 * id + 2] - wp[3 * w + 2]) * s);
+    }
+    lens.sort((a, b) => a - b);
+    const med = lens[Math.floor(lens.length / 2)] || 0.01;
+    const R = Math.min(40, Math.max(2, 0.05 / Math.max(med, 1e-4)));
+
+    const sw = new Float32Array(n);
+    for (let i = 0; i < n; i += 1) {
+      const id = wid[i];
+      sw[i] = comp[id] ? smooth01(0, R, hops[id]) : 0;
+    }
+    o.userData.sleeveW = sw;
+    found = true;
+  });
+  return found;
 }
 
 // Sukdon ang gown sa mga gitas-on sa lawas (usa ra, kay dili mausab ang gitas-on sa pag-slide sa build)
@@ -174,12 +312,13 @@ function gownProfileInner(root, body, length) {
   // Taas: i-scale uniformly
   const s = (body.height * (body.coverTop || FIT.coverTop) * length) / size.y;
   const gb = (FIT.band * body.height) / s;
+  const hasSleeves = computeSleeveWeights(root, body, s, box);   // sleeves must not count as the torso width
   const rows = body.slices.map((sl) => {
     const gy = box.min.y + (sl.y - body.minY) / s;           // samang gitas-on sa gown (local)
-    const g = sliceExtents(root, gy - gb, gy + gb, 0);
+    const g = sliceExtents(root, gy - gb, gy + gb, 0, hasSleeves);
     return g && g.halfW > 0 && g.halfD > 0 ? g : null;       // null = wala'y gown sa kana nga gitas-on
   });
-  return { box, s, rows };
+  return { box, s, rows, hasSleeves };
 }
 
 /* ----------------------------------------------------------
@@ -188,12 +327,13 @@ function gownProfileInner(root, body, length) {
    gidugang ibabaw sa auto-fit, mao nga parehas ang posisyon sa tanang customer.
    s = gidak-on (1 = sama), y = pataas / paubos (metros), w = lapad, d = gibag-on
    ---------------------------------------------------------- */
-export const DEFAULT_TWEAK = { s: 1, x: 0, y: 0, z: 0, w: 1, d: 1, exact: false, noPush: false, hide: [] };
+export const DEFAULT_TWEAK = { s: 1, x: 0, y: 0, z: 0, w: 1, d: 1, exact: false, noPush: false, sleeves: null, hide: [] };
 export const parseTweak = (v) => {
   const n = (x, def) => (Number.isFinite(Number(x)) && x !== null && x !== '' ? Number(x) : def);
   const o = v && typeof v === 'object' ? v : {};
   return {
     s: n(o.s, 1), x: n(o.x, 0), y: n(o.y, 0), z: n(o.z, 0), w: n(o.w, 1), d: n(o.d, 1), exact: !!o.exact,
+    sleeves: o.sleeves === false ? false : null,          // false = sleeves stay put when the arms move away
     noPush: !!o.noPush,                                   // manual: do not reshape the gown around the body
     hide: Array.isArray(o.hide) ? o.hide.map(String) : [], // names of gown parts the admin switched off
   };
@@ -376,7 +516,7 @@ function Body({ modelPath, visible, build, hide, arms, onProfile }) {
       u.uArmHide.value = arms === 'hide' ? 1 : 0;
       if (!a) { u.uArmRot.value = 0; return; }
       u.uArmP.value.set(a.pivot[0], a.pivot[1]);
-      const deg = arms === 'tpose' ? 90 - a.rest : arms === 'away' ? 28 : 0;
+      const deg = armDegrees(arms, a);
       u.uArmRot.value = (deg * Math.PI) / 180;
     });
   }, [unis, profile, arms]);
@@ -410,10 +550,10 @@ function FallbackBody({ onProfile }) {
    ---------------------------------------------------------- */
 const PUSH = { mw: 1.05, md: 1.10 };   // dugang nga luna palibot sa lawas (lapad / lalom)
 
-function expandGownAroundBody(root, fit, body, length, tweak) {
-  withDetached(root, () => expandInner(root, fit, body, length, tweak));
+function expandGownAroundBody(root, fit, body, length, tweak, arm) {
+  withDetached(root, () => expandInner(root, fit, body, length, tweak, arm));
 }
-function expandInner(root, fit, body, length, tweak) {
+function expandInner(root, fit, body, length, tweak, arm) {
   const sl = [...body.slices].sort((a, b) => a.y - b.y);
   if (!sl.length) return;
   const last = sl[sl.length - 1];
@@ -422,6 +562,12 @@ function expandInner(root, fit, body, length, tweak) {
   const cx = body.cx || 0;
   const [sx, sy, sz] = fit.scale;
   const [px, py, pz] = fit.position;
+  const push = !tw.noPush;                       // manual mode: do not reshape around the body
+  const rad = arm ? (arm.deg * Math.PI) / 180 : 0;
+  const armC = Math.cos(rad);
+  const armS = Math.sin(rad);
+  const pivX = arm?.pivot?.[0] || 0;
+  const pivY = arm?.pivot?.[1] || 0;
 
   const profile = (y) => {
     let a = sl[0];
@@ -453,12 +599,13 @@ function expandInner(root, fit, body, length, tweak) {
     const orig = o.userData.origPos;
     m.copy(o.matrixWorld);
     mi.copy(m).invert();
+    const sw = rad !== 0 ? o.userData.sleeveW : null;
     for (let i = 0; i < pos.count; i += 1) {
       v.set(orig[3 * i], orig[3 * i + 1], orig[3 * i + 2]).applyMatrix4(m);
       let bx = px + sx * v.x;
-      const by = py + sy * v.y;
+      let by = py + sy * v.y;
       let bz = pz + sz * v.z;
-      if (by >= sl[0].y && by <= topY) {
+      if (push && by >= sl[0].y && by <= topY) {
         const [w, d, cz] = profile(by);
         let ex = (bx - cx) / w;
         let ez = (bz - cz) / d;
@@ -468,6 +615,19 @@ function expandInner(root, fit, body, length, tweak) {
           if (r < 1e-3) { ex = 0; ez = 1; r = 1; }
           bx = cx + (ex / r) * w;
           bz = cz + (ez / r) * d;
+        }
+      }
+      // Away: swing the sleeve together with the arm (same pivot and angle as the avatar's arm)
+      if (sw && sw[i] > 0.001) {
+        const wgt = sw[i] * (1 - smooth01(pivY, pivY + 0.1, by));
+        if (wgt > 0) {
+          const side = bx >= 0 ? 1 : -1;
+          const a = rad * wgt;
+          const c = Math.cos(a); const sn = Math.sin(a);
+          const qx = bx * side - pivX;
+          const qy = by - pivY;
+          bx = side * (c * qx - sn * qy + pivX);
+          by = sn * qx + c * qy + pivY;
         }
       }
       v.set((bx - px) / sx, (by - py) / sy, (bz - pz) / sz).applyMatrix4(mi);
@@ -481,7 +641,7 @@ function expandInner(root, fit, body, length, tweak) {
   });
 }
 
-function FittedGown({ modelPath, body, looseness, length, tweak, onParts }) {
+function FittedGown({ modelPath, body, looseness, length, tweak, onParts, arms }) {
   const scene = useClonedGLB(modelPath);
   const ysKey = body.ok ? body.slices.map(sl => sl.y).join(',') : '';
 
@@ -491,7 +651,7 @@ function FittedGown({ modelPath, body, looseness, length, tweak, onParts }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scene, body.ok, body.height, body.minY, body.coverTop, ysKey, length]
   );
-  const tw = useMemo(() => parseTweak(tweak), [tweak?.s, tweak?.x, tweak?.y, tweak?.z, tweak?.w, tweak?.d, tweak?.exact, tweak?.noPush, (tweak?.hide || []).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tw = useMemo(() => parseTweak(tweak), [tweak?.s, tweak?.x, tweak?.y, tweak?.z, tweak?.w, tweak?.d, tweak?.exact, tweak?.noPush, tweak?.sleeves, (tweak?.hide || []).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   const fit = useMemo(() => gownFit(profile, body, looseness, tw), [profile, body, looseness, tw]);
 
   // Kada gown naay kaugalingon nga geometry (dili mausab ang gi-cache nga original)
@@ -523,15 +683,17 @@ function FittedGown({ modelPath, body, looseness, length, tweak, onParts }) {
   // I-isbog ang gown aron ang lawas makasulod gyud (skipped in manual mode: the gown keeps its own shape)
   useEffect(() => {
     if (!(body.ok && profile)) return;
-    if (tw.noPush) {
+    const deg = armDegrees(arms, body.arm);
+    const moveSleeves = deg !== 0 && tw.sleeves !== false && profile.hasSleeves && !!body.arm;
+    if (tw.noPush && !moveSleeves) {
       scene.traverse((o) => {
         const pos = o.isMesh && o.geometry?.attributes?.position;
         if (pos && o.userData.origPos) { pos.array.set(o.userData.origPos); pos.needsUpdate = true; o.geometry.computeBoundingSphere(); }
       });
       return;
     }
-    expandGownAroundBody(scene, fit, body, length, tw);
-  }, [scene, fit, body, profile, length, tw]);
+    expandGownAroundBody(scene, fit, body, length, tw, moveSleeves ? { deg, pivot: body.arm.pivot } : null);
+  }, [scene, fit, body, profile, length, tw, arms]);
 
   // Ang sulod sa gown makita (walay "butang" kung ang mesh usa ra ka-side)
   useEffect(() => {
@@ -573,7 +735,7 @@ export function Scene({ bodyPath, gownPath, showBody, build, looseness, length, 
 
       {gownPath && body && (
         <ModelErrorBoundary key={gownPath} fallback={<FallbackGown />}>
-          <FittedGown modelPath={gownPath} body={body} looseness={looseness} length={length} tweak={tweak} onParts={onParts} />
+          <FittedGown modelPath={gownPath} body={body} looseness={looseness} length={length} tweak={tweak} onParts={onParts} arms={arms} />
         </ModelErrorBoundary>
       )}
     </group>

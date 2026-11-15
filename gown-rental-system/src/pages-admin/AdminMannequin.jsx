@@ -214,6 +214,21 @@ const AdminMannequin = () => {
   const resetFit = () => { setTweak(DEFAULT_TWEAK); setSaveMsg(''); };
   const setT = (k) => (v) => { setTweak(prev => ({ ...prev, [k]: v })); setSaveMsg(''); };
 
+  // Position slider: shows a signed number (0 = centered)
+  const renderOffset = (label, value, setter, min = -0.3, max = 0.3) => (
+    <div className="slider-group">
+      <div className="slider-label">
+        <span>{label}</span>
+        <span>{value > 0 ? '+' : ''}{Math.round(value * 100)}</span>
+      </div>
+      <input
+        type="range" min={min} max={max} step="0.005"
+        value={value}
+        onChange={(e) => setter(parseFloat(e.target.value))}
+      />
+    </div>
+  );
+
   const renderSlider = (label, value, setter, min = 0.9, max = 1.1) => (
     <div className="slider-group">
       <div className="slider-label">
@@ -369,7 +384,9 @@ const AdminMannequin = () => {
                 Manual: do not reshape the gown around the body
               </label>
               {renderSlider('Size (whole gown)', tweak.s, setT('s'), 0.7, 1.3)}
-              {renderSlider('Up / down', tweak.y, setT('y'), -0.3, 0.3)}
+              {renderOffset('Left / right', tweak.x || 0, setT('x'))}
+              {renderOffset('Up / down', tweak.y, setT('y'))}
+              {renderOffset('Forward / back', tweak.z || 0, setT('z'))}
               {renderSlider('Width', tweak.w, setT('w'), 0.7, 1.4)}
               {renderSlider('Depth (front to back)', tweak.d, setT('d'), 0.7, 1.4)}
               {gownParts.length > 1 && (

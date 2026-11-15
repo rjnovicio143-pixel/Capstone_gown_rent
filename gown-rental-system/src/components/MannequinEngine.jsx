@@ -188,12 +188,12 @@ function gownProfileInner(root, body, length) {
    gidugang ibabaw sa auto-fit, mao nga parehas ang posisyon sa tanang customer.
    s = gidak-on (1 = sama), y = pataas / paubos (metros), w = lapad, d = gibag-on
    ---------------------------------------------------------- */
-export const DEFAULT_TWEAK = { s: 1, y: 0, w: 1, d: 1, exact: false, noPush: false, hide: [] };
+export const DEFAULT_TWEAK = { s: 1, x: 0, y: 0, z: 0, w: 1, d: 1, exact: false, noPush: false, hide: [] };
 export const parseTweak = (v) => {
   const n = (x, def) => (Number.isFinite(Number(x)) && x !== null && x !== '' ? Number(x) : def);
   const o = v && typeof v === 'object' ? v : {};
   return {
-    s: n(o.s, 1), y: n(o.y, 0), w: n(o.w, 1), d: n(o.d, 1), exact: !!o.exact,
+    s: n(o.s, 1), x: n(o.x, 0), y: n(o.y, 0), z: n(o.z, 0), w: n(o.w, 1), d: n(o.d, 1), exact: !!o.exact,
     noPush: !!o.noPush,                                   // manual: do not reshape the gown around the body
     hide: Array.isArray(o.hide) ? o.hide.map(String) : [], // names of gown parts the admin switched off
   };
@@ -203,7 +203,7 @@ export const parseTweak = (v) => {
 function gownFit(profile, body, looseness, tweak) {
   // EXACT: ang gown gi-butang na sa Blender sa ibabaw sa mannequin -> gamiton ang iyang posisyon sa Blender, walay auto-fit
   if (tweak?.exact && body?.ok) {
-    return { scale: [tweak.s * tweak.w, tweak.s, tweak.s * tweak.d], position: [0, tweak.y, 0] };
+    return { scale: [tweak.s * tweak.w, tweak.s, tweak.s * tweak.d], position: [tweak.x || 0, tweak.y, tweak.z || 0] };
   }
   const identity = { scale: [1, 1, 1], position: [0, 0, 0] };
   if (!profile || !body?.ok) return identity;
@@ -231,7 +231,7 @@ function gownFit(profile, body, looseness, tweak) {
   const gcz = (box.min.z + box.max.z) / 2;
   return {
     scale: [sx, sy, sz],
-    position: [body.cx - sx * gcx, body.minY - sy * box.min.y + tw.y, body.cz - sz * gcz],
+    position: [body.cx - sx * gcx + tw.x, body.minY - sy * box.min.y + tw.y, body.cz - sz * gcz + tw.z],
   };
 }
 
@@ -491,7 +491,7 @@ function FittedGown({ modelPath, body, looseness, length, tweak, onParts }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scene, body.ok, body.height, body.minY, body.coverTop, ysKey, length]
   );
-  const tw = useMemo(() => parseTweak(tweak), [tweak?.s, tweak?.y, tweak?.w, tweak?.d, tweak?.exact, tweak?.noPush, (tweak?.hide || []).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tw = useMemo(() => parseTweak(tweak), [tweak?.s, tweak?.x, tweak?.y, tweak?.z, tweak?.w, tweak?.d, tweak?.exact, tweak?.noPush, (tweak?.hide || []).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   const fit = useMemo(() => gownFit(profile, body, looseness, tw), [profile, body, looseness, tw]);
 
   // Kada gown naay kaugalingon nga geometry (dili mausab ang gi-cache nga original)

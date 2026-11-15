@@ -891,3 +891,52 @@
 .acc-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; background: #fefce8; font-size: 18px; flex-shrink: 0; }
 .inv-chip-ico { font-size: 11px; line-height: 1; }
 .inv-cat-tab .inv-chip-ico { font-size: 14px; }
+
+/* =========================================
+   Excel export button + accessory icons
+========================================= */
+button.inv-export-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 20px;
+  background: #f0fdf4; color: #166534;
+  border: 1.5px solid #bbf7d0; border-radius: 14px;
+  font-size: 15px; font-weight: 700; letter-spacing: .2px;
+  white-space: nowrap; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(22,101,52,0.06);
+  transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+button.inv-export-btn svg { flex-shrink: 0; transition: transform .18s ease; }
+button.inv-export-btn:hover { background: #dcfce7; border-color: #86efac; box-shadow: 0 4px 12px rgba(22,163,74,0.18); transform: translateY(-1px); }
+button.inv-export-btn:hover svg { transform: translateY(2px); }
+button.inv-export-btn:active { transform: translateY(0); background: #bbf7d0; }
+button.inv-export-btn:focus-visible { outline: 3px solid rgba(34,197,94,0.35); outline-offset: 2px; }
+.inv-toolbar .inv-export-btn { margin-left: auto; }
+.inv-toolbar .inv-export-btn + .inv-add-btn { margin-left: 0; }
+
+.acc-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; background: #fefce8; font-size: 18px; flex-shrink: 0; }
+.inv-chip-ico { font-size: 11px; line-height: 1; }
+.inv-cat-tab .inv-chip-ico { font-size: 14px; }
+
+/* ── Validation: inline errors + toast ── */
+.inv-err {
+  display: flex; align-items: center; gap: 6px;
+  margin: 6px 0 0; padding: 7px 10px;
+  background: #fef2f2; color: #b91c1c;
+  border: 1px solid #fecaca; border-radius: 10px;
+  font-size: 13px; font-weight: 600; line-height: 1.3;
+  animation: inv-err-in .25s ease;
+}
+.inv-err::before {
+  content: '!'; flex-shrink: 0;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #dc2626; color: #fff; font-size: 12px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.inv-field input.inv-invalid, .inv-field select.inv-invalid {
+  border-color: #dc2626 !important; background: #fffafa;
+  box-shadow: 0 0 0 3px rgba(220,38,38,0.15) !important;
+  animation: inv-shake .35s ease;
+}
+.inv-upload.inv-invalid-box { border-color: #dc2626 !important; background: #fffafa; animation: inv-shake .35s ease; }
+@keyframes inv-err-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes inv-shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }

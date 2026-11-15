@@ -9,6 +9,7 @@ import {
   MessageSquare, Download, RefreshCw, Layers, Crown, Edit3, Tag, Save, Package
 } from 'lucide-react';
 import Header from '../components/Header';
+import { askConfirm, showAlert, DialogHost } from '../components/Dialogs';
 import '../styles/Customers.css';
 
 /* ---------- PRICE HELPERS ---------- */
@@ -194,13 +195,13 @@ const Customers = () => {
     if (readError || !gown) return true;
 
     const newStock = (Number(gown.stock) || 0) + delta;
-    if (newStock < 0) { alert(`No stock left for "${gown.name}".`); return false; }
+    if (newStock < 0) { showAlert(`No stock left for "${gown.name}".`); return false; }
 
     const { error } = await supabase
       .from('gowns')
       .update({ stock: newStock, status: newStock > 0 ? 'Available' : 'Out of Stock' })
       .eq('id', gownId);
-    if (error) { alert('Stock update error: ' + error.message); return false; }
+    if (error) { showAlert('Stock update error: ' + error.message); return false; }
     return true;
   };
 
@@ -229,7 +230,7 @@ const Customers = () => {
 
   const notifyCancelled = (count) => {
     if (count > 0) {
-      alert(`${count} other online hold${count === 1 ? ' was' : 's were'} cancelled because this gown is now taken.`);
+      showAlert(`${count} other online hold${count === 1 ? ' was' : 's were'} cancelled because this gown is now taken.`, { tone: 'info' });
     }
   };
 
@@ -280,7 +281,7 @@ const Customers = () => {
     e.preventDefault();
     const gross = computeGross(newCustomer);
     const discount = Number(newCustomer.discount) || 0;
-    if (discount < 0 || discount > gross) return alert('Invalid discount. It cannot be greater than the total.');
+    if (discount < 0 || discount > gross) return showAlert('Invalid discount. It cannot be greater than the total.');
     const total = gross - discount;
     const down = Number(newCustomer.down);
     const balance = total - down;
@@ -312,7 +313,7 @@ const Customers = () => {
       discount, discount_note: newCustomer.discountNote || null,
     }]);
     if (error) {
-      alert('Error: ' + error.message);
+      showAlert('Error: ' + error.message);
       if (initialStatus === 'reserved') await adjustStock(newCustomer.gownId, 1); // undo the stock change
       return;
     }
@@ -361,10 +362,10 @@ const Customers = () => {
   const handleSaveEdit = async () => {
     const b = selectedBooking;
     const f = editForm;
-    if (!f.name.trim()) return alert('Name is required.');
+    if (!f.name.trim()) return showAlert('Name is required.');
     const p = editPreview(b, f);
-    if (p.discount < 0) return alert('Discount cannot be negative.');
-    if (p.discount > p.gross) return alert('Discount cannot be greater than the total.');
+    if (p.discount < 0) return showAlert('Discount cannot be negative.');
+    if (p.discount > p.gross) return showAlert('Discount cannot be greater than the total.');
 
     setSaving(true);
     const { error } = await supabase.from('bookings').update({
@@ -381,7 +382,7 @@ const Customers = () => {
     }).eq('id', b.id);
     setSaving(false);
 
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { showAlert('Error: ' + error.message); return; }
 
     const changes = [];
     if (p.prevNet !== p.net) changes.push(`total ₱${p.prevNet} → ₱${p.net}`);
@@ -417,7 +418,7 @@ const Customers = () => {
       swap_charges: Number(booking.swapCharges || 0) + swapFee,
       total_rent: newTotal, balance: newBalance,
     }).eq('id', booking.id);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { showAlert('Error: ' + error.message); return; }
     await logActivity('booking_updated', `${booking.name} changed petticoat to ${pettiName}${pettiPrice > 0 ? ` (+₱${pettiPrice})` : ''}${swapFee > 0 ? ` (swap fee ₱${swapFee})` : ''}`);
     fetchAll();
     await refreshSelected(booking.id);
@@ -442,7 +443,7 @@ const Customers = () => {
       addons: newAddons, total_rent: newTotal, balance: newBalance,
       swap_charges: Number(booking.swapCharges || 0) + swapFeeAdd,
     }).eq('id', booking.id);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { showAlert('Error: ' + error.message); return; }
     await logActivity('booking_updated', `${booking.name} ${exists ? 'removed' : 'added'} ${acc.name}`);
     fetchAll();
     await refreshSelected(booking.id);
@@ -453,7 +454,7 @@ const Customers = () => {
     const gown = gownById(booking.gownId);
     const petti = includedPettiOf(gown);
     const incAccs = includedAccsOf(gown);
-    if (!petti && incAccs.length === 0) return alert('This gown has no included package.');
+    if (!petti && incAccs.length === 0) return showAlert('This gown has no included package.');
 
     const current = booking.addons || [];
     const missing = incAccs
@@ -476,7 +477,7 @@ const Customers = () => {
       addons: newAddons,
       total_rent: newTotal, balance: newBalance,
     }).eq('id', booking.id);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { showAlert('Error: ' + error.message); return; }
     await logActivity('booking_updated', `Applied included package of "${booking.gownName}" to ${booking.name}`);
     fetchAll();
     await refreshSelected(booking.id);
@@ -485,11 +486,11 @@ const Customers = () => {
   // ── PAYMENT (balance of a confirmed booking) ──
   const handleUpdatePayment = async (booking) => {
     const payAmt = Number(partialPayAmt);
-    if (!payAmt || payAmt <= 0) return alert('Please enter a valid amount.');
-    if (payAmt > booking.balance) return alert('Payment exceeds balance.');
-    if (!window.confirm(`Confirm payment of ₱${payAmt}?`)) return;
+    if (!payAmt || payAmt <= 0) return showAlert('Please enter a valid amount.');
+    if (payAmt > booking.balance) return showAlert('Payment exceeds balance.');
+    if (!await askConfirm(`Confirm payment of ₱${payAmt}?`)) return;
     const { error } = await supabase.from('bookings').update({ down: Number(booking.down) + payAmt, balance: Number(booking.balance) - payAmt }).eq('id', booking.id);
-    if (error) { alert(error.message); return; }
+    if (error) { showAlert(error.message); return; }
     await logActivity('payment_received', `₱${payAmt} from ${booking.name}`);
     setPartialPayAmt('');
     fetchAll();
@@ -501,10 +502,10 @@ const Customers = () => {
     const owed = calculatePenalty(booking);
     const payAmt = Number(penaltyPayAmt);
 
-    if (owed <= 0) return alert('There is no unpaid penalty.');
-    if (!payAmt || payAmt <= 0) return alert('Please enter a valid amount.');
-    if (payAmt > owed) return alert(`The amount is more than the unpaid penalty (${formatCurrency(owed)}).`);
-    if (!window.confirm(`Confirm penalty payment of ${formatCurrency(payAmt)}?`)) return;
+    if (owed <= 0) return showAlert('There is no unpaid penalty.');
+    if (!payAmt || payAmt <= 0) return showAlert('Please enter a valid amount.');
+    if (payAmt > owed) return showAlert(`The amount is more than the unpaid penalty (${formatCurrency(owed)}).`);
+    if (!await askConfirm(`Confirm penalty payment of ${formatCurrency(payAmt)}?`)) return;
 
     const stillClaimed = booking.returnStatus === 'claimed';
     const remaining = owed - payAmt;
@@ -515,7 +516,7 @@ const Customers = () => {
       penalty: stillClaimed ? 0 : remaining,
       is_penalty_settled: stillClaimed ? false : remaining <= 0,
     }).eq('id', booking.id);
-    if (error) { alert(error.message); return; }
+    if (error) { showAlert(error.message); return; }
 
     await logActivity('penalty_paid', `₱${payAmt} penalty from ${booking.name}${remaining > 0 ? ` (₱${remaining} still unpaid)` : ''}`);
     setPenaltyPayAmt('');
@@ -527,7 +528,7 @@ const Customers = () => {
     // Warn before returning a gown that still has an unpaid penalty
     if (newStatus === 'returned') {
       const owed = calculatePenalty(booking);
-      if (owed > 0 && !window.confirm(
+      if (owed > 0 && !await askConfirm(
         `This booking has an unpaid penalty of ${formatCurrency(owed)}.\n\nMark it as returned anyway? You can still collect the penalty afterwards.`
       )) return;
     }
@@ -554,7 +555,7 @@ const Customers = () => {
       is_penalty_settled: fullyPaid || booking.isPenaltySettled,
       claimed_status: newStatus === 'claimed' ? 'claimed' : (newStatus === 'returned' ? 'claimed' : booking.claimedStatus)
     }).eq('id', booking.id);
-    if (error) { alert(error.message); return; }
+    if (error) { showAlert(error.message); return; }
 
     // A pending booking that is now claimed or reserved took the stock
     let cancelledHolds = 0;
@@ -567,12 +568,12 @@ const Customers = () => {
 
   // ── CONFIRM AN ONLINE HOLD (the first downpayment gets the gown) ──
   const handleConfirmOnlineHold = async () => {
-    if (!holdData.downpayment || Number(holdData.downpayment) <= 0) return alert('Enter the downpayment.');
-    if (!holdData.returnDate) return alert('Select the return date.');
+    if (!holdData.downpayment || Number(holdData.downpayment) <= 0) return showAlert('Enter the downpayment.');
+    if (!holdData.returnDate) return showAlert('Select the return date.');
 
     const total = netTotal(selectedBooking) || Number(selectedBooking.rentalPrice);
     const newDown = Number(holdData.downpayment);
-    if (newDown > total) return alert('The downpayment cannot be greater than the total.');
+    if (newDown > total) return showAlert('The downpayment cannot be greater than the total.');
 
     // Paying the downpayment secures the gown
     const ok = await adjustStock(selectedBooking.gownId, -1);
@@ -591,7 +592,7 @@ const Customers = () => {
     }).eq('id', selectedBooking.id);
 
     if (error) {
-      alert(error.message);
+      showAlert(error.message);
       await adjustStock(selectedBooking.gownId, 1); // undo the stock change
       return;
     }
@@ -606,10 +607,15 @@ const Customers = () => {
   };
 
   const handleDeleteBooking = async (booking) => {
-    if (!window.confirm('Delete this record?')) return;
+    // A gown that is still out with the customer can never be deleted
+    if (booking.returnStatus === 'claimed') {
+      showAlert(`${booking.name} still has the gown / suit and has not returned it yet.\n\nMark it as Returned first, then you can delete this record.`, { title: 'Cannot delete yet', tone: 'warn' });
+      return;
+    }
+    if (!(await askConfirm(`Delete ${booking.name}'s record? This cannot be undone.`))) return;
     if (booking.returnStatus === 'claimed' || booking.returnStatus === 'reserved') await adjustStock(booking.gownId, 1);
     const { error } = await supabase.from('bookings').delete().eq('id', booking.id);
-    if (error) { alert(error.message); return; }
+    if (error) { showAlert(error.message); return; }
     await logActivity('booking_deleted', `Deleted booking: ${booking.name}`);
     closeDetails(); fetchAll();
   };
@@ -689,6 +695,7 @@ const Customers = () => {
   return (
     <>
       <Header />
+      <DialogHost />
       <div className="customers-luxury-container">
 
         {/* TOP BAR */}

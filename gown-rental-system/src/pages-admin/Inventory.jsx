@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import {
   Search, PlusCircle, X, Upload, Package, AlertCircle,
   Trash2, Edit, Camera, Eye, EyeOff,
-  Crown, Layers, ShoppingBag, Globe, FileSpreadsheet
+  Crown, Layers, ShoppingBag, Globe, Download
 } from 'lucide-react';
 import '../styles/Inventory.css';
 import Header from '../components/Header';
+import { askConfirm, showAlert, DialogHost } from '../components/Dialogs';
 import { supabase } from '../supabaseClient';
 import { logActivity } from '../utils/activityLogger';
 import { downloadXlsx } from '../utils/exportXlsx';
@@ -113,6 +114,16 @@ const emptyAccForm = { name: '', category: 'Others', customCategory: '', price: 
 const emptyPettiForm = { layer: '', price: '', swap_fee: '' };
 
 const Inventory = () => {
+  const [errors, setErrors] = useState({});   // { fieldId: 'message' }
+  const notify = (msg) => showAlert(msg);
+  const fail = (field, msg) => {
+    setErrors({ [field]: msg });
+    setTimeout(() => {
+      const el = document.getElementById('f-' + field);
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (el.focus) el.focus({ preventScroll: true }); }
+    }, 30);
+  };
+  const clearErr = (field) => setErrors(e => (e[field] ? {} : e));
   const [activeTab, setActiveTab] = useState('gowns'); // 'gowns' | 'nophoto' | 'petticoats' | 'accessories'
 
   // Data
@@ -353,6 +364,7 @@ const Inventory = () => {
   };
 
   const closeGownModal = () => {
+    setErrors({});
     setGownModalOpen(false);
     setEditingGown(null);
     setImageFile(null);
@@ -360,12 +372,13 @@ const Inventory = () => {
   };
 
   const handleSaveGown = async () => {
-    if (!gownForm.name.trim()) return alert('Please enter a gown name.');
-    if (!gownForm.price)       return alert('Please enter a price.');
+    if (!gownForm.name.trim()) return fail('gname', 'Please enter the gown name.');
+    if (!gownForm.price)       return fail('gprice', 'Please enter the price.');
     // Photo is required only when the gown is going public
     if (gownForm.is_posted && !imagePreview) {
-      return alert('Please upload a photo before posting this gown to the public catalog.');
+      return fail('gphoto', 'Please upload a photo before posting this gown to the public catalog.');
     }
+    setErrors({});
     setLoading(true);
     try {
       let imageUrl = editingGown?.image || '';
@@ -405,7 +418,7 @@ const Inventory = () => {
       closeGownModal();
     } catch (err) {
       console.error(err);
-      alert('Error: ' + err.message);
+      notify('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -414,17 +427,17 @@ const Inventory = () => {
   const handleTogglePost = async (gown) => {
     const next = !gown.is_posted;
     if (next && (!gown.price || gown.price <= 0)) {
-      return alert('Please set a price before posting this gown.');
+      return notify('Please set a price before posting this gown.');
     }
     // No photo yet -> open the editor with Publish already ON so the photo can be added
     if (next && !gown.image) {
-      alert('Add a photo first before posting this gown.');
+      notify('Add a photo first before posting this gown.');
       openEditGown(gown);
       setGownForm(p => ({ ...p, is_posted: true }));
       return;
     }
     const { error } = await supabase.from('gowns').update({ is_posted: next, ...(next ? { posted_at: new Date().toISOString() } : {}) }).eq('id', gown.id);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { notify('Error: ' + error.message); return; }
     await logActivity('gown_edited', `${next ? 'Posted' : 'Unpublished'} gown: ${gown.name}`);
     fetchGowns();
   };
@@ -437,14 +450,27 @@ const Inventory = () => {
       .not('return_status', 'in', '("returned","cancelled")');
     if (countErr) console.error(countErr);
 
-    if (count > 0) {
-      alert(`Cannot delete "${gown.name}" — it still has ${plural(count, 'active booking')}.`);
+    // Rented out in a wedding package (picked up, not returned yet)
+    const { count: weddingOut, error: wErr } = await supabase
+      .from('wedding_reservations')
+      .select('id', { count: 'exact', head: true })
+      .or(`bridal_gown_id.eq.${gown.id},groom_attire_id.eq.${gown.id}`)
+      .not('picked_up_at', 'is', null)
+      .is('returned_at', null);
+    if (wErr) console.error(wErr);
+
+    if (count > 0 || weddingOut > 0) {
+      const n = (count || 0) + (weddingOut || 0);
+      showAlert(
+        `"${gown.name}" cannot be deleted because ${n === 1 ? 'a customer is' : n + ' customers are'} still renting or booking it and ${n === 1 ? 'has' : 'have'} not returned it yet.\n\nMark ${n === 1 ? 'it' : 'them'} as Returned (or Cancelled) first.`,
+        { title: 'Cannot delete yet', tone: 'warn' }
+      );
       return;
     }
-    if (!window.confirm(`Delete "${gown.name}"? This cannot be undone.`)) return;
+    if (!(await askConfirm(`Delete "${gown.name}"? This cannot be undone.`))) return;
 
     const { error } = await supabase.from('gowns').delete().eq('id', gown.id);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { notify('Error: ' + error.message); return; }
     await logActivity('gown_deleted', `Deleted gown: ${gown.name}`);
     fetchGowns();
   };
@@ -466,9 +492,9 @@ const Inventory = () => {
 
   const handleSavePetti = async () => {
     const layerNum = Number(pettiForm.layer);
-    if (!layerNum || layerNum < 1) return alert('Enter a valid layer number (1 or higher).');
+    if (!layerNum || layerNum < 1) return fail('player', 'Please enter a layer number (1 or higher).');
     if (petticoats.some(p => Number(p.layer) === layerNum && p.id !== editingPetti?.id)) {
-      return alert(`Layer ${layerNum} already exists.`);
+      return fail('player', `Layer ${layerNum} already exists.`);
     }
     setLoading(true);
     try {
@@ -494,7 +520,7 @@ const Inventory = () => {
       fetchPetticoats();
       setPettiModalOpen(false);
     } catch (err) {
-      alert('Error: ' + err.message);
+      notify('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -503,12 +529,12 @@ const Inventory = () => {
   const handleDeletePetti = async (p) => {
     const used = gowns.filter(g => Number(g.petticoat_layer) === Number(p.layer)).length;
     if (used > 0) {
-      alert(`Cannot delete Layer ${p.layer} — it is used by ${plural(used, 'gown')}. Change the package of those gowns first.`);
+      notify(`Cannot delete Layer ${p.layer} — it is used by ${plural(used, 'gown')}. Change the package of those gowns first.`);
       return;
     }
-    if (!window.confirm(`Delete Layer ${p.layer}?`)) return;
+    if (!await askConfirm(`Delete Layer ${p.layer}?`)) return;
     const { error } = await supabase.from('petticoats').delete().eq('id', p.id);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { notify('Error: ' + error.message); return; }
     await logActivity('petticoat_deleted', `Deleted petticoat Layer ${p.layer}`);
     fetchPetticoats();
   };
@@ -534,7 +560,7 @@ const Inventory = () => {
   };
 
   const handleSaveAcc = async () => {
-    if (!accForm.name.trim()) return alert('Please enter a name.');
+    if (!accForm.name.trim()) return fail('aname', 'Please enter a name for this accessory.');
     setLoading(true);
     try {
       const payload = {
@@ -556,7 +582,7 @@ const Inventory = () => {
       fetchAccessories();
       setAccModalOpen(false);
     } catch (err) {
-      alert('Error: ' + err.message);
+      notify('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -565,12 +591,12 @@ const Inventory = () => {
   const handleDeleteAcc = async (acc) => {
     const used = gowns.filter(g => (g.included_accessories || []).includes(acc.id)).length;
     if (used > 0) {
-      alert(`Cannot delete "${acc.name}" — it is included in the package of ${plural(used, 'gown')}. Remove it from those gowns first.`);
+      notify(`Cannot delete "${acc.name}" — it is included in the package of ${plural(used, 'gown')}. Remove it from those gowns first.`);
       return;
     }
-    if (!window.confirm(`Delete "${acc.name}"?`)) return;
+    if (!await askConfirm(`Delete "${acc.name}"?`)) return;
     const { error } = await supabase.from('accessories').delete().eq('id', acc.id);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { notify('Error: ' + error.message); return; }
     await logActivity('accessory_deleted', `Deleted accessory: ${acc.name}`);
     fetchAccessories();
   };
@@ -580,7 +606,7 @@ const Inventory = () => {
     const next = Math.max(0, Number(acc.stock || 0) + delta);
     if (next === Number(acc.stock || 0)) return;
     const { error } = await supabase.from('accessories').update({ stock: next }).eq('id', acc.id);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { notify('Error: ' + error.message); return; }
     setAccessories(prev => prev.map(a => a.id === acc.id ? { ...a, stock: next } : a));
   };
 
@@ -670,7 +696,6 @@ const Inventory = () => {
         ]));
     }
   };
-  const exportLabel = activeTab === 'petticoats' ? 'Export Petticoats' : activeTab === 'accessories' ? 'Export Accessories' : 'Export to Excel';
 
   // ── STATS ──
   const totalGowns  = gowns.length;
@@ -681,6 +706,7 @@ const Inventory = () => {
   return (
     <div className="inv-wrapper">
       <Header />
+      <DialogHost />
       <div className="inv-container">
 
         {/* ── STATS ── */}
@@ -745,7 +771,7 @@ const Inventory = () => {
               </div>
 
               <button className="inv-export-btn" onClick={exportExcel} title="Download all gowns and suits as an Excel file (no photos)">
-                <FileSpreadsheet size={18} /> {exportLabel}
+                <Download size={18} strokeWidth={2.2} /><span>Export</span>
               </button>
               <button className="inv-add-btn" onClick={openAddGown}>
                 <PlusCircle size={18} /> Add Gown
@@ -807,7 +833,7 @@ const Inventory = () => {
                 Petticoat layers. These appear in the gown package and in Customers (New Rental / Swap).
               </p>
               <button className="inv-export-btn" onClick={exportExcel} title="Download as an Excel file">
-                <FileSpreadsheet size={18} /> {exportLabel}
+                <Download size={18} strokeWidth={2.2} /><span>Export</span>
               </button>
               <button className="inv-add-btn" onClick={openAddPetti}>
                 <PlusCircle size={18} /> Add Layer
@@ -856,7 +882,7 @@ const Inventory = () => {
                 <input placeholder="Search accessories..." value={accSearch} onChange={e => setAccSearch(e.target.value)} />
               </div>
               <button className="inv-export-btn" onClick={exportExcel} title="Download as an Excel file">
-                <FileSpreadsheet size={18} /> {exportLabel}
+                <Download size={18} strokeWidth={2.2} /><span>Export</span>
               </button>
               <button className="inv-add-btn" onClick={openAddAcc}>
                 <PlusCircle size={18} /> Add Accessory
@@ -941,15 +967,17 @@ const Inventory = () => {
 
                   <div className="inv-field">
                     <label>Gown Name</label>
-                    <input type="text" placeholder="e.g. Mermaid Wedding Gown" value={gownForm.name}
-                      onChange={e => setGownForm(p => ({ ...p, name: e.target.value }))} />
+                    <input id="f-gname" className={errors.gname ? 'inv-invalid' : ''} type="text" placeholder="e.g. Mermaid Wedding Gown" value={gownForm.name}
+                      onChange={e => { clearErr('gname'); setGownForm(p => ({ ...p, name: e.target.value })); }} />
+                    {errors.gname && <p className="inv-err">{errors.gname}</p>}
                   </div>
 
                   <div className="inv-row-3">
                     <div className="inv-field">
                       <label>Price (₱)</label>
-                      <input type="number" placeholder="0" value={gownForm.price}
-                        onChange={e => setGownForm(p => ({ ...p, price: e.target.value }))} />
+                      <input id="f-gprice" className={errors.gprice ? 'inv-invalid' : ''} type="number" placeholder="0" value={gownForm.price}
+                        onChange={e => { clearErr('gprice'); setGownForm(p => ({ ...p, price: e.target.value })); }} />
+                      {errors.gprice && <p className="inv-err">{errors.gprice}</p>}
                     </div>
                     <div className="inv-field">
                       <label>Stock</label>
@@ -1211,8 +1239,8 @@ const Inventory = () => {
                   </div>
 
                   {gownForm.is_posted && (
-                    <div className="inv-post-photo">
-                      <label className={`inv-upload ${!imagePreview ? 'required' : ''}`}>
+                    <div className="inv-post-photo" id="f-gphoto" tabIndex={-1}>
+                      <label className={`inv-upload ${!imagePreview ? 'required' : ''} ${errors.gphoto ? 'inv-invalid-box' : ''}`}>
                         {imagePreview ? (
                           <>
                             <img src={imagePreview} alt="preview" className="inv-upload-preview" />
@@ -1226,6 +1254,7 @@ const Inventory = () => {
                         )}
                         <input type="file" accept="image/*" onChange={handleImageChange} hidden />
                       </label>
+                      {errors.gphoto && <p className="inv-err">{errors.gphoto}</p>}
                     </div>
                   )}
                 </div>
@@ -1249,8 +1278,9 @@ const Inventory = () => {
               <div className="inv-modal-body">
                 <div className="inv-field">
                   <label>Layer Number</label>
-                  <input type="number" min="1" value={pettiForm.layer}
-                    onChange={e => setPettiForm(p => ({ ...p, layer: e.target.value }))} />
+                  <input id="f-player" className={errors.player ? 'inv-invalid' : ''} type="number" min="1" value={pettiForm.layer}
+                    onChange={e => { clearErr('player'); setPettiForm(p => ({ ...p, layer: e.target.value })); }} />
+                  {errors.player && <p className="inv-err">{errors.player}</p>}
                 </div>
                 <div className="inv-row-2">
                   <div className="inv-field">
@@ -1283,8 +1313,9 @@ const Inventory = () => {
               <div className="inv-modal-body">
                 <div className="inv-field">
                   <label>Name</label>
-                  <input type="text" placeholder="e.g. Bowtie - Black, Fil Blue, Crown Gold" value={accForm.name}
-                    onChange={e => setAccForm(p => ({ ...p, name: e.target.value }))} />
+                  <input id="f-aname" className={errors.aname ? 'inv-invalid' : ''} type="text" placeholder="e.g. Bowtie - Black, Fil Blue, Crown Gold" value={accForm.name}
+                    onChange={e => { clearErr('aname'); setAccForm(p => ({ ...p, name: e.target.value })); }} />
+                  {errors.aname && <p className="inv-err">{errors.aname}</p>}
                 </div>
                 <div className="inv-row-2">
                   <div className="inv-field">
@@ -1326,6 +1357,7 @@ const Inventory = () => {
             </div>
           </div>
         )}
+
 
       </div>
     </div>

@@ -8,6 +8,7 @@ import {
   CheckCircle2, Ban, Wallet, Sparkles, Info, Pencil, Trash2, Shirt, Download
 } from 'lucide-react';
 import Header from '../components/Header';
+import { askConfirm, showAlert, DialogHost } from '../components/Dialogs';
 import '../styles/Availability.css';
 
 /* ---------- SETTINGS (confirm these with the shop owner) ---------- */
@@ -452,7 +453,7 @@ const Availability = () => {
   };
 
   const notifyCancelled = (n) => {
-    if (n > 0) alert(`${n} other reservation${n === 1 ? ' was' : 's were'} cancelled because this date is now full.`);
+    if (n > 0) showAlert(`${n} other reservation${n === 1 ? ' was' : 's were'} cancelled because this date is now full.`, { tone: 'info' });
   };
 
   /* ---------- PACKAGES (add / edit / delete) ---------- */
@@ -480,8 +481,8 @@ const Availability = () => {
     e.preventDefault();
     const d = pkgEditor;
     const price = Number(d.price);
-    if (!d.name.trim()) return alert('Enter a package name.');
-    if (!price || price <= 0) return alert('Enter a valid price.');
+    if (!d.name.trim()) return showAlert('Enter a package name.');
+    if (!price || price <= 0) return showAlert('Enter a valid price.');
 
     const fields = {
       name: d.name.trim(),
@@ -505,7 +506,7 @@ const Availability = () => {
       ({ error } = await supabase.from('wedding_packages').insert([{ ...fields, key: makeKey(d.name), sort_order: nextOrder }]));
     }
     setSaving(false);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { showAlert('Error: ' + error.message); return; }
 
     await logActivity(d.id ? 'wedding_package_updated' : 'wedding_package_added', `${d.id ? 'Updated' : 'Added'} wedding package: ${fields.name} (${peso(price)})`);
     setPkgEditor(null);
@@ -515,12 +516,12 @@ const Availability = () => {
   const deletePackage = async (p) => {
     const active = reservations.filter(r => r.packageKey === p.key && (r.status === 'pending' || r.status === 'confirmed')).length;
     if (active > 0) {
-      return alert(`Cannot delete "${p.name}" — ${plural(active, 'active reservation')} still use it.`);
+      return showAlert(`Cannot delete "${p.name}" — ${plural(active, 'active reservation')} still use it.`);
     }
-    if (!window.confirm(`Delete "${p.name}"? Past reservations keep their details.`)) return;
+    if (!await askConfirm(`Delete "${p.name}"? Past reservations keep their details.`)) return;
 
     const { error } = await supabase.from('wedding_packages').delete().eq('id', p.id);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { showAlert('Error: ' + error.message); return; }
     await logActivity('wedding_package_deleted', `Deleted wedding package: ${p.name}`);
     setPkgEditor(null);
     fetchPackages();
@@ -532,13 +533,13 @@ const Availability = () => {
       .from('wedding_packages')
       .insert(DEFAULT_PACKAGES.map((p, i) => packageToRow({ ...p, bridalIds: [], groomIds: [] }, i + 1)));
     setSaving(false);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { showAlert('Error: ' + error.message); return; }
     fetchPackages();
   };
 
   /* ---------- NEW RESERVATION ---------- */
   const openForm = (packageKey) => {
-    if (packages.length === 0) return alert('Add a wedding package first.');
+    if (packages.length === 0) return showAlert('Add a wedding package first.');
     const fallback = packages.find(p => p.bestSeller)?.key || packages[0].key;
     setForm(emptyForm(dateKey, packageKey || fallback));
     setEditingId(null);
@@ -590,24 +591,24 @@ const Availability = () => {
     if (!current) return;
 
     if (current.downpayment > pkg.price) {
-      return alert(`${peso(current.downpayment)} was already paid, which is more than this package (${peso(pkg.price)}). Pick a package that costs at least that.`);
+      return showAlert(`${peso(current.downpayment)} was already paid, which is more than this package (${peso(pkg.price)}). Pick a package that costs at least that.`);
     }
 
     // A booking that already holds a slot needs a free slot on the new date
     const holdsSlot = current.status === 'confirmed' || current.status === 'completed';
     if (holdsSlot && form.weddingDate !== current.weddingDate &&
         slotTakers(form.weddingDate).filter(r => r.id !== editingId).length >= MAX_WEDDINGS_PER_DAY) {
-      return alert('No slots left on that date. Pick another date.');
+      return showAlert('No slots left on that date. Pick another date.');
     }
 
     const isOut = current.pickedUpAt && !current.returnedAt;
     if (isOut && (form.bridalGownId !== current.bridalGownId || form.groomAttireId !== current.groomAttireId)) {
-      return alert('The gown / suit is already picked up. Mark it as returned first before changing it.');
+      return showAlert('The gown / suit is already picked up. Mark it as returned first before changing it.');
     }
 
     const clash = [pickedBridal, pickedGroom].filter(Boolean).find(it => takenNote(it, form.weddingDate));
     if (clash) {
-      return alert(`"${clash.name}" is ${takenNote(clash, form.weddingDate)}. Choose another one or pick another date.`);
+      return showAlert(`"${clash.name}" is ${takenNote(clash, form.weddingDate)}. Choose another one or pick another date.`);
     }
 
     setSaving(true);
@@ -645,18 +646,16 @@ const Availability = () => {
 
   const handleDelete = async (r) => {
     const paidNote = r.downpayment > 0 ? ` ${peso(r.downpayment)} was already paid.` : '';
-    const isOut = r.status === 'confirmed' && r.pickedUpAt && !r.returnedAt;
-    const outNote = isOut ? ' The gown / suit is still out, so its stock will be given back to Inventory.' : '';
-    if (!window.confirm(`Delete ${r.name}'s reservation permanently?${paidNote}${outNote} This cannot be undone.`)) return;
+    const isOut = !!r.pickedUpAt && !r.returnedAt;
+    // Still rented out (picked up, not returned yet): never delete
+    if (isOut) {
+      showAlert(`${r.name} has picked up the gown / suit and has not returned it yet.\n\nMark it as Returned first, then you can delete this reservation.`, { title: 'Cannot delete yet', tone: 'warn' });
+      return;
+    }
+    if (!(await askConfirm(`Delete ${r.name}'s reservation permanently?${paidNote} This cannot be undone.`))) return;
 
     const { error } = await supabase.from('wedding_reservations').delete().eq('id', r.id);
-    if (error) { alert('Error: ' + error.message); return; }
-
-    if (isOut && itemIdsOf(r).length) {
-      const stockError = await adjustStock(itemIdsOf(r), 1);
-      if (stockError) alert(`The booking was deleted, but Inventory was not updated: ${stockError}`);
-      fetchInventory();
-    }
+    if (error) { showAlert('Error: ' + error.message); return; }
 
     await logActivity('wedding_deleted', `Deleted ${r.name}'s wedding reservation (${r.packageName}, ${r.weddingDate})`);
     fetchReservations();
@@ -665,22 +664,22 @@ const Availability = () => {
   const handleCreate = async (e) => {
     e.preventDefault();
     const pkg = formPkg;
-    if (!pkg) return alert('Pick a package.');
+    if (!pkg) return showAlert('Pick a package.');
     if (editingId) return handleUpdate(pkg);
     const down = Number(form.downpayment) || 0;
 
     if (down > 0) {
-      if (down < MIN_DOWNPAYMENT) return alert(`The minimum downpayment is ${peso(MIN_DOWNPAYMENT)}.`);
-      if (down > pkg.price) return alert('The downpayment cannot be more than the package price.');
+      if (down < MIN_DOWNPAYMENT) return showAlert(`The minimum downpayment is ${peso(MIN_DOWNPAYMENT)}.`);
+      if (down > pkg.price) return showAlert('The downpayment cannot be more than the package price.');
       if (slotTakers(form.weddingDate).length >= MAX_WEDDINGS_PER_DAY) {
-        return alert('No slots left on this date. Pick another date.');
+        return showAlert('No slots left on this date. Pick another date.');
       }
     }
 
     // Gown / attire already held by another wedding on that date
     const clash = [pickedBridal, pickedGroom].filter(Boolean).find(it => takenNote(it, form.weddingDate));
     if (clash) {
-      return alert(`"${clash.name}" is ${takenNote(clash, form.weddingDate)}. Choose another one or pick another date.`);
+      return showAlert(`"${clash.name}" is ${takenNote(clash, form.weddingDate)}. Choose another one or pick another date.`);
     }
 
     setSaving(true);
@@ -727,30 +726,30 @@ const Availability = () => {
   /* ---------- PAYMENTS AND STATUS ---------- */
   const handlePay = async (r) => {
     const amount = Number(payInputs[r.id]);
-    if (!amount || amount <= 0) return alert('Enter a valid amount.');
+    if (!amount || amount <= 0) return showAlert('Enter a valid amount.');
 
     const newDown = r.downpayment + amount;
-    if (newDown > r.packagePrice) return alert('The payment is more than the balance.');
+    if (newDown > r.packagePrice) return showAlert('The payment is more than the balance.');
 
     const wasPending = r.status === 'pending';
     if (wasPending) {
-      if (newDown < MIN_DOWNPAYMENT) return alert(`The minimum downpayment is ${peso(MIN_DOWNPAYMENT)}.`);
+      if (newDown < MIN_DOWNPAYMENT) return showAlert(`The minimum downpayment is ${peso(MIN_DOWNPAYMENT)}.`);
       if (slotTakers(r.weddingDate).length >= MAX_WEDDINGS_PER_DAY) {
-        return alert('No slots left on this date.');
+        return showAlert('No slots left on this date.');
       }
       // Soft warning if the chosen gown / attire was taken by another wedding meanwhile
       const clash = [itemById[r.bridalGownId], itemById[r.groomAttireId]]
         .filter(Boolean)
         .find(it => takenNote(it, r.weddingDate));
-      if (clash && !window.confirm(`"${clash.name}" is ${takenNote(clash, r.weddingDate)}. Confirm the downpayment anyway?`)) return;
+      if (clash && !await askConfirm(`"${clash.name}" is ${takenNote(clash, r.weddingDate)}. Confirm the downpayment anyway?`)) return;
     }
-    if (!window.confirm(`Confirm payment of ${peso(amount)} from ${r.name}?`)) return;
+    if (!await askConfirm(`Confirm payment of ${peso(amount)} from ${r.name}?`)) return;
 
     const { error } = await supabase
       .from('wedding_reservations')
       .update({ downpayment: newDown, status: wasPending ? 'confirmed' : r.status })
       .eq('id', r.id);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { showAlert('Error: ' + error.message); return; }
 
     const cancelled = wasPending ? await cancelCompetingPending(r.weddingDate) : 0;
     await logActivity('wedding_payment', `${peso(amount)} from ${r.name} for the ${r.packageName}`);
@@ -761,16 +760,16 @@ const Availability = () => {
 
   const handleStatus = async (r, status) => {
     if (status === 'completed' && !r.returnedAt) {
-      return alert('Mark the gown / suit as returned first, then complete the booking.');
+      return showAlert('Mark the gown / suit as returned first, then complete the booking.');
     }
     const label = status === 'completed' ? 'mark this wedding as completed' : 'cancel this reservation';
-    if (!window.confirm(`Do you want to ${label}?`)) return;
+    if (!await askConfirm(`Do you want to ${label}?`)) return;
 
     const { error } = await supabase
       .from('wedding_reservations')
       .update({ status, cancel_reason: status === 'cancelled' ? 'Cancelled by the shop.' : null })
       .eq('id', r.id);
-    if (error) { alert('Error: ' + error.message); return; }
+    if (error) { showAlert('Error: ' + error.message); return; }
 
     await logActivity('wedding_updated', `${r.name}'s wedding reservation marked as ${status}`);
     fetchReservations();
@@ -812,7 +811,7 @@ const Availability = () => {
       return: `Mark ${r.name}'s gown / suit as returned?${names ? stockNote.replace('change', 'go back up by 1') : ''}`,
       undo: r.returnedAt ? 'Undo the return?' : 'Undo the pickup?',
     };
-    if (!window.confirm(messages[step])) return;
+    if (!await askConfirm(messages[step])) return;
 
     // -1 when the items leave the shop, +1 when they come back
     const delta = step === 'pickup' ? -1 : step === 'return' ? 1 : (r.returnedAt ? -1 : 1);
@@ -827,19 +826,19 @@ const Availability = () => {
     if (delta < 0 && ids.length) {
       for (const id of ids) {
         const { data } = await supabase.from('gowns').select('name, stock').eq('id', id).single();
-        if (data && Number(data.stock || 0) <= 0) return alert(`"${data.name}" has no stock left in Inventory.`);
+        if (data && Number(data.stock || 0) <= 0) return showAlert(`"${data.name}" has no stock left in Inventory.`);
       }
     }
 
     const { error } = await supabase.from('wedding_reservations').update(patch).eq('id', r.id);
     if (error) {
-      alert('Error: ' + error.message + '\n\nRun wedding-stages.sql in the Supabase SQL Editor first (adds the picked_up_at and returned_at columns).');
+      showAlert('Error: ' + error.message + '\n\nRun wedding-stages.sql in the Supabase SQL Editor first (adds the picked_up_at and returned_at columns).');
       return;
     }
 
     if (ids.length) {
       const stockError = await adjustStock(ids, delta);
-      if (stockError) alert(`The booking was updated, but Inventory was not: ${stockError}`);
+      if (stockError) showAlert(`The booking was updated, but Inventory was not: ${stockError}`);
       fetchInventory();
     }
 
@@ -925,6 +924,7 @@ const Availability = () => {
   return (
     <>
       <Header />
+      <DialogHost />
       <div className="wa-page">
 
         {/* TOP BAR */}

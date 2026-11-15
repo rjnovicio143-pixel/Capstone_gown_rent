@@ -1,0 +1,50 @@
+.dlg-overlay {
+  position: fixed; inset: 0; z-index: 20000;
+  display: flex; align-items: center; justify-content: center; padding: 18px;
+  background: rgba(15, 23, 42, 0.58); backdrop-filter: blur(4px);
+  animation: dlgFade .18s ease;
+}
+.dlg-box {
+  width: 100%; max-width: 420px; padding: 28px 26px 22px;
+  background: #fff; border-radius: 22px; text-align: center;
+  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.35);
+  font-family: 'Inter', system-ui, sans-serif;
+  animation: dlgPop .22s cubic-bezier(.2,.9,.3,1.2);
+}
+.dlg-box *, .dlg-box { box-sizing: border-box; }
+.dlg-icon {
+  width: 60px; height: 60px; margin: 0 auto 14px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 26px;
+  background: #fef3c7;
+}
+.dlg-danger .dlg-icon, .dlg-error .dlg-icon { background: #fee2e2; }
+.dlg-info .dlg-icon, .dlg-green .dlg-icon { background: #dcfce7; }
+.dlg-warn .dlg-icon, .dlg-gold .dlg-icon { background: #fef3c7; }
+
+.dlg-title { margin: 0 0 8px; font-size: 19px; font-weight: 800; color: #1e293b; }
+.dlg-msg { max-height: 40vh; overflow-y: auto; }
+.dlg-msg p { margin: 0 0 6px; font-size: 14.5px; line-height: 1.55; color: #475569; word-break: break-word; }
+
+.dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
+.dlg-btn {
+  flex: 1; padding: 13px 16px; border: none; border-radius: 13px;
+  font-family: inherit; font-size: 14.5px; font-weight: 800; cursor: pointer;
+  transition: transform .15s, filter .15s, background .15s;
+}
+.dlg-btn:hover { transform: translateY(-1px); }
+.dlg-btn:active { transform: none; filter: brightness(.95); }
+.dlg-btn:focus-visible { outline: 3px solid rgba(184, 134, 11, .35); outline-offset: 2px; }
+.dlg-cancel { background: #f1f5f9; color: #475569; }
+.dlg-cancel:hover { background: #e2e8f0; }
+.dlg-ok { color: #fff; background: linear-gradient(135deg, #b8860b, #daa520); box-shadow: 0 6px 14px rgba(184,134,11,.3); }
+.dlg-ok-danger { background: linear-gradient(135deg, #dc2626, #ef4444); box-shadow: 0 6px 14px rgba(220,38,38,.3); }
+.dlg-ok-error { background: #334155; box-shadow: none; }
+.dlg-ok-green, .dlg-ok-info { background: linear-gradient(135deg, #15803d, #22c55e); box-shadow: 0 6px 14px rgba(22,163,74,.3); }
+
+@keyframes dlgFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dlgPop { from { opacity: 0; transform: translateY(14px) scale(.94); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 480px) {
+  .dlg-box { padding: 24px 20px 18px; border-radius: 20px; }
+  .dlg-actions { flex-direction: column-reverse; }
+}

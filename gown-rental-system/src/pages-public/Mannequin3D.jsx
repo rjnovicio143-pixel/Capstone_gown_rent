@@ -94,29 +94,11 @@ const mapAccessory = (row) => ({
   modelPath: resolveModelUrl(row.model_path),
 });
 
-// EXAMPLES ONLY (local files in public/gown)
-const EXAMPLE_GOWNS = [
-  {
-    id: 'example-1', name: 'Red Dress Ruby', category: 'Example',
-    thumbnail: '/images/Red rose.jpg', modelPath: '/gown/elegant_rose.glb',
-    sizes: ['S', 'M', 'L'], includedAccessoryIds: [], isExample: true,
-  },
-  {
-    id: 'example-2', name: 'Blue Gown', category: 'Example',
-    thumbnail: '/images/Sky blye.jpg', modelPath: '/gown/blue_dress.glb',
-    sizes: ['M'], includedAccessoryIds: [], isExample: true,
-  },
-  {
-    id: 'example-3', name: 'Black Dress', category: 'Example',
-    thumbnail: '/images/Black.jpg', modelPath: '/gown/black_dress.glb',
-    sizes: ['S', 'M'], includedAccessoryIds: [], isExample: true,
-  },
-  {
-    id: 'example-4', name: 'Golden Gown', category: 'Example',
-    thumbnail: '/images/premium.jpg', modelPath: '/gown/golden_gown.glb',
-    sizes: ['L', 'XXL'], includedAccessoryIds: [], isExample: true,
-  },
-];
+// Nothing is selected until the customer picks a gown (placeholder keeps the page logic simple)
+const NO_GOWN = {
+  id: 'none', name: '', category: '', price: 0, discount: 0, sizes: [], includedAccessoryIds: [],
+  modelPath: null, fitAdjust: parseTweak(null), isExample: true,
+};
 
 const SLIDERS = [
   { key: 'height', label: 'Height' },
@@ -170,7 +152,7 @@ const Mannequin3D = () => {
   const [loadingData, setLoadingData] = useState(true);
 
   // Selection
-  const [selectedGown, setSelectedGown] = useState(EXAMPLE_GOWNS[0]);
+  const [selectedGown, setSelectedGown] = useState(NO_GOWN);
   const [wornIds, setWornIds] = useState([]); // accessories shown on the mannequin
   const [wearing, setWearing] = useState(false); // nothing is worn until the customer picks a gown
 
@@ -213,7 +195,7 @@ const Mannequin3D = () => {
   }, []);
 
   /* ---------- GOWN LIST (search, filters, show more) ---------- */
-  const allGowns = [...gowns, ...EXAMPLE_GOWNS];
+  const allGowns = gowns;
   const categories = ['All', ...new Set(allGowns.map(g => g.category).filter(Boolean))];
 
   const q = search.trim().toLowerCase();

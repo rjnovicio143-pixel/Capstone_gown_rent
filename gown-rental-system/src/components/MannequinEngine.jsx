@@ -188,11 +188,15 @@ function gownProfileInner(root, body, length) {
    gidugang ibabaw sa auto-fit, mao nga parehas ang posisyon sa tanang customer.
    s = gidak-on (1 = sama), y = pataas / paubos (metros), w = lapad, d = gibag-on
    ---------------------------------------------------------- */
-export const DEFAULT_TWEAK = { s: 1, y: 0, w: 1, d: 1, exact: false };
+export const DEFAULT_TWEAK = { s: 1, y: 0, w: 1, d: 1, exact: false, noPush: false, hide: [] };
 export const parseTweak = (v) => {
   const n = (x, def) => (Number.isFinite(Number(x)) && x !== null && x !== '' ? Number(x) : def);
   const o = v && typeof v === 'object' ? v : {};
-  return { s: n(o.s, 1), y: n(o.y, 0), w: n(o.w, 1), d: n(o.d, 1), exact: !!o.exact };
+  return {
+    s: n(o.s, 1), y: n(o.y, 0), w: n(o.w, 1), d: n(o.d, 1), exact: !!o.exact,
+    noPush: !!o.noPush,                                   // manual: do not reshape the gown around the body
+    hide: Array.isArray(o.hide) ? o.hide.map(String) : [], // names of gown parts the admin switched off
+  };
 };
 
 // Kuhaon ang scale + position sa gown aron mo-fit sa avatar (paspas, mahimo matag slide)
@@ -477,7 +481,7 @@ function expandInner(root, fit, body, length, tweak) {
   });
 }
 
-function FittedGown({ modelPath, body, looseness, length, tweak }) {
+function FittedGown({ modelPath, body, looseness, length, tweak, onParts }) {
   const scene = useClonedGLB(modelPath);
   const ysKey = body.ok ? body.slices.map(sl => sl.y).join(',') : '';
 
@@ -487,7 +491,7 @@ function FittedGown({ modelPath, body, looseness, length, tweak }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scene, body.ok, body.height, body.minY, body.coverTop, ysKey, length]
   );
-  const tw = useMemo(() => parseTweak(tweak), [tweak?.s, tweak?.y, tweak?.w, tweak?.d, tweak?.exact]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tw = useMemo(() => parseTweak(tweak), [tweak?.s, tweak?.y, tweak?.w, tweak?.d, tweak?.exact, tweak?.noPush, (tweak?.hide || []).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   const fit = useMemo(() => gownFit(profile, body, looseness, tw), [profile, body, looseness, tw]);
 
   // Kada gown naay kaugalingon nga geometry (dili mausab ang gi-cache nga original)
@@ -497,9 +501,36 @@ function FittedGown({ modelPath, body, looseness, length, tweak }) {
     });
   }, [scene]);
 
-  // I-isbog ang gown aron ang lawas makasulod gyud
+  // Names of the gown's parts (so the admin can switch one off)
+  const partNames = useMemo(() => {
+    const names = [];
+    scene.traverse((o) => { if (o.isMesh) names.push(o.name || `part-${names.length + 1}`); });
+    return names;
+  }, [scene]);
+  useEffect(() => { if (onParts) onParts(partNames); }, [partNames, onParts]);
+
+  // Hide the parts the admin switched off (does not change the fit)
   useEffect(() => {
-    if (body.ok && profile) expandGownAroundBody(scene, fit, body, length, tw);
+    let i = 0;
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const name = o.name || `part-${i + 1}`;
+      i += 1;
+      o.visible = !tw.hide.includes(name);
+    });
+  }, [scene, tw]);
+
+  // I-isbog ang gown aron ang lawas makasulod gyud (skipped in manual mode: the gown keeps its own shape)
+  useEffect(() => {
+    if (!(body.ok && profile)) return;
+    if (tw.noPush) {
+      scene.traverse((o) => {
+        const pos = o.isMesh && o.geometry?.attributes?.position;
+        if (pos && o.userData.origPos) { pos.array.set(o.userData.origPos); pos.needsUpdate = true; o.geometry.computeBoundingSphere(); }
+      });
+      return;
+    }
+    expandGownAroundBody(scene, fit, body, length, tw);
   }, [scene, fit, body, profile, length, tw]);
 
   // Ang sulod sa gown makita (walay "butang" kung ang mesh usa ra ka-side)
@@ -529,7 +560,7 @@ function FallbackGown() {
 }
 
 // Ang tibuok eksena: avatar + gown nga na-fit sa iyang sukod
-export function Scene({ bodyPath, gownPath, showBody, build, looseness, length, scale, arms = 'down', tweak, onMeasured }) {
+export function Scene({ bodyPath, gownPath, showBody, build, looseness, length, scale, arms = 'down', tweak, onMeasured, onParts }) {
   const [raw, setRaw] = useState(null);   // null = wala pa na-sukod ang avatar
   useEffect(() => { if (onMeasured) onMeasured(raw); }, [raw, onMeasured]);
   const body = useMemo(() => applyBuild(raw, build), [raw, build]);
@@ -542,7 +573,7 @@ export function Scene({ bodyPath, gownPath, showBody, build, looseness, length, 
 
       {gownPath && body && (
         <ModelErrorBoundary key={gownPath} fallback={<FallbackGown />}>
-          <FittedGown modelPath={gownPath} body={body} looseness={looseness} length={length} tweak={tweak} />
+          <FittedGown modelPath={gownPath} body={body} looseness={looseness} length={length} tweak={tweak} onParts={onParts} />
         </ModelErrorBoundary>
       )}
     </group>

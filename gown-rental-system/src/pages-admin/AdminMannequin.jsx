@@ -75,6 +75,7 @@ const AdminMannequin = () => {
   const [arms, setArms] = useState('down');          // down | away | tpose | hide
   const [tweak, setTweak] = useState(DEFAULT_TWEAK);  // gown position (saved per gown)
   const [saveMsg, setSaveMsg] = useState('');
+  const [gownParts, setGownParts] = useState([]);     // names of the parts inside the selected gown
   const [sheet, setSheet] = useState('closed');       // mobile bottom sheet: closed | gowns | controls
   // 3D background: dark | light (remembered in this browser)
   const [bgMode, setBgMode] = useState(() => {
@@ -359,10 +360,47 @@ const AdminMannequin = () => {
                 />{' '}
                 Exact position from Blender (no auto-fit)
               </label>
+              <label className="am-check" style={{ display: 'block', marginBottom: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={!!tweak.noPush}
+                  onChange={(e) => { setTweak(prev => ({ ...prev, noPush: e.target.checked })); setSaveMsg(''); }}
+                />{' '}
+                Manual: do not reshape the gown around the body
+              </label>
               {renderSlider('Size (whole gown)', tweak.s, setT('s'), 0.7, 1.3)}
               {renderSlider('Up / down', tweak.y, setT('y'), -0.3, 0.3)}
               {renderSlider('Width', tweak.w, setT('w'), 0.7, 1.4)}
               {renderSlider('Depth (front to back)', tweak.d, setT('d'), 0.7, 1.4)}
+              {gownParts.length > 1 && (
+                <div className="am-parts">
+                  <h4>Gown parts</h4>
+                  <p className="section-subtitle">
+                    Untick a part to remove it from this gown (for example a patch that does not fit). Press Save position to keep it for customers.
+                  </p>
+                  <div className="am-parts-list">
+                    {gownParts.map((name) => {
+                      const hidden = (tweak.hide || []).includes(name);
+                      return (
+                        <label key={name} className={`am-part ${hidden ? 'off' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={!hidden}
+                            onChange={() => {
+                              setTweak(prev => {
+                                const cur = prev.hide || [];
+                                return { ...prev, hide: cur.includes(name) ? cur.filter(x => x !== name) : [...cur, name] };
+                              });
+                              setSaveMsg('');
+                            }}
+                          />{' '}
+                          <span>{name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="presets-list">
                 {!category.kids && (
                   <button className="preset-btn" onClick={() => applyPreset(category, 'M')}>Use size M</button>
@@ -441,6 +479,7 @@ const AdminMannequin = () => {
                           showBody={showBody}
                           arms={arms}
                           tweak={tweak}
+                          onParts={setGownParts}
                           build={build}
                           looseness={looseness}
                           length={length}

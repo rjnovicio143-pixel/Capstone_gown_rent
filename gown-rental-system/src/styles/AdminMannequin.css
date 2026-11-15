@@ -283,3 +283,16 @@
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   }
 }
+
+/* Gown parts list (switch a part of the gown off) */
+.am-parts { margin: 14px 0 6px; padding: 12px; background: #fafbfc; border: 1px solid #edf0f4; border-radius: 12px; }
+.am-parts h4 { margin: 0 0 4px; font-size: 13px; font-weight: 800; color: #1e293b; }
+.am-parts-list { display: flex; flex-direction: column; gap: 6px; max-height: 190px; overflow-y: auto; margin-top: 8px; }
+.am-part {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  background: #fff; border: 1.5px solid #e2e8f0; border-radius: 9px;
+  font-size: 12.5px; font-weight: 600; color: #334155; cursor: pointer;
+}
+.am-part span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.am-part:hover { border-color: #daa520; }
+.am-part.off { background: #fef2f2; border-color: #fecaca; color: #b91c1c; text-decoration: line-through; }

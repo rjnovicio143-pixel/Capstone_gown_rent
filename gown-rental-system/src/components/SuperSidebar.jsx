@@ -36,7 +36,7 @@ const SuperSidebar = ({ isCollapsed, setIsCollapsed }) => {
         <div className="sidebar-logo">
           <span className="logo-icon-g">G</span>
           <span className="logos-text">
-            Super<span className="accent-gold-text"> Admin</span>
+            Sys<span className="accent-gold-text">Admin</span>
           </span>
         </div>
 

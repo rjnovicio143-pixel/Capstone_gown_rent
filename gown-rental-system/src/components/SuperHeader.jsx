@@ -61,7 +61,7 @@ const SuperHeader = () => {
     <header className="sh-header">
       <div className="sh-left">
         <ShieldCheck size={16} />
-        <span>Super Admin Panel</span>
+        <span>System Administrator</span>
       </div>
 
       <div className="sh-right">

@@ -34,6 +34,8 @@ const mapGown = (row) => ({
   stock: Number(row.stock) || 0,
   fitAdjust: parseTweak(row.fit_adjust),      // gown position saved by the admin
   hasFit: !!row.fit_adjust,
+  petticoatLayer: row.petticoat_layer || null,
+  includedAccessoryIds: row.included_accessories || [],
   thumbnail: row.image,                       // usba kung lahi ang column
   modelPath: resolveModelUrl(row.model_path), // usba kung lahi ang column
   isExample: false,
@@ -65,7 +67,6 @@ const AdminMannequin = () => {
   const [height, setHeight] = useState(1.0);
   const [waist, setWaist] = useState(1.0);
   const [chest, setChest] = useState(1.0);
-  const [hip, setHip] = useState(1.0);
 
   // Auto-fit sa gown
   const [looseness, setLooseness] = useState(1.0);   // gaan-an / pig-ot sa gown
@@ -87,6 +88,7 @@ const AdminMannequin = () => {
     try { localStorage.setItem('mannequin-bg', next); } catch (e) { /* ignore */ }
     return next;
   });
+  const [accessories, setAccessories] = useState([]);   // for the "included with this gown" list (info only)
   const [bodyRaw, setBodyRaw] = useState(null);       // sukod sa avatar (gikan sa Scene)
 
   /* ---------- FETCH GOWNS (INVENTORY) ---------- */
@@ -111,6 +113,15 @@ const AdminMannequin = () => {
     fetchGowns();
   }, []);
 
+  useEffect(() => {
+    supabase.from('accessories').select('*').then(({ data, error }) => {
+      if (error) { console.error('Error fetching accessories:', error); return; }
+      setAccessories((data || []).map(r => ({ id: r.id, name: r.name, category: r.category || '', thumbnail: r.image || r.thumbnail || null })));
+    });
+  }, []);
+  const includedAccs = accessories.filter(a => (selectedGown?.includedAccessoryIds || []).includes(a.id));
+  const hasIncluded = !!selectedGown && !selectedGown.isExample && (includedAccs.length > 0 || !!selectedGown.petticoatLayer);
+
   // Inventory una, examples sunod
   const allGowns = [...gowns, ...EXAMPLE_GOWNS];
 
@@ -128,7 +139,7 @@ const AdminMannequin = () => {
   );
 
   const resetSliders = () => {
-    setHeight(1.0); setWaist(1.0); setChest(1.0); setHip(1.0);
+    setHeight(1.0); setWaist(1.0); setChest(1.0);
   };
 
   // I-load ang preset sa size / edad: gidak-on + weight, ug i-reset ang belly / muscle
@@ -356,7 +367,6 @@ const AdminMannequin = () => {
               <p className="section-subtitle">Fine adjustments for {category.id} ({selectedSize}); the gown follows:</p>
               {renderSlider('Waist (Width)', waist, setWaist, 0.8, 1.3)}
               {renderSlider('Chest (Front)', chest, setChest, 0.8, 1.3)}
-              {renderSlider('Hip', hip, setHip, 0.8, 1.3)}
             </div>
 
             <div className="am-section-card">
@@ -562,6 +572,28 @@ const AdminMannequin = () => {
                     ? `The gown fits (gown size ${gownSizes.join(' / ')}, avatar is about ${sizeCheck.now}).`
                     : `Does not fit. The gown is for ${gownSizes.join(' / ')} and the avatar is about ${sizeCheck.now}. Adjust Waist/Chest or Weight until it reaches ${gownSizes.join(' / ')}.`}
                 </p>
+              )}
+
+              {selectedGown && !selectedGown.isExample && (
+                <div className="am-included">
+                  <div className="am-included-title">
+                    <Shirt size={14} /> Included with this gown
+                    <span>Part of the same 3D model, so these cannot be swapped.</span>
+                  </div>
+                  {hasIncluded ? (
+                    <div className="am-included-list">
+                      {selectedGown.petticoatLayer && <span className="am-inc-chip">Petticoat Layer {selectedGown.petticoatLayer}</span>}
+                      {includedAccs.map(a => (
+                        <span key={a.id} className="am-inc-chip">
+                          {a.thumbnail && <img src={a.thumbnail} alt="" />}
+                          {a.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="am-included-none">No add-ons listed for this gown. Add them in Inventory.</p>
+                  )}
+                </div>
               )}
 
               <div className={`canvas-viewport-container ${bgMode}`}>

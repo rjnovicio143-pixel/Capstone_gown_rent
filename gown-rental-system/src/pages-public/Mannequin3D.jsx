@@ -1,41 +1,14 @@
-import React, { useState, useEffect, useMemo, useRef, Suspense, Component } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Stage, useGLTF, Html } from '@react-three/drei';
-import { Sliders, Ruler, Shirt, RotateCcw, Info, Calendar, Search, Crown, Check, X, Sun, Moon, Hand, Lock } from 'lucide-react';
+import { OrbitControls, Stage, Html } from '@react-three/drei';
+import { Sliders, Ruler, Shirt, RotateCcw, Info, Calendar, Search, Crown, Check, X, Sun, Moon, Hand, Lock, Layers } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import {
   Scene, CATEGORIES, sizesFor, defaultSizeFor, makeBuild, parseGownSizes, checkSizeFit,
   audienceOf, audienceFits, AUDIENCE_LABEL, parseTweak, parseKidAges, nearestAdultSize, DEFAULT_LIM,
 } from '../components/MannequinEngine';
 import '../styles-public/Mannequin3D.css';
-
-/* ---------- SAFE MODEL LOADER ----------
-   useGLTF suspends while loading, so a plain try/catch does not work.
-   An Error Boundary shows a placeholder only when the file really fails to load. */
-class ModelErrorBoundary extends Component {
-  state = { hasError: false };
-  static getDerivedStateFromError() { return { hasError: true }; }
-  render() {
-    return this.state.hasError ? this.props.fallback : this.props.children;
-  }
-}
-
-function GLBModel({ modelPath, scale }) {
-  const { scene } = useGLTF(modelPath);
-  return <primitive object={scene.clone()} scale={scale} />;
-}
-
-// Accessories: render nothing if the file fails, and load without blanking the whole scene
-function OptionalModel({ modelPath }) {
-  return (
-    <ModelErrorBoundary key={modelPath} fallback={null}>
-      <Suspense fallback={null}>
-        <GLBModel modelPath={modelPath} scale={[1, 1, 1]} />
-      </Suspense>
-    </ModelErrorBoundary>
-  );
-}
 
 function SceneLoader() {
   return (
@@ -101,16 +74,15 @@ const NO_GOWN = {
 const SLIDERS = [
   { key: 'waist',  label: 'Waist (Width)' },
   { key: 'chest',  label: 'Chest (Front)' },
-  { key: 'hip',    label: 'Hip' },
 ];
 
 const SIZE_LIMITS = [0.8, 1.3];   // fine-tune range (80% - 130%)
-const DEFAULT_ADJUST = { height: 1, waist: 1, chest: 1, hip: 1 };
+const DEFAULT_ADJUST = { height: 1, waist: 1, chest: 1 };
 
 // Tabs shown under the 3D view on tablet and mobile
 const TABS = [
   { id: 'gowns',  label: 'Gowns',  icon: Shirt },
-  { id: 'extras', label: 'Extras', icon: Crown },
+  { id: 'extras', label: 'Add-ons', icon: Crown },
   { id: 'body',   label: 'Body',   icon: Ruler },
   { id: 'fit',    label: 'Fit',    icon: Sliders },
 ];
@@ -150,7 +122,6 @@ const Mannequin3D = () => {
 
   // Selection
   const [selectedGown, setSelectedGown] = useState(NO_GOWN);
-  const [wornIds, setWornIds] = useState([]); // accessories shown on the mannequin
   const [wearing, setWearing] = useState(false); // nothing is worn until the customer picks a gown
 
   // Gown filters
@@ -158,9 +129,6 @@ const Mannequin3D = () => {
   const [gownCat, setGownCat] = useState('All');
   const [only3D, setOnly3D] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-
-  // Accessory filter
-  const [accCategory, setAccCategory] = useState('All');
 
   /* ---------- FETCH POSTED GOWNS + ACCESSORIES ---------- */
   useEffect(() => {
@@ -240,24 +208,12 @@ const Mannequin3D = () => {
   const clearFilters   = ()  => { setSearch(''); setGownCat('All'); setOnly3D(false); setVisibleCount(PAGE_SIZE); };
 
   /* ---------- ACCESSORIES ---------- */
-  const accCategories = ['All', ...new Set(accessories.map(a => a.category).filter(Boolean))];
-  const visibleAccs = accessories.filter(a => accCategory === 'All' || a.category === accCategory);
-
   const includedIds = selectedGown.includedAccessoryIds || [];
   const includedAccs = accessories.filter(a => includedIds.includes(a.id));
   const hasPackage = !!selectedGown.petticoatLayer || includedAccs.length > 0;
 
-  const wornAccessories = accessories.filter(a => wornIds.includes(a.id));
-  const wornWith3D = wornAccessories.filter(a => a.modelPath);
-  const noPreviewCount = wornAccessories.length - wornWith3D.length;
-
-  // Accessories that are not part of the gown package are charged as extras
-  const chargedAccessories = wornAccessories.filter(a => !includedIds.includes(a.id));
-  const extrasTotal = chargedAccessories.reduce((sum, a) => sum + a.price, 0);
+  // Accessories are part of the gown's own 3D model: they are shown as information only (not selectable, not charged)
   const gownPrice = Math.round((Number(selectedGown.price) || 0) * (1 - (selectedGown.discount || 0) / 100));
-
-  const toggleAccessory = (id) =>
-    setWornIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
 
   /* ---------- MANNEQUIN ---------- */
   const bodyModelPath = `/mannequin/${category.file}.glb`;
@@ -347,7 +303,6 @@ const Mannequin3D = () => {
   const handleSelectGown = (gown) => {
     setSelectedGown(gown);
     setWearing(true);
-    setWornIds(gown.includedAccessoryIds || []);
     setLooseness(1.0);
     setLength(1.0);
 
@@ -380,8 +335,7 @@ const Mannequin3D = () => {
           category: selectedGown.category,
           size: selectedGown.sizes?.includes(selectedSize) ? selectedSize : (selectedGown.sizes?.[0] || ''),
         },
-        // Accessories chosen on top of the gown package (charged)
-        extras: chargedAccessories.map(a => a.id),
+        extras: [],   // accessories come with the gown, nothing is added on top
       },
     });
   };
@@ -586,7 +540,7 @@ const Mannequin3D = () => {
                     <button
                       type="button"
                       className="m3d-unequip"
-                      onClick={() => { setWearing(false); setWornIds([]); }}
+                      onClick={() => setWearing(false)}
                     >
                       <X size={13} /> Take off
                     </button>
@@ -624,11 +578,6 @@ const Mannequin3D = () => {
                         length={length}
                         scale={[adjust.waist * modelScale, adjust.height * modelScale, adjust.chest * modelScale]}
                       />
-                      {wornWith3D.map(acc => (
-                        <group key={acc.id} scale={modelScale} position={[0, -1, 0]}>
-                          <OptionalModel modelPath={acc.modelPath} />
-                        </group>
-                      ))}
                     </Stage>
                   </Suspense>
 
@@ -676,12 +625,11 @@ const Mannequin3D = () => {
                       <strong>{selectedGown.name}</strong>
                       <span>
                         {peso(gownPrice)}
-                        {extrasTotal > 0 && ` + ${peso(extrasTotal)} extras`}
                       </span>
                     </div>
                     <div className="m3d-summary-total">
                       <span>Estimated total</span>
-                      <strong>{peso(gownPrice + extrasTotal)}</strong>
+                      <strong>{peso(gownPrice)}</strong>
                     </div>
                   </div>
 
@@ -703,9 +651,6 @@ const Mannequin3D = () => {
                 onClick={() => setActiveTab(prev => (prev === id ? 'closed' : id))}
               >
                 <Icon size={16} /> {label}
-                {id === 'extras' && chargedAccessories.length > 0 && (
-                  <span className="m3d-tab-count">{chargedAccessories.length}</span>
-                )}
               </button>
             ))}
           </nav>
@@ -823,77 +768,34 @@ const Mannequin3D = () => {
               )}
             </div>
 
-            {/* ---------- ACCESSORIES ---------- */}
+            {/* ---------- ADD-ONS THAT COME WITH THE GOWN (information only) ---------- */}
             <div className="m3d-card m3d-pane-extras">
-              <h3><span className="m3d-step">3</span> Add accessories</h3>
+              <h3><span className="m3d-step">3</span> What comes with it</h3>
               <p className="m3d-subtitle">
-                Add accessories to your look. Items included with the gown are already in its price.
+                The accessories are part of the gown's 3D model, so they cannot be added or swapped here.
               </p>
 
-              {wearing && !selectedGown.isExample && hasPackage && (
-                <div className="m3d-included">
-                  <p className="m3d-included-title">Included with this gown</p>
-                  <div className="m3d-included-list">
-                    {selectedGown.petticoatLayer && (
-                      <span className="m3d-inc-chip">Petticoat Layer {selectedGown.petticoatLayer}</span>
-                    )}
-                    {includedAccs.map(a => (
-                      <span key={a.id} className="m3d-inc-chip">{a.name}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {accessories.length === 0 ? (
-                <p className="m3d-list-note">{loadingData ? 'Loading accessories...' : 'No accessories available yet.'}</p>
-              ) : (
-                <>
-                  {accCategories.length > 2 && (
-                    <div className="m3d-chips">
-                      {accCategories.map(c => (
-                        <button
-                          key={c}
-                          type="button"
-                          className={`m3d-chip ${accCategory === c ? 'active' : ''}`}
-                          onClick={() => setAccCategory(c)}
-                        >
-                          {c}
-                        </button>
-                      ))}
+              {!wearing || selectedGown.isExample ? (
+                <p className="m3d-list-note">Pick a gown to see what comes with it.</p>
+              ) : hasPackage ? (
+                <div className="m3d-incl-list">
+                  {selectedGown.petticoatLayer && (
+                    <div className="m3d-incl-row">
+                      <span className="m3d-incl-ico"><Layers size={14} /></span>
+                      <span className="m3d-incl-info"><strong>Petticoat</strong><span>Layer {selectedGown.petticoatLayer}</span></span>
+                      <span className="m3d-acc-price inc">Included</span>
                     </div>
                   )}
-
-                  <div className="m3d-acc-list">
-                    {visibleAccs.map(acc => {
-                      const on = wornIds.includes(acc.id);
-                      const included = includedIds.includes(acc.id);
-                      return (
-                        <button
-                          type="button"
-                          key={acc.id}
-                          className={`m3d-acc ${on ? 'on' : ''}`}
-                          onClick={() => toggleAccessory(acc.id)}
-                          aria-pressed={on}
-                        >
-                          <span className="m3d-acc-check">{on && <Check size={12} />}</span>
-                          <span className="m3d-acc-info">
-                            <strong>{acc.name}</strong>
-                            <span>{acc.category}{!acc.modelPath ? ' · No 3D preview' : ''}</span>
-                          </span>
-                          <span className={`m3d-acc-price ${included ? 'inc' : ''}`}>
-                            {included ? 'Included' : acc.price > 0 ? `+${peso(acc.price)}` : 'Free'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {noPreviewCount > 0 && (
-                    <p className="m3d-note">
-                      {noPreviewCount} selected {noPreviewCount === 1 ? 'accessory has' : 'accessories have'} no 3D preview yet.
-                    </p>
-                  )}
-                </>
+                  {includedAccs.map(a => (
+                    <div key={a.id} className="m3d-incl-row">
+                      <span className="m3d-incl-ico"><Crown size={14} /></span>
+                      <span className="m3d-incl-info"><strong>{a.name}</strong><span>{a.category}</span></span>
+                      <span className="m3d-acc-price inc">Included</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="m3d-list-note">This gown comes on its own, with no petticoat or accessories.</p>
               )}
             </div>
           </aside>

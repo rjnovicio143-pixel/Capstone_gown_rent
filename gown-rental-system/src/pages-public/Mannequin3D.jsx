@@ -2,9 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, Suspense, Component } from
 import { useNavigate } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stage, useGLTF, Html } from '@react-three/drei';
-import {
-  Sliders, Ruler, Shirt, RotateCcw, Info, Calendar, Search, Crown, Check, X, Sun, Moon
-} from 'lucide-react';
+import { Sliders, Ruler, Shirt, RotateCcw, Info, Calendar, Search, Crown, Check, X, Sun, Moon, Hand, Lock } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import {
   Scene, CATEGORIES, sizesFor, defaultSizeFor, makeBuild, parseGownSizes, checkSizeFit,
@@ -299,6 +297,7 @@ const Mannequin3D = () => {
     return a <= b ? [a, b] : [b, b];
   })();
   const [poseMsg, setPoseMsg] = useState('');
+  const [heightText, setHeightText] = useState(null);   // what the customer is typing in the height box
   const pickArms = (id) => {
     if (id === 'away' && !awayOk) { setPoseMsg('This pose is not available for this 3D model.'); return; }
     setPoseMsg(''); setArms(id);
@@ -308,6 +307,7 @@ const Mannequin3D = () => {
   const clampTo = (v, [a, b]) => Math.min(b, Math.max(a, v));
   useEffect(() => {
     setAdjust((prev) => (prev.height !== clampTo(prev.height, heightRange) ? { ...prev, height: clampTo(prev.height, heightRange) } : prev));
+    setHeightText(null);
     setBelly((v) => clampTo(v, lim.belly));
     setMuscle((v) => clampTo(v, lim.muscle));
   }, [selectedGown?.id, wearing, selectedSize, JSON.stringify(lim), bodyRaw?.height, modelScale]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -437,17 +437,26 @@ const Mannequin3D = () => {
               </div>
             </div>
 
-            <div className="m3d-card m3d-pane-body">
-              <h3><Ruler size={17} /> Arms</h3>
-              <p className="m3d-subtitle">Show the arms, or hide them so they are not in the way.</p>
-              <div className="m3d-seg">
-                {[['down', 'Default'], ['away', 'Away'], ['hide', 'Hide']].map(([id, label]) => (
-                  <button key={id} type="button" className={arms === id ? 'active' : ''} onClick={() => pickArms(id)}>
-                    {label}
-                  </button>
-                ))}
+            <div className="m3d-card m3d-pane-body m3d-arms-card">
+              <div className="m3d-arms-row">
+                <h3><Hand size={16} /> Arms</h3>
+                <div className="m3d-seg m3d-seg-3">
+                  {[['down', 'Default'], ['away', 'Away'], ['hide', 'Hide']].map(([id, label]) => {
+                    const locked = id === 'away' && !awayOk;
+                    return (
+                      <button
+                        key={id} type="button" disabled={locked}
+                        title={locked ? 'Away is turned off for this gown' : undefined}
+                        className={`${arms === id ? 'active' : ''} ${locked ? 'locked' : ''}`}
+                        onClick={() => pickArms(id)}
+                      >
+                        {locked && <Lock size={11} />} {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              {poseMsg && <p className="m3d-subtitle" style={{ color: '#c0392b', marginTop: 8 }}>{poseMsg}</p>}
+              {wearing && !awayOk && <p className="m3d-hint">The Away pose is turned off for this gown.</p>}
             </div>
 
             <div className="m3d-adj-switch" role="tablist" aria-label="Adjust">
@@ -458,9 +467,45 @@ const Mannequin3D = () => {
             <div className={`m3d-card m3d-pane-body m3d-adj ${adjTab === 'build' ? 'on' : ''}`}>
               <h3><Sliders size={17} /> Body build</h3>
               <p className="m3d-subtitle">Height, slim to heavy, belly and muscle. The gown follows the body.</p>
+              {bodyRaw?.height ? (() => {
+                const baseCm = bodyRaw.height * 100 * modelScale;
+                const minCm = Math.round(baseCm * heightRange[0]);
+                const maxCm = Math.round(baseCm * heightRange[1]);
+                const curCm = Math.round(baseCm * adjust.height);
+                const setCm = (cm) => {
+                  const c = Math.min(maxCm, Math.max(minCm, Math.round(cm)));
+                  setAdjust((prev) => ({ ...prev, height: c / baseCm }));
+                  setHeightText(String(c));
+                };
+                return (
+                  <div className="m3d-height">
+                    <div className="m3d-height-top">
+                      <span className="m3d-height-title">Height</span>
+                      <span className="m3d-height-range">{minCm}–{maxCm} cm</span>
+                    </div>
+                    <div className="m3d-height-input">
+                      <button type="button" aria-label="Shorter" onClick={() => setCm(curCm - 1)}>−</button>
+                      <input
+                        type="text" inputMode="numeric" aria-label="Height in cm"
+                        value={heightText ?? String(curCm)}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setHeightText(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+                        onBlur={() => { if (heightText) setCm(parseInt(heightText, 10)); else setHeightText(null); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                      />
+                      <span className="m3d-unit">cm</span>
+                      <button type="button" aria-label="Taller" onClick={() => setCm(curCm + 1)}>+</button>
+                    </div>
+                    <input
+                      className="m3d-range" type="range" min={heightRange[0]} max={heightRange[1]} step="0.005" value={Math.min(heightRange[1], Math.max(heightRange[0], adjust.height))}
+                      style={{ '--p': `${((adjust.height - heightRange[0]) / Math.max(1e-6, heightRange[1] - heightRange[0])) * 100}%` }}
+                      onChange={(e) => { setHeightText(null); setAdjust((prev) => ({ ...prev, height: parseFloat(e.target.value) })); }}
+                    />
+                  </div>
+                );
+              })() : null}
               <div className="m3d-sliders">
                 {[
-                  [`Height${bodyRaw?.height ? ` (about ${Math.round(bodyRaw.height * 100 * modelScale * adjust.height)} cm)` : ''}`, adjust.height, (v) => setAdjust((prev) => ({ ...prev, height: v })), heightRange[0], heightRange[1]],
                   ['Weight (slim / heavy)', weight, setWeight, -1, 1],
                   ['Belly', belly, setBelly, lim.belly[0], lim.belly[1]],
                   ['Muscle', muscle, setMuscle, lim.muscle[0], lim.muscle[1]],
@@ -468,10 +513,11 @@ const Mannequin3D = () => {
                   <div key={label} className="m3d-slider">
                     <div className="m3d-slider-label">
                       <span>{label}</span>
-                      <span>{Math.round(value * 100)}%</span>
+                      <span className="m3d-pill">{Math.round(value * 100)}%</span>
                     </div>
                     <input
-                      type="range" min={min} max={max} step="0.01" value={value}
+                      className="m3d-range" type="range" min={min} max={max} step="0.01" value={value}
+                      style={{ '--p': `${((value - min) / Math.max(1e-6, max - min)) * 100}%` }}
                       onChange={(e) => setter(parseFloat(e.target.value))}
                     />
                   </div>

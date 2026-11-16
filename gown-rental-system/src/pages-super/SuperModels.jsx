@@ -1,11 +1,12 @@
 import { useState, useEffect, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stage } from '@react-three/drei';
-import { Box, Upload, Search, Link2, Eye, Trash2, X } from 'lucide-react';
+import { Box, Upload, Search, Link2, Eye, Trash2, X, Sun, Moon, Shirt, Move, Sliders, Hand, Lock } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import SuperHeader from '../components/SuperHeader';
 import '../styles/SuperAdmin.css';
-import { Scene, CATEGORIES, makeBuild, DEFAULT_TWEAK, parseTweak, ModelErrorBoundary } from '../components/MannequinEngine';
+import '../styles/SuperModelsStudio.css';
+import { Scene, CATEGORIES, makeBuild, DEFAULT_TWEAK, DEFAULT_LIM, parseTweak, ModelErrorBoundary } from '../components/MannequinEngine';
 
 const MODEL_BUCKET = 'gown-models';
 const MAX_UPLOAD_MB = 45;               // Supabase free plan allows 50 MB per file
@@ -42,6 +43,11 @@ const SuperModels = () => {
   const [pvMsg, setPvMsg] = useState('');
   const [pvBusy, setPvBusy] = useState(false);
   const [pvDark, setPvDark] = useState(true);
+  const [pvTab, setPvTab] = useState('place');        // place | limits
+  const [pvArms, setPvArms] = useState('down');       // down | away | hide  (preview only)
+  const [pvWear, setPvWear] = useState(true);         // gown on / taken off
+  const [pvParts, setPvParts] = useState([]);         // names of the gown's parts
+  const [bodyRaw, setBodyRaw] = useState(null);       // measured avatar (for cm)
 
   const fetchGowns = async () => {
     const { data, error } = await supabase
@@ -149,7 +155,7 @@ const SuperModels = () => {
   const openPreview = (g) => {
     setPv(g);
     setTweak(parseTweak(g.fit_adjust));
-    setPvMsg('');
+    setPvMsg(''); setPvTab('place'); setPvArms('down'); setPvWear(true); setPvParts([]);
     const t = `${g.category || ''} ${g.name || ''}`.toLowerCase();
     setPvCat(CATEGORIES.find(c => c.id === 'Man') && /suit|tux|barong|\bman\b|\bmen\b|groom/.test(t) ? CATEGORIES[1] : CATEGORIES[0]);
   };
@@ -294,73 +300,182 @@ const SuperModels = () => {
         </div>
       </div>
 
-      {pv && (
-        <div className="sm-overlay" onClick={closePreview}>
-          <div className="sm-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="sm-head">
-              <strong>{pv.name}</strong>
-              <button type="button" className="sm-x" onClick={closePreview} aria-label="Close"><X size={18} /></button>
+      {pv && (() => {
+        const lim = tweak.lim || DEFAULT_LIM;
+        const baseCm = (bodyRaw?.height || 1.74) * 100;
+        const hc = lim.hcm || [Math.round(baseCm * 0.8), Math.round(baseCm * 1.3)];
+        const setLim = (k, i, v) => setTweak(prev => {
+          const cur = [...((prev.lim && prev.lim[k]) || DEFAULT_LIM[k] || [0, 1])];
+          cur[i] = v;
+          if (cur[0] > cur[1]) { if (i === 0) cur[1] = v; else cur[0] = v; }
+          return { ...prev, lim: { ...(prev.lim || DEFAULT_LIM), [k]: cur } };
+        });
+        const offset = (label, k) => (
+          <div className="smx-slider">
+            <div className="smx-slider-top"><span>{label}</span><b>{(tweak[k] || 0) > 0 ? '+' : ''}{Math.round((tweak[k] || 0) * 100)}</b></div>
+            <input type="range" min="-0.3" max="0.3" step="0.005" value={tweak[k] || 0} onChange={(e) => setT(k)(parseFloat(e.target.value))} />
+          </div>
+        );
+        const scl = (label, k, min, max) => (
+          <div className="smx-slider">
+            <div className="smx-slider-top"><span>{label}</span><b>{Math.round(Number(tweak[k]) * 100)}%</b></div>
+            <input type="range" min={min} max={max} step="0.01" value={tweak[k]} onChange={(e) => setT(k)(parseFloat(e.target.value))} />
+          </div>
+        );
+        const limRow = (k, label) => {
+          const cur = lim[k] || DEFAULT_LIM[k];
+          return (
+            <div key={k} className="smx-limrow">
+              <div className="smx-slider-top"><span>{label}</span><b>{Math.round(cur[0] * 100)}% – {Math.round(cur[1] * 100)}%</b></div>
+              <div className="smx-line"><em>From</em><input type="range" min="0" max="1" step="0.01" value={cur[0]} onChange={(e) => { setLim(k, 0, parseFloat(e.target.value)); setPvMsg(''); }} /></div>
+              <div className="smx-line"><em>To</em><input type="range" min="0" max="1" step="0.01" value={cur[1]} onChange={(e) => { setLim(k, 1, parseFloat(e.target.value)); setPvMsg(''); }} /></div>
             </div>
-
-            <div className="sm-body">
-              <div className={`sm-view ${pvDark ? 'dark' : 'light'}`}>
-                <ModelErrorBoundary key={pv.id + pvCat.id}>
-                  <Suspense fallback={<div className="sm-loading">Loading 3D…</div>}>
-                    <Canvas key={pvCat.id} dpr={[1, 2]} camera={{ position: [0, 0.1, pvCat.kids ? 2.7 : 3.5], fov: 45 }}>
-                      <ambientLight intensity={0.6} />
-                      <directionalLight position={[6, 9, 6]} intensity={1.3} />
-                      <directionalLight position={[-6, 4, -4]} intensity={0.6} color="#9db4ff" />
-                      <Suspense fallback={null}>
-                        <Stage environment={null} intensity={0.4} adjustCamera={false}>
-                          <Scene
-                            bodyPath={`/mannequin/${pvCat.file}.glb`}
-                            gownPath={toUrl(pv.model_path)}
-                            showBody
-                            build={makeBuild(0, 0, 0, pvCat.kids)}
-                            looseness={1}
-                            length={1}
-                            scale={[1, 1, 1]}
-                            arms="down"
-                            tweak={tweak}
-                          />
-                        </Stage>
-                      </Suspense>
-                      <OrbitControls enableZoom minDistance={1.2} maxDistance={6} />
-                    </Canvas>
-                  </Suspense>
-                </ModelErrorBoundary>
+          );
+        };
+        return (
+          <div className="smx-overlay" onClick={closePreview}>
+            <div className="smx-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="smx-head">
+                <div className="smx-title"><span className="smx-dot" /> <strong>{pv.name}</strong><span className="smx-sub">3D Studio</span></div>
+                <button type="button" className="smx-x" onClick={closePreview} aria-label="Close"><X size={18} /></button>
               </div>
 
-              <div className="sm-panel">
-                <div className="sm-row">
-                  {CATEGORIES.map((c) => (
-                    <button key={c.id} type="button" className={`sa-upload-btn ${pvCat.id === c.id ? 'sm-on' : ''}`} onClick={() => setPvCat(c)}>{c.id}</button>
-                  ))}
-                  <button type="button" className="sa-upload-btn" onClick={() => setPvDark(d => !d)}>{pvDark ? 'Light bg' : 'Dark bg'}</button>
+              <div className="smx-body">
+                <div className="smx-canvas-card">
+                  <div className="smx-canvas-head">
+                    <div className="smx-chips">
+                      {CATEGORIES.map((c) => (
+                        <button key={c.id} type="button" className={`smx-chip ${pvCat.id === c.id ? 'on' : ''}`} onClick={() => setPvCat(c)}>{c.id}</button>
+                      ))}
+                    </div>
+                    <div className="smx-chips">
+                      <button type="button" className={`smx-chip ${pvWear ? '' : 'on'}`} onClick={() => setPvWear(w => !w)}>
+                        {pvWear ? <X size={13} /> : <Shirt size={13} />} {pvWear ? 'Take off' : 'Put on'}
+                      </button>
+                      <button type="button" className="smx-chip" onClick={() => setPvDark(d => !d)}>
+                        {pvDark ? <Sun size={13} /> : <Moon size={13} />} {pvDark ? 'Light' : 'Dark'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={`smx-view ${pvDark ? 'dark' : 'light'}`}>
+                    <ModelErrorBoundary key={pv.id + pvCat.id}>
+                      <Suspense fallback={<div className="sm-loading">Loading 3D…</div>}>
+                        <Canvas key={pvCat.id} dpr={[1, 2]} camera={{ position: [0, 0.1, pvCat.kids ? 2.7 : 3.5], fov: 45 }}>
+                          <ambientLight intensity={0.6} />
+                          <directionalLight position={[6, 9, 6]} intensity={1.3} />
+                          <directionalLight position={[-6, 4, -4]} intensity={0.6} color="#9db4ff" />
+                          <Suspense fallback={null}>
+                            <Stage environment={null} intensity={0.4} adjustCamera={false}>
+                              <Scene
+                                bodyPath={`/mannequin/${pvCat.file}.glb`}
+                                gownPath={pvWear ? toUrl(pv.model_path) : null}
+                                onMeasured={setBodyRaw}
+                                onParts={setPvParts}
+                                showBody
+                                build={makeBuild(0, 0, 0, pvCat.kids)}
+                                looseness={1}
+                                length={1}
+                                scale={[1, 1, 1]}
+                                arms={pvArms}
+                                tweak={tweak}
+                              />
+                            </Stage>
+                          </Suspense>
+                          <OrbitControls enableZoom minDistance={1.2} maxDistance={6} />
+                        </Canvas>
+                      </Suspense>
+                    </ModelErrorBoundary>
+                  </div>
+
+                  <div className="smx-arms">
+                    <span className="smx-arms-t"><Hand size={14} /> Arms</span>
+                    <div className="smx-seg">
+                      {[['down', 'Default'], ['away', 'Away'], ['hide', 'Hide']].map(([id, label]) => (
+                        <button key={id} type="button" className={pvArms === id ? 'on' : ''} onClick={() => setPvArms(id)}>{label}</button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <label className="sm-check">
-                  <input type="checkbox" checked={!!tweak.exact} onChange={(e) => { setTweak(prev => ({ ...prev, exact: e.target.checked })); setPvMsg(''); }} />
-                  Exact position (gown placed in Blender)
-                </label>
+                <div className="smx-panel">
+                  <div className="smx-tabs">
+                    <button type="button" className={pvTab === 'place' ? 'on' : ''} onClick={() => setPvTab('place')}><Move size={14} /> Place gown</button>
+                    <button type="button" className={pvTab === 'limits' ? 'on' : ''} onClick={() => setPvTab('limits')}><Sliders size={14} /> Limits</button>
+                  </div>
 
-                {[['Size (whole gown)', 's', 0.7, 1.3], ['Up / down', 'y', -0.3, 0.3], ['Width', 'w', 0.7, 1.4], ['Depth (front to back)', 'd', 0.7, 1.4]].map(([label, k, min, max]) => (
-                  <label key={k} className="sm-slider">
-                    <span>{label} <b>{Number(tweak[k]).toFixed(2)}</b></span>
-                    <input type="range" min={min} max={max} step="0.01" value={tweak[k]} onChange={(e) => setT(k)(parseFloat(e.target.value))} />
-                  </label>
-                ))}
+                  <div className="smx-scroll">
+                    {pvTab === 'place' && (
+                      <>
+                        <p className="smx-note">Move the sliders until the gown sits right on the mannequin, then press Save. It is added on top of the automatic fit, so it also works for the other sizes.</p>
+                        <label className="smx-check"><input type="checkbox" checked={!!tweak.exact} onChange={(e) => { setTweak(prev => ({ ...prev, exact: e.target.checked })); setPvMsg(''); }} /> Exact position from Blender (no auto-fit)</label>
+                        <label className="smx-check"><input type="checkbox" checked={!!tweak.noPush} onChange={(e) => { setTweak(prev => ({ ...prev, noPush: e.target.checked })); setPvMsg(''); }} /> Manual: do not reshape the gown around the body</label>
+                        <label className="smx-check"><input type="checkbox" checked={!!tweak.away} onChange={(e) => { setTweak(prev => ({ ...prev, away: e.target.checked })); setPvMsg(''); }} /> Allow the Away pose for customers (long-sleeve suits)</label>
 
-                <div className="sm-row">
-                  <button type="button" className="sa-upload-btn" onClick={savePosition} disabled={pvBusy}>{pvBusy ? 'Saving…' : 'Save position'}</button>
-                  <button type="button" className="sa-upload-btn" onClick={() => { setTweak(DEFAULT_TWEAK); setPvMsg(''); }}>Reset</button>
+                        {scl('Size (whole gown)', 's', 0.7, 1.3)}
+                        {offset('Left / right', 'x')}
+                        {offset('Up / down', 'y')}
+                        {offset('Forward / back', 'z')}
+                        {scl('Width', 'w', 0.7, 1.4)}
+                        {scl('Depth (front to back)', 'd', 0.7, 1.4)}
+
+                        {pvParts.length > 1 && (
+                          <div className="smx-parts">
+                            <h4>Gown parts</h4>
+                            <p className="smx-note">Untick a part to remove it (for example a patch that does not fit).</p>
+                            <div className="smx-parts-list">
+                              {pvParts.map((name) => {
+                                const hidden = (tweak.hide || []).includes(name);
+                                return (
+                                  <label key={name} className={`smx-part ${hidden ? 'off' : ''}`}>
+                                    <input type="checkbox" checked={!hidden} onChange={() => {
+                                      setTweak(prev => { const cur = prev.hide || []; return { ...prev, hide: cur.includes(name) ? cur.filter(x => x !== name) : [...cur, name] }; });
+                                      setPvMsg('');
+                                    }} /> <span>{name}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {pvTab === 'limits' && (
+                      <>
+                        <p className="smx-note">Choose where each customer slider starts and ends for this gown.</p>
+                        <div className="smx-limbox">
+                          <div className="smx-slider-top"><span>Height</span><b>{hc[0]} cm – {hc[1]} cm</b></div>
+                          {[['From', 0], ['To', 1]].map(([t, i]) => (
+                            <div key={t} className="smx-line"><em>{t}</em>
+                              <input type="range" min={Math.round(baseCm * 0.7)} max={Math.round(baseCm * 1.45)} step="1" value={hc[i]}
+                                onChange={(e) => {
+                                  const v = parseInt(e.target.value, 10); const n = [...hc]; n[i] = v;
+                                  if (n[0] > n[1]) { if (i === 0) n[1] = v; else n[0] = v; }
+                                  setTweak(prev => ({ ...prev, lim: { ...(prev.lim || DEFAULT_LIM), hcm: n } })); setPvMsg('');
+                                }} />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="smx-limbox">{limRow('muscle', 'Muscle')}{limRow('belly', 'Belly')}</div>
+                        <button type="button" className="smx-btn ghost" onClick={() => { setTweak(prev => ({ ...prev, lim: { ...DEFAULT_LIM, hcm: null } })); setPvMsg(''); }}>Reset limits</button>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="smx-foot">
+                    {pvMsg && <p className="smx-msg">{pvMsg}</p>}
+                    <div className="smx-actions">
+                      <button type="button" className="smx-btn primary" onClick={savePosition} disabled={pvBusy}>{pvBusy ? 'Saving…' : 'Save'}</button>
+                      <button type="button" className="smx-btn ghost" onClick={() => { setTweak(DEFAULT_TWEAK); setPvMsg(''); }}>Reset all</button>
+                    </div>
+                  </div>
                 </div>
-                {pvMsg && <p className="sa-msg" style={{ margin: 0 }}>{pvMsg}</p>}
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </>
   );
 };

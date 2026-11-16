@@ -8,7 +8,7 @@ import {
 import { supabase } from '../supabaseClient';
 import {
   Scene, CATEGORIES, sizesFor, defaultSizeFor, makeBuild, parseGownSizes, checkSizeFit,
-  audienceOf, audienceFits, AUDIENCE_LABEL, parseTweak, parseKidAges, nearestAdultSize,
+  audienceOf, audienceFits, AUDIENCE_LABEL, parseTweak, parseKidAges, nearestAdultSize, DEFAULT_LIM,
 } from '../components/MannequinEngine';
 import '../styles-public/Mannequin3D.css';
 
@@ -101,7 +101,6 @@ const NO_GOWN = {
 };
 
 const SLIDERS = [
-  { key: 'height', label: 'Height' },
   { key: 'waist',  label: 'Waist (Width)' },
   { key: 'chest',  label: 'Chest (Front)' },
   { key: 'hip',    label: 'Hip' },
@@ -135,7 +134,7 @@ const Mannequin3D = () => {
   const [length, setLength] = useState(1.0);
   const [bodyRaw, setBodyRaw] = useState(null);         // measured avatar (from the 3D scene)
   const [activeTab, setActiveTab] = useState('closed');   // mobile bottom sheet: closed | gowns | extras | body | fit
-  const [arms, setArms] = useState('down');             // down | away | tpose | hide
+  const [arms, setArms] = useState('down');             // down (default) | hide
   const [bgMode, setBgMode] = useState(() => {         // 3D background: dark | light
     try { return localStorage.getItem('mannequin-bg') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; }
   });
@@ -192,6 +191,35 @@ const Mannequin3D = () => {
       setLoadingData(false);
     };
     load();
+  }, []);
+
+  /* ---------- LIVE UPDATE: pick up the admin's saved limits / pose / position without refreshing ---------- */
+  useEffect(() => {
+    let alive = true;
+    const refreshFit = async () => {
+      const { data, error } = await supabase.from('gowns').select('id, fit_adjust').eq('is_posted', true);
+      if (!alive || error || !data) return;
+      const fresh = new Map(data.map((r) => [String(r.id), parseTweak(r.fit_adjust)]));
+      const changed = (old, nw) => JSON.stringify(old) !== JSON.stringify(nw);
+      setGowns((prev) => (prev.some((g) => fresh.has(String(g.id)) && changed(g.fitAdjust, fresh.get(String(g.id))))
+        ? prev.map((g) => (fresh.has(String(g.id)) ? { ...g, fitAdjust: fresh.get(String(g.id)) } : g)) : prev));
+      setSelectedGown((g) => (g && fresh.has(String(g.id)) && changed(g.fitAdjust, fresh.get(String(g.id)))
+        ? { ...g, fitAdjust: fresh.get(String(g.id)) } : g));
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshFit(); };
+    const timer = setInterval(refreshFit, 15000);
+    window.addEventListener('focus', refreshFit);
+    document.addEventListener('visibilitychange', onVisible);
+    let channel = null;
+    try {   // instant update if Realtime is switched on for the gowns table; harmless if not
+      channel = supabase.channel('gowns-fit').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gowns' }, refreshFit).subscribe();
+    } catch (e) { /* ignore */ }
+    return () => {
+      alive = false; clearInterval(timer);
+      window.removeEventListener('focus', refreshFit);
+      document.removeEventListener('visibilitychange', onVisible);
+      if (channel) supabase.removeChannel(channel);
+    };
   }, []);
 
   /* ---------- GOWN LIST (search, filters, show more) ---------- */
@@ -256,6 +284,33 @@ const Mannequin3D = () => {
   };
 
   const handleSizeChange = (size) => applyPreset(category, size);
+
+  // Limits and the Away pose are set by the admin for each gown
+  // Without a gown on, the customer can adjust freely. Limits and the pose rule only apply once a gown is worn.
+  const lim = (wearing && selectedGown?.fitAdjust?.lim) || DEFAULT_LIM;
+  const awayOk = !wearing || !!selectedGown?.fitAdjust?.away;
+  // Height limit: the admin sets it in cm; the slider is a multiplier on the size, so convert
+  const heightRange = (() => {
+    const cm = lim.hcm;
+    const base = bodyRaw?.height ? bodyRaw.height * 100 * modelScale : 0;
+    if (!cm || !base) return lim.height;
+    const a = Math.min(1.3, Math.max(0.8, cm[0] / base));
+    const b = Math.min(1.3, Math.max(0.8, cm[1] / base));
+    return a <= b ? [a, b] : [b, b];
+  })();
+  const [poseMsg, setPoseMsg] = useState('');
+  const pickArms = (id) => {
+    if (id === 'away' && !awayOk) { setPoseMsg('This pose is not available for this 3D model.'); return; }
+    setPoseMsg(''); setArms(id);
+  };
+  useEffect(() => { if (arms === 'away' && !awayOk) setArms('down'); setPoseMsg(''); }, [selectedGown?.id, wearing]); // eslint-disable-line react-hooks/exhaustive-deps
+  // keep the sliders inside the admin's limits (also after choosing a size or another gown)
+  const clampTo = (v, [a, b]) => Math.min(b, Math.max(a, v));
+  useEffect(() => {
+    setAdjust((prev) => (prev.height !== clampTo(prev.height, heightRange) ? { ...prev, height: clampTo(prev.height, heightRange) } : prev));
+    setBelly((v) => clampTo(v, lim.belly));
+    setMuscle((v) => clampTo(v, lim.muscle));
+  }, [selectedGown?.id, wearing, selectedSize, JSON.stringify(lim), bodyRaw?.height, modelScale]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCategoryChange = (id) => {
     const cat = CATEGORIES.find(c => c.id === id) || CATEGORIES[0];
@@ -384,14 +439,15 @@ const Mannequin3D = () => {
 
             <div className="m3d-card m3d-pane-body">
               <h3><Ruler size={17} /> Arms</h3>
-              <p className="m3d-subtitle">Move the arms away from the gown, or hide them.</p>
+              <p className="m3d-subtitle">Show the arms, or hide them so they are not in the way.</p>
               <div className="m3d-seg">
-                {[['down', 'Down'], ['away', 'Away'], ['hide', 'Hide']].map(([id, label]) => (
-                  <button key={id} type="button" className={arms === id ? 'active' : ''} onClick={() => setArms(id)}>
+                {[['down', 'Default'], ['away', 'Away'], ['hide', 'Hide']].map(([id, label]) => (
+                  <button key={id} type="button" className={arms === id ? 'active' : ''} onClick={() => pickArms(id)}>
                     {label}
                   </button>
                 ))}
               </div>
+              {poseMsg && <p className="m3d-subtitle" style={{ color: '#c0392b', marginTop: 8 }}>{poseMsg}</p>}
             </div>
 
             <div className="m3d-adj-switch" role="tablist" aria-label="Adjust">
@@ -401,12 +457,13 @@ const Mannequin3D = () => {
 
             <div className={`m3d-card m3d-pane-body m3d-adj ${adjTab === 'build' ? 'on' : ''}`}>
               <h3><Sliders size={17} /> Body build</h3>
-              <p className="m3d-subtitle">Slim to heavy, belly and muscle. The gown follows the body.</p>
+              <p className="m3d-subtitle">Height, slim to heavy, belly and muscle. The gown follows the body.</p>
               <div className="m3d-sliders">
                 {[
+                  [`Height${bodyRaw?.height ? ` (about ${Math.round(bodyRaw.height * 100 * modelScale * adjust.height)} cm)` : ''}`, adjust.height, (v) => setAdjust((prev) => ({ ...prev, height: v })), heightRange[0], heightRange[1]],
                   ['Weight (slim / heavy)', weight, setWeight, -1, 1],
-                  ['Belly', belly, setBelly, 0, 1],
-                  ['Muscle', muscle, setMuscle, 0, 1],
+                  ['Belly', belly, setBelly, lim.belly[0], lim.belly[1]],
+                  ['Muscle', muscle, setMuscle, lim.muscle[0], lim.muscle[1]],
                 ].map(([label, value, setter, min, max]) => (
                   <div key={label} className="m3d-slider">
                     <div className="m3d-slider-label">

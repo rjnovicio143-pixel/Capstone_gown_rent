@@ -112,6 +112,7 @@ function measureBody(root) {
       slices: meta.slices,
       arm: meta.arm || null,          // abaga (pivot) + anggulo sa bukton
       morphs: meta.morphs || {},      // pila ang madugang sa matag slice kung i-slide ang weight / belly / muscle
+      limbSrc: collectLimbSource(root),
     };
   }
 
@@ -139,6 +140,101 @@ function measureBody(root) {
   };
 }
 
+
+/* ----------------------------------------------------------
+   LIMBS (arms + legs)
+   The avatar's real arm / leg cross-sections (with weight / belly / muscle applied) so the
+   garment can be pushed out of them - nothing of the body pokes through sleeves or trousers.
+   ---------------------------------------------------------- */
+function collectLimbSource(root) {
+  let src = null;
+  root.traverse((o) => {
+    const g = o.isMesh && o.geometry;
+    if (src || !g || !g.attributes?.position || !g.attributes._arm) return;
+    const names = o.morphTargetDictionary || {};
+    const tg = {};
+    ['weight', 'belly', 'muscle'].forEach((n) => {
+      const idx = names[n];
+      const att = idx !== undefined && g.morphAttributes?.position?.[idx];
+      if (att) tg[n] = att;
+    });
+    src = { pos: g.attributes.position, arm: g.attributes._arm, tg, relative: g.morphTargetsRelative !== false };
+  });
+  return src;
+}
+
+function computeLimbs(raw, build) {
+  const src = raw?.limbSrc;
+  if (!src || !raw.arm) return null;
+  const K = (raw.height || 1.7407) / 1.7407;
+  const BIN = 0.03 * K;
+  const hipS = raw.slices.find((t) => t.name === 'hip');
+  const hipY = hipS ? hipS.y : 0.9 * K;
+  const cx = raw.cx || 0;
+  const minY = raw.minY || 0;
+  const n = src.pos.count;
+  const buckets = { 'arm1': new Map(), 'arm-1': new Map(), 'leg1': new Map(), 'leg-1': new Map() };
+  const names = Object.keys(src.tg).filter((k) => build?.[k]);
+  for (let i = 0; i < n; i += 1) {
+    let x = src.pos.getX(i); let y = src.pos.getY(i); let z = src.pos.getZ(i);
+    for (let t = 0; t < names.length; t += 1) {
+      const a = src.tg[names[t]]; const w = build[names[t]];
+      if (src.relative) { x += w * a.getX(i); y += w * a.getY(i); z += w * a.getZ(i); }
+      else { x += w * (a.getX(i) - src.pos.getX(i)); y += w * (a.getY(i) - src.pos.getY(i)); z += w * (a.getZ(i) - src.pos.getZ(i)); }
+    }
+    const aw = src.arm.getX(i);
+    let kind = null;
+    if (aw > 0.6) kind = 'arm';
+    else if (aw < 0.1 && y < hipY - 0.02 * K && y > minY + 0.06 * K) kind = 'leg';
+    if (!kind) continue;
+    const side = x - cx >= 0 ? 1 : -1;
+    const map = buckets[kind + side];
+    const k = Math.floor(y / BIN);
+    let b = map.get(k);
+    if (!b) { b = [1e9, -1e9, 1e9, -1e9]; map.set(k, b); }
+    if (x < b[0]) b[0] = x; if (x > b[1]) b[1] = x;
+    if (z < b[2]) b[2] = z; if (z > b[3]) b[3] = z;
+  }
+  const out = {};
+  Object.entries(buckets).forEach(([key, map]) => {
+    const ks = [...map.keys()].sort((a, b) => a - b);
+    if (ks.length < 2) { out[key] = null; return; }
+    const sm = (j) => ks.map((_, i) => {
+      const a = map.get(ks[Math.max(0, i - 1)])[j]; const b = map.get(ks[i])[j]; const c = map.get(ks[Math.min(ks.length - 1, i + 1)])[j];
+      return (a + b + c) / 3;
+    });
+    out[key] = { yb: ks.map((k) => (k + 0.5) * BIN), x0: sm(0), x1: sm(1), z0: sm(2), z1: sm(3) };
+  });
+  out.hipY = hipY; out.K = K; out.cx = cx;
+  return out;
+}
+
+const lerpAt = (xs, ys, x) => {
+  const n = xs.length;
+  if (x <= xs[0]) return ys[0];
+  if (x >= xs[n - 1]) return ys[n - 1];
+  let lo = 0; let hi = n - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (xs[m] <= x) lo = m; else hi = m; }
+  const t = (x - xs[lo]) / (xs[hi] - xs[lo] || 1);
+  return ys[lo] + (ys[hi] - ys[lo]) * t;
+};
+
+// Pushes a garment point out of a limb's cross-section. Returns [x, z].
+function pushOutOfLimb(L, x, y, z, side, K) {
+  if (!L || y < L.yb[0] || y > L.yb[L.yb.length - 1]) return null;
+  const a0 = lerpAt(L.yb, L.x0, y); const a1 = lerpAt(L.yb, L.x1, y);
+  const b0 = lerpAt(L.yb, L.z0, y); const b1 = lerpAt(L.yb, L.z1, y);
+  const c0 = (a0 + a1) / 2; const c1 = (b0 + b1) / 2;
+  const hx = ((a1 - a0) / 2) * 1.10 + 0.010 * K;
+  const hz = ((b1 - b0) / 2) * 1.10 + 0.010 * K;
+  let ex = (x - c0) / hx; let ez = (z - c1) / hz;
+  const r2 = ex * ex + ez * ez;
+  if (r2 >= 1) return null;
+  let r = Math.sqrt(r2);
+  if (r < 1e-3) { ex = 0; ez = 1; r = 1; }
+  return [c0 + (ex / r) * hx, c1 + (ez / r) * hz];
+}
+
 // Ang sukod sa lawas sumala sa posisyon sa sliders (weight / belly / muscle)
 export function applyBuild(raw, build) {
   if (!raw?.ok) return raw;
@@ -155,7 +251,11 @@ export function applyBuild(raw, build) {
     return { ...sl, halfW, halfD, cz };
   });
   const mid = slices.length ? slices.reduce((sum, sl) => sum + sl.cz, 0) / slices.length : raw.cz;
-  return { ...raw, slices, cz: mid, baseSlices: raw.slices };
+  let limbs;
+  return {
+    ...raw, slices, cz: mid, baseSlices: raw.slices,
+    get limbs() { if (limbs === undefined) limbs = computeLimbs(raw, build); return limbs; },   // lazy: only the fitted garment needs it
+  };
 }
 
 /* ----------------------------------------------------------
@@ -222,6 +322,7 @@ function computeSleeveWeights(root, body, s, box) {
       dSum[id] += dd; ySum[id] += by; cnt[id] += 1;
       wp[3 * id] = v.x; wp[3 * id + 1] = v.y; wp[3 * id + 2] = v.z;
     }
+    const kk = (body.height || 1.7407) / 1.7407;   // thresholds scale with avatar height (kids!)
     const allowed = new Uint8Array(m);
     const comp = new Uint8Array(m);
     const queue = new Int32Array(m);
@@ -229,8 +330,8 @@ function computeSleeveWeights(root, body, s, box) {
     for (let id = 0; id < m; id += 1) {
       const d = dSum[id] / cnt[id];
       const y = ySum[id] / cnt[id];
-      allowed[id] = d > 0.03 && y > hip.y - 0.4 && y < pivY + 0.1 ? 1 : 0;
-      if (allowed[id] && d > 0.10 && y >= midY && y <= pivY) { comp[id] = 1; queue[qt] = id; qt += 1; }
+      allowed[id] = d > 0.03 * kk && y > hip.y - 0.4 * kk && y < pivY + 0.1 * kk ? 1 : 0;
+      if (allowed[id] && d > 0.10 * kk && y >= midY && y <= pivY) { comp[id] = 1; queue[qt] = id; qt += 1; }
     }
     if (qt === 0) return;
 
@@ -282,7 +383,7 @@ function computeSleeveWeights(root, body, s, box) {
     }
     lens.sort((a, b) => a - b);
     const med = lens[Math.floor(lens.length / 2)] || 0.01;
-    const R = Math.min(40, Math.max(2, 0.05 / Math.max(med, 1e-4)));
+    const R = Math.min(40, Math.max(2, (0.05 * kk) / Math.max(med, 1e-4)));
 
     const sw = new Float32Array(n);
     for (let i = 0; i < n; i += 1) {
@@ -327,7 +428,23 @@ function gownProfileInner(root, body, length) {
    gidugang ibabaw sa auto-fit, mao nga parehas ang posisyon sa tanang customer.
    s = gidak-on (1 = sama), y = pataas / paubos (metros), w = lapad, d = gibag-on
    ---------------------------------------------------------- */
-export const DEFAULT_TWEAK = { s: 1, x: 0, y: 0, z: 0, w: 1, d: 1, exact: false, noPush: false, sleeves: null, hide: [] };
+// Slider ranges the admin can narrow per gown (customers can only move inside them)
+export const DEFAULT_LIM = { height: [0.8, 1.3], muscle: [0, 1], belly: [0, 1] };
+const parseLim = (v) => {
+  const out = {};
+  Object.entries(DEFAULT_LIM).forEach(([k, [lo, hi]]) => {
+    const a = Array.isArray(v?.[k]) ? v[k].map(Number) : null;
+    if (a && a.length === 2 && a.every(Number.isFinite)) {
+      const mn = Math.min(hi, Math.max(lo, Math.min(a[0], a[1])));
+      const mx = Math.min(hi, Math.max(lo, Math.max(a[0], a[1])));
+      out[k] = [mn, mx];
+    } else out[k] = [lo, hi];
+  });
+  out.hcm = Array.isArray(v?.hcm) && v.hcm.length === 2 && v.hcm.every((x) => Number.isFinite(Number(x)) && Number(x) > 30 && Number(x) < 300)
+    ? [Math.min(...v.hcm.map(Number)), Math.max(...v.hcm.map(Number))] : null;   // height limit in cm
+  return out;
+};
+export const DEFAULT_TWEAK = { s: 1, x: 0, y: 0, z: 0, w: 1, d: 1, exact: false, noPush: false, sleeves: null, hide: [], away: false, lim: parseLim(null) };
 export const parseTweak = (v) => {
   const n = (x, def) => (Number.isFinite(Number(x)) && x !== null && x !== '' ? Number(x) : def);
   const o = v && typeof v === 'object' ? v : {};
@@ -336,6 +453,8 @@ export const parseTweak = (v) => {
     sleeves: o.sleeves === false ? false : null,          // false = sleeves stay put when the arms move away
     noPush: !!o.noPush,                                   // manual: do not reshape the gown around the body
     hide: Array.isArray(o.hide) ? o.hide.map(String) : [], // names of gown parts the admin switched off
+    away: !!o.away,                                       // admin allowed the Away pose for customers
+    lim: parseLim(o.lim),                                 // min / max of the Height, Muscle and Belly sliders
   };
 };
 
@@ -568,6 +687,8 @@ function expandInner(root, fit, body, length, tweak, arm) {
   const armS = Math.sin(rad);
   const pivX = arm?.pivot?.[0] || 0;
   const pivY = arm?.pivot?.[1] || 0;
+  const limbs = push ? body.limbs : null;
+  const Kh = limbs?.K || 1;
 
   const profile = (y) => {
     let a = sl[0];
@@ -599,7 +720,7 @@ function expandInner(root, fit, body, length, tweak, arm) {
     const orig = o.userData.origPos;
     m.copy(o.matrixWorld);
     mi.copy(m).invert();
-    const sw = rad !== 0 ? o.userData.sleeveW : null;
+    const sw = arm ? o.userData.sleeveW : null;
     for (let i = 0; i < pos.count; i += 1) {
       v.set(orig[3 * i], orig[3 * i + 1], orig[3 * i + 2]).applyMatrix4(m);
       let bx = px + sx * v.x;
@@ -615,6 +736,18 @@ function expandInner(root, fit, body, length, tweak, arm) {
           if (r < 1e-3) { ex = 0; ez = 1; r = 1; }
           bx = cx + (ex / r) * w;
           bz = cz + (ez / r) * d;
+        }
+      }
+      // Arms / legs: never let the body poke through the garment
+      if (limbs) {
+        const hanging = by < pivY + 0.1;
+        const side = bx - (limbs.cx || 0) >= 0 ? 1 : -1;
+        if (sw && sw[i] > 0.05 && hanging) {
+          const r = pushOutOfLimb(limbs['arm' + side], bx, by, bz, side, Kh);
+          if (r) { bx = r[0]; bz = r[1]; }
+        } else if ((!sw || sw[i] < 0.3) && by < limbs.hipY) {
+          const r = pushOutOfLimb(limbs['leg' + side], bx, by, bz, side, Kh);
+          if (r) { bx = r[0]; bz = r[1]; }
         }
       }
       // Away: swing the sleeve together with the arm (same pivot and angle as the avatar's arm)
@@ -684,7 +817,7 @@ function FittedGown({ modelPath, body, looseness, length, tweak, onParts, arms }
   useEffect(() => {
     if (!(body.ok && profile)) return;
     const deg = armDegrees(arms, body.arm);
-    const moveSleeves = deg !== 0 && tw.sleeves !== false && profile.hasSleeves && !!body.arm;
+    const moveSleeves = tw.sleeves !== false && profile.hasSleeves && !!body.arm;
     if (tw.noPush && !moveSleeves) {
       scene.traverse((o) => {
         const pos = o.isMesh && o.geometry?.attributes?.position;

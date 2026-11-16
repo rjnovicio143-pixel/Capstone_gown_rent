@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stage } from '@react-three/drei';
-import { Sliders, Ruler, Shirt, Search, Move, Sun, Moon, Maximize2 } from 'lucide-react';
+import { Sliders, Ruler, Shirt, Search, Move, Sun, Moon, Maximize2, Shirt as ShirtOn, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import Header from '../components/Header';
 import '../styles/AdminMannequin.css';
 import {
   Scene, CATEGORIES, ADULT_SIZES, SIZE_ORDER, sizesFor, defaultSizeFor, makeBuild, bodyGirth,
-  parseGownSizes, parseKidAges, nearestAdultSize, audienceOf, audienceFits, AUDIENCE_LABEL, DEFAULT_TWEAK, parseTweak,
+  parseGownSizes, parseKidAges, nearestAdultSize, audienceOf, audienceFits, AUDIENCE_LABEL, DEFAULT_TWEAK, DEFAULT_LIM, parseTweak,
 } from '../components/MannequinEngine';
 
 
@@ -70,9 +70,10 @@ const AdminMannequin = () => {
   // Auto-fit sa gown
   const [looseness, setLooseness] = useState(1.0);   // gaan-an / pig-ot sa gown
   const [length, setLength] = useState(1.0);         // taas sa gown
+  const [wearing, setWearing] = useState(true);      // gown on / taken off
   const [showBody, setShowBody] = useState(true);    // ipakita ba ang avatar
-  const [tab, setTab] = useState('avatar');          // avatar | build | scale | place
-  const [arms, setArms] = useState('down');          // down | away | tpose | hide
+  const [tab, setTab] = useState('avatar');          // avatar | build | scale | limits | place
+  const [arms, setArms] = useState('down');          // down (default) | hide
   const [tweak, setTweak] = useState(DEFAULT_TWEAK);  // gown position (saved per gown)
   const [saveMsg, setSaveMsg] = useState('');
   const [gownParts, setGownParts] = useState([]);     // names of the parts inside the selected gown
@@ -182,8 +183,25 @@ const AdminMannequin = () => {
   };
 
   // Pagpili og gown: i-reset ang fit, ug kung naay size sa inventory (S/M/L...), i-load ang samang avatar
+  // The limits of the selected gown also apply to the mannequin here (live preview of what customers get)
+  const limA = (tweak && tweak.lim) || DEFAULT_LIM;
+  const heightRange = (() => {
+    const base = bodyRaw?.height ? bodyRaw.height * 100 * modelScale : 0;
+    if (!limA.hcm || !base) return limA.height || DEFAULT_LIM.height;
+    const a = Math.min(1.3, Math.max(0.8, limA.hcm[0] / base));
+    const b = Math.min(1.3, Math.max(0.8, limA.hcm[1] / base));
+    return a <= b ? [a, b] : [b, b];
+  })();
+  const clampTo = (v, [a, b]) => Math.min(b, Math.max(a, v));
+  useEffect(() => {
+    setHeight((v) => clampTo(v, heightRange));
+    setBelly((v) => clampTo(v, limA.belly || DEFAULT_LIM.belly));
+    setMuscle((v) => clampTo(v, limA.muscle || DEFAULT_LIM.muscle));
+  }, [selectedGown?.id, modelScale, bodyRaw?.height, JSON.stringify(limA)]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handlePickGown = (gown) => {
     setSelectedGown(gown);
+    setWearing(true);
     setTweak(gown.fitAdjust || DEFAULT_TWEAK);
     setSaveMsg('');
     if (window.innerWidth <= 900) setSheet('closed');   // close the sheet so the gown is visible
@@ -258,7 +276,7 @@ const AdminMannequin = () => {
           <div className="am-control-panel">
             <div className="am-section-card am-tabstrip">
               <div className="presets-list">
-                {[['avatar', 'Avatar'], ['build', 'Body'], ['scale', 'Scale'], ['place', 'Place gown']].map(([k, label]) => (
+                {[['avatar', 'Avatar'], ['build', 'Body'], ['scale', 'Scale'], ['limits', 'Limits'], ['place', 'Place gown']].map(([k, label]) => (
                   <button key={k} className={`preset-btn ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>
                     {label}
                   </button>
@@ -305,9 +323,9 @@ const AdminMannequin = () => {
 
             <div className="am-section-card">
               <h3><Ruler size={18} /> Arms</h3>
-              <p className="section-subtitle">Move the arms away from the gown, or hide them.</p>
+              <p className="section-subtitle">Preview the arms: default, away or hidden.</p>
               <div className="presets-list">
-                {[['down', 'Down'], ['away', 'Away'], ['hide', 'Hide']].map(([id, label]) => (
+                {[['down', 'Default'], ['away', 'Away'], ['hide', 'Hide']].map(([id, label]) => (
                   <button key={id} className={`preset-btn ${arms === id ? 'active' : ''}`} onClick={() => setArms(id)}>{label}</button>
                 ))}
               </div>
@@ -318,10 +336,11 @@ const AdminMannequin = () => {
             {tab === 'build' && (<>
             <div className="am-section-card">
               <h3><Sliders size={18} /> Body Build</h3>
-              <p className="section-subtitle">Slim to heavy, belly and muscle (the gown follows).</p>
+              <p className="section-subtitle">Height, slim to heavy, belly and muscle (the gown follows).</p>
+              {renderSlider(`Height${bodyRaw?.height ? ` (about ${Math.round(bodyRaw.height * 100 * modelScale * height)} cm)` : ''}`, height, setHeight, heightRange[0], heightRange[1])}
               {renderSlider('Weight (- slim / + heavy)', weight, setWeight, -1, 1)}
-              {renderSlider('Belly', belly, setBelly, 0, 1)}
-              {renderSlider('Muscle', muscle, setMuscle, 0, 1)}
+              {renderSlider('Belly', belly, setBelly, limA.belly[0], limA.belly[1])}
+              {renderSlider('Muscle', muscle, setMuscle, limA.muscle[0], limA.muscle[1])}
               <div className="presets-list">
                 <button className="preset-btn" onClick={() => applyPreset(category, selectedSize)}>
                   Reset build
@@ -335,7 +354,6 @@ const AdminMannequin = () => {
             <div className="am-section-card">
               <h3><Sliders size={18} /> Fine-Tune Scale</h3>
               <p className="section-subtitle">Fine adjustments for {category.id} ({selectedSize}); the gown follows:</p>
-              {renderSlider('Height', height, setHeight, 0.8, 1.3)}
               {renderSlider('Waist (Width)', waist, setWaist, 0.8, 1.3)}
               {renderSlider('Chest (Front)', chest, setChest, 0.8, 1.3)}
               {renderSlider('Hip', hip, setHip, 0.8, 1.3)}
@@ -355,6 +373,55 @@ const AdminMannequin = () => {
                 Show avatar body
               </label>
             </div>
+            </>)}
+
+            {tab === 'limits' && (<>
+              <div className="am-section-card">
+                <h3><Sliders size={18} /> Slider limits</h3>
+                <p className="section-subtitle">Choose where each customer slider starts and ends for this gown. Press Save limits to keep it.</p>
+                {(() => {
+                  const base = (bodyRaw?.height || 1.74) * 100;                 // cm at size 100%
+                  const hc = (tweak.lim && tweak.lim.hcm) || [Math.round(base * 0.8), Math.round(base * 1.3)];
+                  const setH = (i, v) => {
+                    const next = [...hc]; next[i] = v;
+                    if (next[0] > next[1]) { if (i === 0) next[1] = v; else next[0] = v; }
+                    setTweak(prev => ({ ...prev, lim: { ...(prev.lim || DEFAULT_LIM), hcm: next } })); setSaveMsg('');
+                  };
+                  return (
+                    <div className="am-limits">
+                      <div className="am-limit-top"><span>Height</span><b>{hc[0]} cm – {hc[1]} cm</b></div>
+                      <div className="am-limit-line"><em>From</em><input type="range" min={Math.round(base * 0.7)} max={Math.round(base * 1.45)} step="1" value={hc[0]} onChange={(e) => setH(0, parseInt(e.target.value, 10))} /></div>
+                      <div className="am-limit-line"><em>To</em><input type="range" min={Math.round(base * 0.7)} max={Math.round(base * 1.45)} step="1" value={hc[1]} onChange={(e) => setH(1, parseInt(e.target.value, 10))} /></div>
+                      <div className="am-limit-nums">
+                        <label>From (cm) <input type="number" value={hc[0]} onChange={(e) => e.target.value && setH(0, parseInt(e.target.value, 10))} /></label>
+                        <label>To (cm) <input type="number" value={hc[1]} onChange={(e) => e.target.value && setH(1, parseInt(e.target.value, 10))} /></label>
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div className="am-limits">
+                  {[['muscle', 'Muscle'], ['belly', 'Belly']].map(([k, label]) => {
+                    const cur = (tweak.lim && tweak.lim[k]) || DEFAULT_LIM[k];
+                    const setLim = (i, v) => {
+                      const next = [...cur]; next[i] = v;
+                      if (next[0] > next[1]) { if (i === 0) next[1] = v; else next[0] = v; }
+                      setTweak(prev => ({ ...prev, lim: { ...(prev.lim || DEFAULT_LIM), [k]: next } })); setSaveMsg('');
+                    };
+                    return (
+                      <div key={k} className="am-limit-row">
+                        <div className="am-limit-top"><span>{label}</span><b>{Math.round(cur[0] * 100)}% – {Math.round(cur[1] * 100)}%</b></div>
+                        <div className="am-limit-line"><em>From</em><input type="range" min="0" max="1" step="0.01" value={cur[0]} onChange={(e) => setLim(0, parseFloat(e.target.value))} /></div>
+                        <div className="am-limit-line"><em>To</em><input type="range" min="0" max="1" step="0.01" value={cur[1]} onChange={(e) => setLim(1, parseFloat(e.target.value))} /></div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="presets-list" style={{ marginTop: 12 }}>
+                  <button className="preset-btn active" onClick={saveFit} disabled={!selectedGown || selectedGown.isExample}>Save limits</button>
+                  <button className="preset-btn" onClick={() => { setTweak(prev => ({ ...prev, lim: { ...DEFAULT_LIM, hcm: null } })); setSaveMsg(''); }}>Reset</button>
+                </div>
+                {saveMsg && <p className="section-subtitle" style={{ marginTop: 10, fontWeight: 700 }}>{saveMsg}</p>}
+              </div>
             </>)}
 
             {tab === 'place' && (<>
@@ -386,10 +453,10 @@ const AdminMannequin = () => {
               <label className="am-check" style={{ display: 'block', marginBottom: 12 }}>
                 <input
                   type="checkbox"
-                  checked={tweak.sleeves !== false}
-                  onChange={(e) => { setTweak(prev => ({ ...prev, sleeves: e.target.checked ? null : false })); setSaveMsg(''); }}
+                  checked={!!tweak.away}
+                  onChange={(e) => { setTweak(prev => ({ ...prev, away: e.target.checked })); setSaveMsg(''); }}
                 />{' '}
-                Sleeves move with the arms (Away)
+                Allow the Away pose for customers (use it for long-sleeve suits)
               </label>
               {renderSlider('Size (whole gown)', tweak.s, setT('s'), 0.7, 1.3)}
               {renderOffset('Left / right', tweak.x || 0, setT('x'))}
@@ -449,6 +516,15 @@ const AdminMannequin = () => {
                 <span className="am-head-right">
                   <button
                     type="button"
+                    className={`am-bg-toggle am-takeoff ${wearing ? '' : 'off'}`}
+                    onClick={() => setWearing((w) => !w)}
+                    title={wearing ? 'Take the gown off the mannequin' : 'Put the gown back on'}
+                  >
+                    {wearing ? <X size={14} /> : <ShirtOn size={14} />}
+                    {wearing ? 'Take off' : 'Put on'}
+                  </button>
+                  <button
+                    type="button"
                     className="am-bg-toggle"
                     onClick={toggleBg}
                     title={bgMode === 'dark' ? 'Switch to light background' : 'Switch to dark background'}
@@ -499,7 +575,7 @@ const AdminMannequin = () => {
                       <Stage environment={null} intensity={0.4} adjustCamera={false}>
                         <Scene
                           bodyPath={bodyModelPath}
-                          gownPath={canWear ? selectedGown?.modelPath : null}
+                          gownPath={wearing && canWear ? selectedGown?.modelPath : null}
                           onMeasured={setBodyRaw}
                           showBody={showBody}
                           arms={arms}
@@ -577,7 +653,7 @@ const AdminMannequin = () => {
             <button type="button" className={sheet === 'gowns' ? 'active' : ''} onClick={() => setSheet(s => (s === 'gowns' ? 'closed' : 'gowns'))}>
               <Shirt size={17} /> Gowns
             </button>
-            {[['avatar', 'Avatar', Ruler], ['build', 'Body', Sliders], ['scale', 'Scale', Maximize2], ['place', 'Place', Move]].map(([k, label, Icon]) => (
+            {[['avatar', 'Avatar', Ruler], ['build', 'Body', Sliders], ['scale', 'Scale', Maximize2], ['limits', 'Limits', Sliders], ['place', 'Place', Move]].map(([k, label, Icon]) => (
               <button
                 key={k}
                 type="button"

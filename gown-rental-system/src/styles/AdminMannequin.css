@@ -296,3 +296,50 @@
 .am-part span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .am-part:hover { border-color: #daa520; }
 .am-part.off { background: #fef2f2; border-color: #fecaca; color: #b91c1c; text-decoration: line-through; }
+
+/* ===== Desktop: mannequin stays in view, the control columns scroll on their own (no more scrolling to the buttons) ===== */
+@media (min-width: 901px) {
+  .am-grid-layout { align-items: start; }
+  .am-canvas-panel {
+    position: sticky;
+    top: 84px;
+    align-self: start;
+  }
+  .am-control-panel,
+  .am-gown-panel {
+    max-height: calc(100vh - 104px);
+    overflow-y: auto;
+    position: sticky;
+    top: 84px;
+    scrollbar-width: thin;
+    padding-right: 4px;
+  }
+}
+/* medium screens: gown list sits below, so it must not be sticky/limited */
+@media (min-width: 901px) and (max-width: 1300px) {
+  .am-gown-panel { position: static; max-height: none; overflow: visible; }
+}
+
+/* ===== Take off / Put on button ===== */
+.am-takeoff.off { background: var(--m3d-gold-light); border-color: var(--m3d-gold); color: var(--m3d-gold); }
+
+/* ===== Slider limits (Height / Muscle / Belly) ===== */
+.am-limits {
+  margin: 6px 0 16px; padding: 14px; border: 1px solid var(--m3d-border);
+  border-radius: 14px; background: #fff; box-shadow: 0 2px 10px rgba(30, 41, 59, 0.04);
+}
+.am-limits h4 { margin: 0 0 2px; font-size: 0.92rem; font-weight: 800; color: var(--m3d-text-dark); }
+.am-limits .section-subtitle { margin: 0 0 6px; font-size: 0.78rem; }
+.am-limit-row { padding: 10px 0; border-top: 1px dashed var(--m3d-border); }
+.am-limit-row:first-of-type { border-top: none; }
+.am-limit-top { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; font-weight: 700; color: var(--m3d-text-dark); margin-bottom: 6px; }
+.am-limit-top b { background: var(--m3d-gold-light); color: var(--m3d-gold); padding: 2px 9px; border-radius: 20px; font-size: 0.74rem; }
+.am-limit-line { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: center; gap: 8px; }
+.am-limit-line em { font-style: normal; font-size: 0.72rem; font-weight: 700; color: var(--m3d-text-gray); }
+.am-limit-line input[type="range"] { width: 100%; min-width: 0; margin: 4px 0; accent-color: var(--m3d-gold); cursor: pointer; }
+.am-limit-nums { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.am-limit-nums label { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; font-weight: 700; color: var(--m3d-text-gray); }
+.am-limit-nums input { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--m3d-border); border-radius: 9px; font-size: 0.85rem; font-weight: 700; }
+.am-limit-nums input:focus { outline: none; border-color: var(--m3d-gold); }
+.am-limits + .am-limits { margin-top: 0; }
+@media (max-width: 900px) { .am-nav { grid-template-columns: repeat(6, 1fr); } .am-nav button { font-size: 10.5px; } }

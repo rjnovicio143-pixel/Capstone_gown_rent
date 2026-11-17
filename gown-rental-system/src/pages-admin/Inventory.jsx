@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Search, PlusCircle, X, Upload, Package, AlertCircle,
   Trash2, Edit, Camera, Eye, EyeOff,
-  Crown, Layers, ShoppingBag, Globe, Download
+  Crown, Layers, ShoppingBag, Globe, Download, RefreshCw
 } from 'lucide-react';
 import '../styles/Inventory.css';
 import Header from '../components/Header';
@@ -158,6 +158,8 @@ const Inventory = () => {
 
   const [loading, setLoading] = useState(false);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   // ── FETCH ──
   const fetchGowns = async () => {
     const { data, error } = await supabase
@@ -175,6 +177,12 @@ const Inventory = () => {
     const { data, error } = await supabase
       .from('accessories').select('*').order('category', { ascending: true });
     if (!error) setAccessories(data || []);
+  };
+
+  const refreshAll = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchGowns(), fetchPetticoats(), fetchAccessories()]);
+    setTimeout(() => setRefreshing(false), 400);
   };
 
   useEffect(() => {
@@ -676,6 +684,13 @@ const Inventory = () => {
   const gownsWithPhoto = activeTab === 'gowns' ? filteredGowns : [];
   const gownsNoPhoto   = activeTab === 'nophoto' ? filteredGowns : [];
   const noPhotoTotal = gowns.filter(g => !g.image).length;
+  // Out-of-stock counts per tab (shown as a red dot so you know where to look)
+  const isOut = (x) => Number(x.stock ?? 1) < 1;
+  const outGownsPhoto   = gowns.filter(g => !!g.image && isOut(g)).length;
+  const outGownsNoPhoto = gowns.filter(g => !g.image && isOut(g)).length;
+  const outAccsTotal    = accessories.filter(a => Number(a.stock ?? 1) < 1).length;
+  const OutDot = ({ n, what }) => n > 0
+    ? <span className="inv-tab-dot" title={`${n} ${what} out of stock`}>{n}</span> : null;
   const withPhotoTotal = gowns.length - noPhotoTotal;
 
   // Accessory picker inside the gown modal
@@ -754,16 +769,19 @@ const Inventory = () => {
         {/* ── TABS ── */}
         <div className="inv-tabs">
           <button className={`inv-tab ${activeTab === 'gowns' ? 'active' : ''}`} onClick={() => { setActiveTab('gowns'); setFilterCategory('All'); }}>
-            👗 Gowns & Suits <span className="inv-tab-count">{withPhotoTotal}</span>
+            👗 Gowns & Suits <span className="inv-tab-count">{withPhotoTotal}</span><OutDot n={outGownsPhoto} what="gown(s)" />
           </button>
           <button className={`inv-tab ${activeTab === 'nophoto' ? 'active' : ''}`} onClick={() => { setActiveTab('nophoto'); setFilterCategory('All'); }}>
-            📷 No Photo <span className="inv-tab-count">{noPhotoTotal}</span>
+            📷 No Photo <span className="inv-tab-count">{noPhotoTotal}</span><OutDot n={outGownsNoPhoto} what="item(s)" />
           </button>
           <button className={`inv-tab ${activeTab === 'petticoats' ? 'active' : ''}`} onClick={() => setActiveTab('petticoats')}>
             🩱 Petticoats
           </button>
           <button className={`inv-tab ${activeTab === 'accessories' ? 'active' : ''}`} onClick={() => setActiveTab('accessories')}>
-            👑 Accessories
+            👑 Accessories<OutDot n={outAccsTotal} what="accessory(ies)" />
+          </button>
+          <button type="button" className={`inv-tab-refresh ${refreshing ? 'spin' : ''}`} onClick={refreshAll} disabled={refreshing} title="Refresh">
+            <RefreshCw size={14} /> Refresh
           </button>
         </div>
 

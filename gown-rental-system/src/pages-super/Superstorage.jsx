@@ -3,6 +3,7 @@ import { HardDrive, Trash2, RefreshCw, Search, Box, Image as ImageIcon, FileText
 import { supabase } from '../supabaseClient';
 import Header from '../components/Header';
 import SuperHeader from '../components/SuperHeader';
+import { askConfirm, DialogHost } from '../components/Dialogs';
 import '../styles/SuperAdmin.css';
 
 const MODEL_BUCKET = 'gown-models';
@@ -172,25 +173,51 @@ const SuperStorage = ({ imagesOnly = false }) => {
 
     let text = `Delete ${picked.length} file(s) (${fmtSize(total)}) from "${bucket}"?\n\nThis cannot be undone.`;
     if (inUseCount > 0) {
-      text += `\n\nWARNING: ${inUseCount} of them are still used in the database. Their images or 3D models will disappear from the pages.`;
+      text += `\n\nWARNING: ${inUseCount} of them are still used in the database. Gowns that use a deleted image will be UNPOSTED and moved to "No photos" in the inventory. Other images or 3D models will disappear from the pages.`;
     }
-    if (!window.confirm(text)) return;
+    if (!(await askConfirm(text, {
+      title: inUseCount > 0 ? 'Delete files that are in use?' : 'Delete these files?',
+      tone: 'danger',
+      confirmText: `Yes, delete ${picked.length}`,
+    }))) return;
 
     setBusy(true);
     setMsg('');
     const paths = picked.map((r) => r.path);
     let removed = 0;
+    const removedPaths = new Set();
     for (let i = 0; i < paths.length; i += 100) {
       const { data, error } = await supabase.storage.from(bucket).remove(paths.slice(i, i + 100));
       if (error) { setMsg('Delete failed: ' + error.message); break; }
       removed += (data || []).length;
+      (data || []).forEach((d) => removedPaths.add(decodeAll(d.name)));
+    }
+
+    // Gowns whose photo was just deleted: unpost them and send them to "No photos"
+    let unposted = 0;
+    if (removedPaths.size > 0) {
+      const { data: gownRows } = await supabase.from('gowns').select('id, image');
+      const hit = (gownRows || []).filter((g) => {
+        if (!g.image) return false;
+        const refs = new Set();
+        collectRefs(g.image, 'image', refs);
+        return [...refs].some((ref) => ref.startsWith(`${bucket}/`) && removedPaths.has(ref.slice(bucket.length + 1)));
+      });
+      if (hit.length > 0) {
+        const { error: upErr } = await supabase.from('gowns')
+          .update({ image: null, is_posted: false })
+          .in('id', hit.map((g) => g.id));
+        if (upErr) setMsg('Files were deleted, but the gowns could not be unposted: ' + upErr.message);
+        else unposted = hit.length;
+      }
     }
     setBusy(false);
 
-    if (removed === paths.length) setMsg(`Deleted ${removed} file(s).`);
+    if (removed === paths.length) setMsg(`Deleted ${removed} file(s).${unposted ? ` ${unposted} gown${unposted === 1 ? ' was' : 's were'} unposted and moved to "No photos".` : ''}`);
     else if (removed > 0) setMsg(`Only ${removed} of ${paths.length} were deleted. The delete policy may be missing.`);
     else if (!msg) setMsg('Nothing was deleted. A delete policy on storage.objects is needed (see the SQL).');
 
+    await scan();
     await loadFiles(bucket);
   };
 
@@ -198,6 +225,7 @@ const SuperStorage = ({ imagesOnly = false }) => {
 
   return (
     <>
+      <DialogHost />
       {imagesOnly ? <Header /> : <SuperHeader />}
       <div className="sa-page">
         <div className="sa-hero">

@@ -365,8 +365,8 @@ const AdminMannequin = () => {
             <div className="am-section-card">
               <h3><Sliders size={18} /> Fine-Tune Scale</h3>
               <p className="section-subtitle">Fine adjustments for {category.id} ({selectedSize}); the gown follows:</p>
-              {renderSlider('Waist (Width)', waist, setWaist, 0.8, 1.3)}
-              {renderSlider('Chest (Front)', chest, setChest, 0.8, 1.3)}
+              {renderSlider('Width', waist, setWaist, 0.8, 1.3)}
+              {renderSlider('Front & Back', chest, setChest, 0.8, 1.3)}
             </div>
 
             <div className="am-section-card">

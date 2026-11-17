@@ -72,8 +72,8 @@ const NO_GOWN = {
 };
 
 const SLIDERS = [
-  { key: 'waist',  label: 'Waist (Width)' },
-  { key: 'chest',  label: 'Chest (Front)' },
+  { key: 'waist',  label: 'Width' },
+  { key: 'chest',  label: 'Front & Back' },
 ];
 
 const SIZE_LIMITS = [0.8, 1.3];   // fine-tune range (80% - 130%)

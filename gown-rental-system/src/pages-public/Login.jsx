@@ -170,7 +170,7 @@ const Login = ({ onLoginSuccess }) => {
           </button>
 
           <p style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', marginTop: '25px', lineHeight: '1.5' }}>
-            Only Gmail accounts registered by the Super Admin can sign in.
+            Only Gmail accounts registered by the System Admin can sign in.
           </p>
 
           <p className="login-footer-text" style={{ marginTop: '30px' }}>Protected by GownRent Security. © 2026</p>

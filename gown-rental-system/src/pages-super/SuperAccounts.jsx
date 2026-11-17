@@ -75,7 +75,7 @@ const SuperAccounts = () => {
 
     if (editing && editing.role === 'super_admin' && form.role !== 'super_admin') {
       if (editing.id === myId) { setMsg('You cannot lower your own role.'); return; }
-      if (superCount <= 1) { setMsg('There must be at least one Super Admin.'); return; }
+      if (superCount <= 1) { setMsg('There must be at least one System Admin.'); return; }
     }
 
     const payload = {
@@ -132,7 +132,7 @@ const SuperAccounts = () => {
   const handleDelete = async (a) => {
     setMsg('');
     if (a.id === myId) { setMsg('You cannot delete your own account.'); return; }
-    if (a.role === 'super_admin' && superCount <= 1) { setMsg('The last Super Admin cannot be deleted.'); return; }
+    if (a.role === 'super_admin' && superCount <= 1) { setMsg('The last System Admin cannot be deleted.'); return; }
     if (!window.confirm(`Delete the account of ${a.name} (${a.email})?\n\nThis cannot be undone.`)) return;
 
     const { data, error } = await supabase.from('admins').delete().eq('id', a.id).select('id');
@@ -188,7 +188,7 @@ const SuperAccounts = () => {
               onChange={(e) => setForm({ ...form, role: e.target.value })}
             >
               <option value="admin">Admin (booking / inventory)</option>
-              <option value="super_admin">Super Admin</option>
+              <option value="super_admin">System Admin</option>
             </select>
 
             <input
@@ -246,7 +246,7 @@ const SuperAccounts = () => {
                       {a.auth_provider === 'google' ? 'Gmail' : 'Password'}
                     </span>
                     <span className={`sa-role ${a.role === 'super_admin' ? 'super' : ''}`}>
-                      {a.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                      {a.role === 'super_admin' ? 'System Admin' : 'Admin'}
                     </span>
                     <button type="button" className="sa-icon-btn" onClick={() => startEdit(a)} title="Edit" aria-label={`Edit ${a.name}`}>
                       <Pencil size={14} />

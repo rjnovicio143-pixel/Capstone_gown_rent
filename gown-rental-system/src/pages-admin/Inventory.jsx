@@ -191,6 +191,12 @@ const Inventory = () => {
   // ── HELPERS ──
   const accCategory = (id) => accessories.find(a => a.id === id)?.category;
   const accName = (id) => accessories.find(a => a.id === id)?.name || `#${id}`;
+  // Stock of an accessory (0 = out of stock). Unknown ids count as in stock.
+  const accStockOf = (id) => {
+    const a = accessories.find(x => String(x.id) === String(id));
+    return a ? Number(a.stock || 0) : 1;
+  };
+  const outAccsOf = (gown) => (gown.included_accessories || []).filter(id => accStockOf(id) < 1);
   const pettiByLayer = (layer) => petticoats.find(p => Number(p.layer) === Number(layer));
   const itemEmoji = (g) => (g.type === 'suit' ? '🤵' : '👗');
 
@@ -229,10 +235,15 @@ const Inventory = () => {
               </span>
             )}
             {(gown.included_accessories || []).map(id => (
-              <span key={id} className="inv-chip chip-acc">
+              <span key={id} className={`inv-chip chip-acc ${accStockOf(id) < 1 ? 'chip-out' : ''}`}
+                title={accStockOf(id) < 1 ? 'Out of stock' : undefined}>
                 <span className="inv-chip-ico">{accIcon(accCategory(id))}</span> {accName(id)}
+                {accStockOf(id) < 1 && <em className="chip-out-tag">Out of stock</em>}
               </span>
             ))}
+            {outAccsOf(gown).length > 0 && (
+              <p className="inv-acc-warn">⚠ Can only be rented without the out-of-stock accessory.</p>
+            )}
             {!gown.petticoat_layer && (gown.included_accessories || []).length === 0 && (
               <span className="inv-chip chip-none">{gown.type === 'suit' ? 'Suit only' : 'Gown only'}</span>
             )}
@@ -280,7 +291,10 @@ const Inventory = () => {
               <span className="inv-chip chip-petticoat"><Layers size={10} /> L{gown.petticoat_layer}</span>
             )}
             {shown.map(id => (
-              <span key={id} className="inv-chip chip-acc"><span className="inv-chip-ico">{accIcon(accCategory(id))}</span> {accName(id)}</span>
+              <span key={id} className={`inv-chip chip-acc ${accStockOf(id) < 1 ? 'chip-out' : ''}`}>
+                <span className="inv-chip-ico">{accIcon(accCategory(id))}</span> {accName(id)}
+                {accStockOf(id) < 1 && <em className="chip-out-tag">Out</em>}
+              </span>
             ))}
             {extra > 0 && <span className="inv-chip chip-none">+{extra}</span>}
           </div>
@@ -913,12 +927,13 @@ const Inventory = () => {
                 const stock = Number(acc.stock || 0);
                 const stockClass = stock === 0 ? 'out' : stock <= LOW_STOCK ? 'low' : 'in';
                 return (
-                  <div key={acc.id} className="acc-row">
+                  <div key={acc.id} className={`acc-row ${stock === 0 ? 'is-out' : ''}`}>
                     <div className="acc-row-info">
                       <span className="acc-icon">{accIcon(acc.category)}</span>
                       <div className="acc-row-text">
                         <p className="acc-name" title={acc.name}>{acc.name}</p>
                         <span className="acc-cat">{acc.category} · Used by {plural(used, 'gown')}</span>
+                        {stock === 0 && <span className="acc-out-note">Out of stock — gowns with this can only be rented without it</span>}
                       </div>
                     </div>
 

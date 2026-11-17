@@ -940,3 +940,11 @@ button.inv-export-btn:focus-visible { outline: 3px solid rgba(34,197,94,0.35); o
 .inv-upload.inv-invalid-box { border-color: #dc2626 !important; background: #fffafa; animation: inv-shake .35s ease; }
 @keyframes inv-err-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes inv-shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+/* ===== Accessory out-of-stock markers (paste at the bottom of Inventory.css) ===== */
+.inv-chip.chip-out { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; text-decoration: line-through; text-decoration-color: rgba(185,28,28,.55); }
+.inv-chip .chip-out-tag { font-style: normal; font-weight: 800; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; margin-left: 4px; padding: 1px 5px; border-radius: 6px; background: #b91c1c; color: #fff; text-decoration: none; display: inline-block; }
+.inv-acc-warn { width: 100%; margin: 6px 0 0; font-size: 11.5px; font-weight: 600; color: #b45309; background: #fef3c7; border-radius: 8px; padding: 5px 8px; }
+.acc-row.is-out { background: #fff7f7; border-color: #fecaca; }
+.acc-row.is-out .acc-name { color: #991b1b; }
+.acc-out-note { display: block; font-size: 11px; font-weight: 600; color: #b91c1c; margin-top: 2px; }

@@ -190,12 +190,11 @@ const ReservationForm = () => {
           <h2>Reservation Submitted!</h2>
           <p>
             Your hold request for <strong>{gown.name}</strong> has been sent.
-            Our admin will review and confirm your reservation soon.
-            Your hold is kept for {HOLD_DAYS} days.
+            The gown is held for you for {HOLD_DAYS} days.
           </p>
           <div className="rf-success-note">
             <Clock size={16} />
-            <span>Please wait for a confirmation from our team before visiting the shop.</span>
+            <span>Please visit our shop within {HOLD_DAYS} days to pay and confirm your reservation. If we do not see you by then, the hold is released.</span>
           </div>
           <button className="rf-back-btn-success" onClick={() => navigate('/gown-suit')}>
             Browse More Gowns
@@ -260,7 +259,7 @@ const ReservationForm = () => {
             <Clock size={15} />
             <div>
               <strong>Pencil Booking</strong>
-              <span>Admin will confirm your reservation. No payment required yet. Your hold is kept for {HOLD_DAYS} days.</span>
+              <span>No online payment. Visit the shop within {HOLD_DAYS} days to pay and clarify the details, so your reservation is confirmed.</span>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { logActivity } from '../utils/activityLogger';
 import * as XLSX from 'xlsx';
@@ -6,11 +6,76 @@ import {
   Search, Plus, X, Trash2, CheckCircle, AlertTriangle,
   User, Calendar, DollarSign, Briefcase, CheckCircle2,
   HandHelping, CreditCard, ShieldAlert,
-  MessageSquare, Download, RefreshCw, Layers, Crown, Edit3, Tag, Save, Package
+  MessageSquare, Download, RefreshCw, Layers, Crown, Edit3, Tag, Save, Package, ChevronDown, Check
 } from 'lucide-react';
 import Header from '../components/Header';
 import { askConfirm, showAlert, DialogHost } from '../components/Dialogs';
 import '../styles/Customers.css';
+
+/* ---------- GOWN PICKER (small photo + search) ---------- */
+const pesoFmt = (n) => '₱' + (Number(n) || 0).toLocaleString();
+function GownPicker({ gowns, value, onPick }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const box = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('touchstart', away);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('touchstart', away); };
+  }, [open]);
+
+  const list = gowns.filter(g => Number(g.stock) > 0);
+  const selected = gowns.find(g => String(g.id) === String(value));
+  const shown = list.filter(g => `${g.name} ${g.category || ''}`.toLowerCase().includes(q.trim().toLowerCase()));
+
+  const Thumb = ({ g }) => (
+    <span className="gp-thumb">
+      {g?.image ? <img src={g.image} alt="" loading="lazy" /> : <span>{g?.type === 'suit' ? '🤵' : '👗'}</span>}
+    </span>
+  );
+
+  return (
+    <div className="gp" ref={box}>
+      {/* keeps the native "required" check working */}
+      <input className="gp-required" tabIndex={-1} required value={value || ''} onChange={() => {}} aria-hidden="true" />
+      <button type="button" className={`gp-trigger ${open ? 'open' : ''}`} onClick={() => setOpen(o => !o)}>
+        {selected ? (
+          <>
+            <Thumb g={selected} />
+            <span className="gp-main"><b>{selected.name}</b><small>{pesoFmt(selected.price)} · {selected.stock} left</small></span>
+          </>
+        ) : <span className="gp-placeholder">Choose a gown…</span>}
+        <ChevronDown size={16} className="gp-chev" />
+      </button>
+
+      {open && (
+        <div className="gp-panel">
+          <div className="gp-search">
+            <Search size={14} />
+            <input autoFocus placeholder="Search gown or suit…" value={q} onChange={e => setQ(e.target.value)} />
+            {q && <button type="button" onClick={() => setQ('')} aria-label="Clear"><X size={13} /></button>}
+          </div>
+          <div className="gp-list">
+            {shown.length === 0 && <p className="gp-empty">{list.length === 0 ? 'No gown in stock.' : 'No gown matches your search.'}</p>}
+            {shown.map(g => (
+              <button type="button" key={g.id}
+                className={`gp-item ${String(g.id) === String(value) ? 'active' : ''}`}
+                onClick={() => { onPick(g); setOpen(false); setQ(''); }}>
+                <Thumb g={g} />
+                <span className="gp-main"><b>{g.name}</b><small>{g.category || (g.type === 'suit' ? 'Suit' : 'Gown')} · {pesoFmt(g.price)}</small></span>
+                <span className="gp-stock">{g.stock} left</span>
+                {String(g.id) === String(value) && <Check size={15} className="gp-check" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ---------- PRICE HELPERS ---------- */
 const addonsTotal = (list) => (list || []).reduce((s, a) => s + (Number(a.price) || 0), 0);
@@ -65,6 +130,7 @@ const Customers = () => {
   const [penaltyPayAmt, setPenaltyPayAmt]       = useState('');
   const [isConfirmingHold, setIsConfirmingHold] = useState(false);
   const [isSwapMode, setIsSwapMode]             = useState(false); // add-ons panel
+  const [accSearch, setAccSearch]               = useState('');
   const [isEditMode, setIsEditMode]             = useState(false); // edit booking
   const [editForm, setEditForm]                 = useState(null);
   const [saving, setSaving]                     = useState(false);
@@ -205,6 +271,51 @@ const Customers = () => {
     return true;
   };
 
+  /* ---------- ACCESSORY STOCK ----------
+     Accessories go with the gown: when a gown is taken, each accessory in the booking
+     goes down by 1, and comes back when the gown is returned / cancelled / deleted.
+     An addon is marked held:true once its stock was taken, so it is only given back once
+     (older bookings made before this rule are never given back by mistake). */
+  const accShortList = async (addons) => {
+    const ids = [...new Set((addons || []).map(a => String(a.id)))];
+    if (!ids.length) return [];
+    const { data } = await supabase.from('accessories').select('id, name, stock').in('id', ids);
+    return (data || [])
+      .filter(r => (Number(r.stock) || 0) < 1)
+      .map(r => ({ id: r.id, name: r.name, stock: Number(r.stock) || 0 }));
+  };
+
+  // Asks what to do when an accessory has no stock. Returns the addons to use, or null to stop.
+  const resolveAccStock = async (addons) => {
+    const list = addons || [];
+    const short = await accShortList(list.filter(a => !a.held));
+    if (!short.length) return list;
+    const names = short.map(x => `"${x.name}"`).join(', ');
+    const many = short.length > 1;
+    const ok = await askConfirm(
+      `${names} ${many ? 'are' : 'is'} out of stock (0 left, already with another booking).\n\nThis gown can only be taken without ${many ? 'them' : 'it'}.\n\nContinue without ${many ? 'them' : 'it'}?`
+    );
+    if (!ok) return null;
+    return list.filter(a => !short.some(x => String(x.id) === String(a.id)));
+  };
+
+  const bumpAcc = async (id, delta) => {
+    const { data: r } = await supabase.from('accessories').select('stock').eq('id', id).single();
+    if (!r) return;
+    await supabase.from('accessories').update({ stock: Math.max(0, (Number(r.stock) || 0) + delta) }).eq('id', id);
+  };
+  const takeAcc = async (addons) => {
+    const out = [];
+    for (const a of addons || []) { if (!a.held) await bumpAcc(a.id, -1); out.push({ ...a, held: true }); }
+    return out;
+  };
+  const giveAcc = async (addons) => {
+    const out = [];
+    for (const a of addons || []) { if (a.held) await bumpAcc(a.id, 1); out.push({ ...a, held: false }); }
+    return out;
+  };
+  const bookingHoldsStock = (b) => b.returnStatus === 'claimed' || b.returnStatus === 'reserved';
+
   const cancelCompetingHolds = async (gownId) => {
     if (!gownId) return 0;
 
@@ -249,6 +360,13 @@ const Customers = () => {
       petticoatPrice: 0,
       selectedAccessories: includedAccsOf(g).map(a => toAddon(a, true)),
     }));
+    const empty = includedAccsOf(g).filter(a => (Number(a.stock) || 0) < 1);
+    if (empty.length) {
+      showAlert(
+        `${empty.map(a => `"${a.name}"`).join(', ')} ${empty.length > 1 ? 'are' : 'is'} out of stock.\n\nThis gown can only be rented without ${empty.length > 1 ? 'them' : 'it'}. Remove ${empty.length > 1 ? 'them' : 'it'} below, or wait until ${empty.length > 1 ? 'they are' : 'it is'} returned.`,
+        { title: 'Accessory out of stock', tone: 'warn' }
+      );
+    }
   };
 
   const handleFormPetticoat = (petti) => {
@@ -279,14 +397,24 @@ const Customers = () => {
   // ── ADD NEW BOOKING ──
   const handleAddCustomer = async (e) => {
     e.preventDefault();
-    const gross = computeGross(newCustomer);
+    let addons = newCustomer.selectedAccessories || [];
+    if (newCustomer.reservationDate) {
+      const ok = await resolveAccStock(addons);
+      if (!ok) return;
+      addons = ok;
+    }
+    const form = { ...newCustomer, selectedAccessories: addons };
+    const gross = computeGross(form);
     const discount = Number(newCustomer.discount) || 0;
     if (discount < 0 || discount > gross) return showAlert('Invalid discount. It cannot be greater than the total.');
     const total = gross - discount;
     const down = Number(newCustomer.down);
     const balance = total - down;
     const initialStatus = newCustomer.reservationDate ? 'reserved' : 'pending';
-    if (initialStatus === 'reserved') { const ok = await adjustStock(newCustomer.gownId, -1); if (!ok) return; }
+    if (initialStatus === 'reserved') {
+      const ok = await adjustStock(newCustomer.gownId, -1); if (!ok) return;
+      addons = await takeAcc(addons);
+    }
     const { error } = await supabase.from('bookings').insert([{
       name: newCustomer.name, contact: newCustomer.contact,
       gmail: newCustomer.gmail, facebook: newCustomer.facebook,
@@ -308,13 +436,13 @@ const Customers = () => {
       total_rent: total, balance,
       petticoat_id: newCustomer.petticoatId || null,
       petticoat_price: newCustomer.petticoatPrice || 0,
-      addons: newCustomer.selectedAccessories,
+      addons,
       swap_charges: 0,
       discount, discount_note: newCustomer.discountNote || null,
     }]);
     if (error) {
       showAlert('Error: ' + error.message);
-      if (initialStatus === 'reserved') await adjustStock(newCustomer.gownId, 1); // undo the stock change
+      if (initialStatus === 'reserved') { await adjustStock(newCustomer.gownId, 1); await giveAcc(addons); } // undo the stock change
       return;
     }
 
@@ -431,9 +559,21 @@ const Customers = () => {
     const current = booking.addons || [];
     const exists = current.find(a => String(a.id) === String(acc.id));
 
-    const newAddons = exists
-      ? current.filter(a => String(a.id) !== String(acc.id))
-      : [...current, toAddon(acc, included)];
+    let newAddons;
+    if (exists) {
+      if (bookingHoldsStock(booking) && exists.held) await giveAcc([exists]);
+      newAddons = current.filter(a => String(a.id) !== String(acc.id));
+    } else {
+      let add = toAddon(acc, included);
+      if (bookingHoldsStock(booking)) {
+        const short = await accShortList([add]);
+        if (short.length) {
+          return showAlert(`"${acc.name}" is out of stock (0 left). It is already with another booking.`, { title: 'Out of stock', tone: 'warn' });
+        }
+        [add] = await takeAcc([add]);
+      }
+      newAddons = [...current, add];
+    }
     const swapFeeAdd = !exists && !included ? Number(acc.swap_fee || 0) : 0;
 
     const gross = Number(booking.rentalPrice) + Number(booking.petticoatPrice || 0) + addonsTotal(newAddons);
@@ -457,9 +597,14 @@ const Customers = () => {
     if (!petti && incAccs.length === 0) return showAlert('This gown has no included package.');
 
     const current = booking.addons || [];
-    const missing = incAccs
+    let missing = incAccs
       .filter(a => !current.some(c => String(c.id) === String(a.id)))
       .map(a => toAddon(a, true));
+    if (bookingHoldsStock(booking) && missing.length) {
+      const ok = await resolveAccStock(missing);
+      if (!ok) return;
+      missing = await takeAcc(ok);
+    }
     const newAddons = [...current, ...missing];
 
     const applyPetti = !!petti && !booking.petticoatId;
@@ -536,12 +681,21 @@ const Customers = () => {
     const takesStock =
       (newStatus === 'claimed' || newStatus === 'reserved') && booking.returnStatus === 'pending';
 
+    let nextAddons = booking.addons || [];
     if (takesStock) {
+      const okAcc = await resolveAccStock(nextAddons);
+      if (!okAcc) return;
+      nextAddons = okAcc;
       const ok = await adjustStock(booking.gownId, -1); if (!ok) return;
+      nextAddons = await takeAcc(nextAddons);
     }
-    if ((newStatus === 'returned' || newStatus === 'cancelled') && (booking.returnStatus === 'claimed' || booking.returnStatus === 'reserved')) {
+    if ((newStatus === 'returned' || newStatus === 'cancelled') && bookingHoldsStock(booking)) {
       await adjustStock(booking.gownId, 1);
+      nextAddons = await giveAcc(nextAddons);
     }
+    const addonsDropped = nextAddons.length !== (booking.addons || []).length;
+    const newGross = Number(booking.rentalPrice) + Number(booking.petticoatPrice || 0) + addonsTotal(nextAddons);
+    const newTotalRent = Math.max(0, newGross - (Number(booking.discount) || 0));
 
     // Unpaid penalty at this moment (computed from the old status, before it changes)
     let finalPenalty = calculatePenalty(booking);
@@ -551,6 +705,8 @@ const Customers = () => {
 
     const { error } = await supabase.from('bookings').update({
       return_status: newStatus,
+      addons: nextAddons,
+      ...(addonsDropped ? { total_rent: newTotalRent, balance: newTotalRent - Number(booking.down) } : {}),
       penalty: finalPenalty,
       is_penalty_settled: fullyPaid || booking.isPenaltySettled,
       claimed_status: newStatus === 'claimed' ? 'claimed' : (newStatus === 'returned' ? 'claimed' : booking.claimedStatus)
@@ -571,16 +727,23 @@ const Customers = () => {
     if (!holdData.downpayment || Number(holdData.downpayment) <= 0) return showAlert('Enter the downpayment.');
     if (!holdData.returnDate) return showAlert('Select the return date.');
 
-    const total = netTotal(selectedBooking) || Number(selectedBooking.rentalPrice);
+    // Accessories that are out of stock can only be dropped from the booking
+    const okAcc = await resolveAccStock(selectedBooking.addons || []);
+    if (!okAcc) return;
+    const sbNow = { ...selectedBooking, addons: okAcc };
+
+    const total = netTotal(sbNow) || Number(selectedBooking.rentalPrice);
     const newDown = Number(holdData.downpayment);
     if (newDown > total) return showAlert('The downpayment cannot be greater than the total.');
 
     // Paying the downpayment secures the gown
     const ok = await adjustStock(selectedBooking.gownId, -1);
     if (!ok) return;
+    const heldAddons = await takeAcc(okAcc);
 
     const { error } = await supabase.from('bookings').update({
       is_online_hold: false, hold_expires_at: 'Confirmed',
+      addons: heldAddons, total_rent: total,
       down: newDown, balance: total - newDown,
       reservation_date: holdData.reservationDate || null,
       return_date: holdData.returnDate,
@@ -594,6 +757,7 @@ const Customers = () => {
     if (error) {
       showAlert(error.message);
       await adjustStock(selectedBooking.gownId, 1); // undo the stock change
+      await giveAcc(heldAddons);
       return;
     }
 
@@ -613,7 +777,7 @@ const Customers = () => {
       return;
     }
     if (!(await askConfirm(`Delete ${booking.name}'s record? This cannot be undone.`))) return;
-    if (booking.returnStatus === 'claimed' || booking.returnStatus === 'reserved') await adjustStock(booking.gownId, 1);
+    if (bookingHoldsStock(booking)) { await adjustStock(booking.gownId, 1); await giveAcc(booking.addons); }
     const { error } = await supabase.from('bookings').delete().eq('id', booking.id);
     if (error) { showAlert(error.message); return; }
     await logActivity('booking_deleted', `Deleted booking: ${booking.name}`);
@@ -1133,22 +1297,42 @@ const Customers = () => {
                           {petticoats.length === 0 && <span className="empty-inline">No petticoat layers in inventory yet.</span>}
 
                           <p className="addon-group-title">👑 Accessories</p>
-                          <div className="addon-swap-btns">
+                          {accessories.length > 5 && (
+                            <div className="acc-search">
+                              <Search size={13} />
+                              <input placeholder="Search accessory…" value={accSearch} onChange={e => setAccSearch(e.target.value)} />
+                            </div>
+                          )}
+                          <div className="acc-pick-list">
                             {accessories.length === 0 && <span className="empty-inline">No accessories in inventory yet.</span>}
-                            {accessories.map(acc => {
+                            {accessories
+                              .filter(acc => acc.name.toLowerCase().includes(accSearch.trim().toLowerCase()))
+                              .sort((x, y) => (sbIncAccs.some(a => a.id === y.id) ? 1 : 0) - (sbIncAccs.some(a => a.id === x.id) ? 1 : 0))
+                              .map(acc => {
                               const has = (sb.addons || []).find(a => String(a.id) === String(acc.id));
                               const isIncluded = sbIncAccs.some(a => a.id === acc.id);
+                              const stk = Number(acc.stock) || 0;
+                              const oos = !has && stk < 1;
                               return (
                                 <button
                                   key={acc.id}
-                                  className={`swap-opt-btn ${has ? 'active' : ''}`}
+                                  className={`acc-pick ${has ? 'on' : ''} ${oos ? 'is-oos' : ''}`}
+                                  disabled={oos}
                                   onClick={() => handleToggleAddon(sb, acc)}
                                 >
-                                  {acc.name}
-                                  {isIncluded
-                                    ? <span className="included-tag">Included</span>
-                                    : !has && acc.price > 0 && <span className="swap-fee-tag">+₱{acc.price}</span>}
-                                  {!has && !isIncluded && acc.swap_fee > 0 && <span className="swap-fee-tag">swap +₱{acc.swap_fee}</span>}
+                                  <span className="acc-pick-check">{has ? <Check size={13} /> : null}</span>
+                                  <span className="acc-pick-main">
+                                    <b>{acc.name}</b>
+                                    <small>{acc.category || 'Accessory'}</small>
+                                  </span>
+                                  <span className="acc-pick-tags">
+                                    {oos && <span className="oos-tag">Out of stock</span>}
+                                    {!oos && !has && stk === 1 && <span className="low-tag">1 left</span>}
+                                    {isIncluded
+                                      ? <span className="included-tag">Included</span>
+                                      : !has && Number(acc.price) > 0 && <span className="swap-fee-tag">+₱{acc.price}</span>}
+                                    {!has && !isIncluded && Number(acc.swap_fee) > 0 && <span className="swap-fee-tag">swap +₱{acc.swap_fee}</span>}
+                                  </span>
                                 </button>
                               );
                             })}
@@ -1176,8 +1360,18 @@ const Customers = () => {
                     {isConfirmingHold && (
                       <div className="info-block confirm-hold-area">
                         <label><CheckCircle2 size={13} /> Complete Information</label>
+                        <div className="down-box">
+                          <div className="down-head"><span><CreditCard size={14} /> Downpayment</span><em>Required — this secures the gown</em></div>
+                          <div className="down-field">
+                            <b>₱</b>
+                            <input type="number" min="0" inputMode="numeric" placeholder="Enter the amount received" autoFocus
+                              onChange={e => setHoldData({...holdData, downpayment: e.target.value})} />
+                          </div>
+                          <p className="down-hint">Total {formatCurrency(netTotal(sb))}
+                            {Number(holdData.downpayment) > 0 && <> · Balance after: <strong>{formatCurrency(Math.max(0, netTotal(sb) - Number(holdData.downpayment)))}</strong></>}
+                          </p>
+                        </div>
                         <div className="hold-edit-fields">
-                          <div className="input-grp"><label>Downpayment</label><input type="number" min="0" onChange={e => setHoldData({...holdData, downpayment: e.target.value})} /></div>
                           <div className="input-grp"><label>Deposit</label><input type="number" min="0" onChange={e => setHoldData({...holdData, deposit: e.target.value})} /></div>
                           <div className="input-grp"><label>Reservation Date</label><input type="date" onChange={e => setHoldData({...holdData, reservationDate: e.target.value})} /></div>
                           <div className="input-grp"><label>Return Date</label><input type="date" required onChange={e => setHoldData({...holdData, returnDate: e.target.value})} /></div>
@@ -1244,10 +1438,8 @@ const Customers = () => {
                   <div className="form-grid-2">
                     <div className="input-grp">
                       <label>Gown Selection</label>
-                      <select required value={newCustomer.gownId} onChange={handleGownSelect}>
-                        <option value="">-- Choose Gown --</option>
-                        {gowns.filter(g => g.stock > 0).map(g => <option key={g.id} value={String(g.id)}>{g.name} ({g.stock} left)</option>)}
-                      </select>
+                      <GownPicker gowns={gowns} value={newCustomer.gownId}
+                        onPick={(g) => handleGownSelect({ target: { value: String(g.id) } })} />
                     </div>
                     <div className="input-grp"><label>Booking Date</label><input type="date" required onChange={e => setNewCustomer({...newCustomer, bookingDate: e.target.value})} /></div>
                   </div>
@@ -1307,9 +1499,13 @@ const Customers = () => {
                         const isIncluded = formIncAccs.some(a => a.id === acc.id);
                         return (
                           <button type="button" key={acc.id}
-                            className={`addon-select-btn ${selected ? 'selected' : ''}`}
+                            className={`addon-select-btn ${selected ? 'selected' : ''} ${(Number(acc.stock) || 0) < 1 ? 'is-oos' : ''}`}
+                            disabled={!selected && (Number(acc.stock) || 0) < 1}
                             onClick={() => toggleFormAccessory(acc)}>
                             {acc.name}
+                            {(Number(acc.stock) || 0) < 1
+                              ? <span className="oos-tag">Out of stock</span>
+                              : (Number(acc.stock) || 0) === 1 && <span className="low-tag">1 left</span>}
                             {isIncluded
                               ? <span className="included-tag">Included</span>
                               : acc.price > 0 && <span>+₱{Number(acc.price).toLocaleString()}</span>}
@@ -1347,10 +1543,21 @@ const Customers = () => {
                     <div className="input-grp" style={{ gridColumn: 'span 2' }}><label>Discount Note</label><input type="text" placeholder="e.g. regular customer" onChange={e => setNewCustomer({...newCustomer, discountNote: e.target.value})} /></div>
                   </div>
 
-                  <div className="form-grid-3">
+                  <div className="form-grid-2">
                     <div className="input-grp"><label>Total Rental</label><input type="number" value={computeTotal(newCustomer)} readOnly /></div>
                     <div className="input-grp"><label>Security Deposit</label><input type="number" onChange={e => setNewCustomer({...newCustomer, deposit: e.target.value})} /></div>
-                    <div className="input-grp"><label>Downpayment</label><input type="number" required onChange={e => setNewCustomer({...newCustomer, down: e.target.value})} /></div>
+                  </div>
+
+                  <div className="down-box">
+                    <div className="down-head"><span><CreditCard size={14} /> Downpayment</span><em>Required</em></div>
+                    <div className="down-field">
+                      <b>₱</b>
+                      <input type="number" min="0" inputMode="numeric" required placeholder="Enter the amount received"
+                        value={newCustomer.down ?? ''} onChange={e => setNewCustomer({...newCustomer, down: e.target.value})} />
+                    </div>
+                    <p className="down-hint">Total {formatCurrency(computeTotal(newCustomer))}
+                      {Number(newCustomer.down) > 0 && <> · Balance: <strong>{formatCurrency(Math.max(0, computeTotal(newCustomer) - Number(newCustomer.down)))}</strong></>}
+                    </p>
                   </div>
                   <div className="form-grid-3">
                     <div className="input-grp"><label>Daily Penalty Rate</label><input type="number" value={newCustomer.penaltyRate} onChange={e => setNewCustomer({...newCustomer, penaltyRate: e.target.value})} /></div>

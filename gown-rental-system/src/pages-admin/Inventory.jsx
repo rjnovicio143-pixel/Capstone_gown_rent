@@ -102,7 +102,7 @@ const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const emptyGownForm = {
-  type: 'gown', audience: 'women', name: '', price: '', stock: 1, size: '', category: 'Wedding', customCategory: '',
+  type: 'gown', audience: 'women', code: '', name: '', price: '', stock: 1, size: '', category: 'Wedding', customCategory: '',
   desc: '', image: null,
   petticoat_layer: null,
   included_accessories: [],
@@ -212,7 +212,7 @@ const Inventory = () => {
   const renderGownCard = (gown) => {
     const petti = gown.petticoat_layer ? pettiByLayer(gown.petticoat_layer) : null;
     return (
-      <div key={gown.id} className="inv-card">
+      <div key={gown.id} className={`inv-card ${Number(gown.stock || 0) < 1 ? 'is-out' : ''}`}>
         <div className={`inv-post-badge ${gown.is_posted ? 'posted' : 'draft'}`}>
           {gown.is_posted ? '🌐 Posted' : '📝 Draft'}
         </div>
@@ -225,11 +225,13 @@ const Inventory = () => {
 
         <div className="inv-card-img">
           <img src={gown.image} alt={gown.name} />
-          <span className={`inv-stock-tag ${gown.stock > 0 ? 'in' : 'out'}`}>{gown.stock || 0} left</span>
+          {Number(gown.stock || 0) < 1 && <div className="inv-oos-overlay"><span>Out of stock</span></div>}
+          <span className={`inv-stock-tag ${gown.stock > 0 ? 'in' : 'out'}`}>{gown.stock > 0 ? `${gown.stock} left` : 'Out of stock'}</span>
         </div>
 
         <div className="inv-card-body">
           <span className="inv-card-cat">{gown.type === 'suit' ? '🤵 ' : ''}{gown.category}</span>
+          {gown.code && <span className="inv-code">{gown.code}</span>}
           <h3 className="inv-card-name">{gown.name}</h3>
           <p className="inv-card-price">
             {discountOf(gown) > 0 ? (<><s className="inv-old-price">{peso(gown.price)}</s> {peso(finalPrice(gown))}</>) : peso(gown.price)}
@@ -280,11 +282,12 @@ const Inventory = () => {
     const extra = accIds.length - shown.length;
     const stock = Number(gown.stock || 0);
     return (
-      <div key={gown.id} className="inv-row-card">
+      <div key={gown.id} className={`inv-row-card ${stock < 1 ? 'is-out' : ''}`}>
         <span className="inv-row-ico">{itemEmoji(gown)}</span>
 
         <div className="inv-row-main">
           <div className="inv-row-title">
+            {gown.code && <span className="inv-code sm">{gown.code}</span>}
             <strong title={gown.name}>{gown.name}</strong>
             <span className={`inv-mini-badge ${gown.is_posted ? 'posted' : 'draft'}`}>
               {gown.is_posted ? 'Posted' : 'Draft'}
@@ -308,7 +311,7 @@ const Inventory = () => {
           </div>
         </div>
 
-        <span className={`inv-stock-tag static ${stock > 0 ? 'in' : 'out'}`}>{stock} left</span>
+        <span className={`inv-stock-tag static ${stock > 0 ? 'in' : 'out'}`}>{stock > 0 ? `${stock} left` : 'Out of stock'}</span>
 
         <div className="inv-row-actions">
           <button className="inv-act-btn edit" onClick={() => openEditGown(gown)}>
@@ -365,6 +368,7 @@ const Inventory = () => {
   const openEditGown = (gown) => {
     setEditingGown(gown);
     setGownForm({
+      code: gown.code || '',
       name: gown.name || '',
       price: gown.price || '',
       stock: gown.stock ?? 1,
@@ -393,8 +397,16 @@ const Inventory = () => {
     setImagePreview(null);
   };
 
+  // Gown code: no spaces, capital letters (BA123, WD313). Must be unique.
+  const cleanCode = (v) => String(v || '').toUpperCase().replace(/\s+/g, '').slice(0, 20);
+  const codeTaken = (v) => {
+    const c = cleanCode(v);
+    return !!c && gowns.some(g => cleanCode(g.code) === c && g.id !== editingGown?.id);
+  };
+
   const handleSaveGown = async () => {
     if (!gownForm.name.trim()) return fail('gname', 'Please enter the gown name.');
+    if (codeTaken(gownForm.code)) return fail('gcode', `The code ${cleanCode(gownForm.code)} is already used by another gown.`);
     if (!gownForm.price)       return fail('gprice', 'Please enter the price.');
     // Photo is required only when the gown is going public
     if (gownForm.is_posted && !imagePreview) {
@@ -408,6 +420,7 @@ const Inventory = () => {
       if (gownForm.is_posted && imageFile) imageUrl = await uploadImage(imageFile);
 
       const payload = {
+        code: cleanCode(gownForm.code) || null,
         name: gownForm.name.trim(),
         price: Number(gownForm.price),
         stock: Number(gownForm.stock),
@@ -440,7 +453,9 @@ const Inventory = () => {
       closeGownModal();
     } catch (err) {
       console.error(err);
-      notify('Error: ' + err.message);
+      if (err.code === '23505') notify('That gown code is already used. Please type a different code.');
+      else if (/column.*code|code.*column/i.test(err.message || '')) notify('The gowns table has no "code" column yet. Run the SQL for the gown code first.');
+      else notify('Error: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -649,7 +664,8 @@ const Inventory = () => {
   const tabGowns = gowns.filter(g => (activeTab === 'nophoto' ? !g.image : !!g.image));
   const customCats = [...new Set(gowns.map(g => g.category).filter(c => c && !ALL_CATEGORIES.includes(c)))].sort();
   const filteredGowns = tabGowns.filter(g => {
-    const matchSearch = g.name?.toLowerCase().includes(searchTerm.toLowerCase());
+    const t = searchTerm.trim().toLowerCase();
+    const matchSearch = !t || [g.name, g.code, g.category].some(v => v?.toLowerCase().includes(t));
     const matchPosted =
       filterPosted === 'all'    ? true :
       filterPosted === 'posted' ? g.is_posted :
@@ -714,9 +730,9 @@ const Inventory = () => {
     } else {
       const audLabel = Object.fromEntries(AUDIENCES);
       downloadXlsx(`gowns-and-suits-${stamp}.xlsx`, 'Gowns & Suits',
-        ['Name', 'Type', 'Category', 'Who wears it', 'Sizes / Ages', 'Price (₱)', 'Discount (%)', 'Price after discount (₱)', 'Stock', 'Status', 'Posted', 'Petticoat layer', 'Included accessories', 'Description'],
+        ['Code', 'Name', 'Type', 'Category', 'Who wears it', 'Sizes / Ages', 'Price (₱)', 'Discount (%)', 'Price after discount (₱)', 'Stock', 'Status', 'Posted', 'Petticoat layer', 'Included accessories', 'Description'],
         gowns.map(g => [
-          g.name, g.type === 'suit' ? "Men's suit" : 'Gown', g.category,
+          g.code || '', g.name, g.type === 'suit' ? "Men's suit" : 'Gown', g.category,
           audLabel[g.audience || defaultAudience(g.type)] || '', g.size || '',
           Number(g.price) || 0, discountOf(g), finalPrice(g), Number(g.stock) || 0,
           Number(g.stock) > 0 ? 'Available' : 'Out of stock', g.is_posted ? 'Posted' : 'Draft',
@@ -791,7 +807,7 @@ const Inventory = () => {
             <div className="inv-toolbar">
               <div className="inv-search">
                 <Search size={16} />
-                <input placeholder="Search gowns..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                <input placeholder="Search by code, name or category..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
               </div>
 
               <div className="inv-filter-pills">
@@ -997,6 +1013,16 @@ const Inventory = () => {
                 {/* Basic */}
                 <div className="inv-form-section">
                   <h4 className="inv-section-title">📝 Basic Info</h4>
+
+                  <div className="inv-field">
+                    <label>Code <span className="inv-opt">(optional)</span></label>
+                    <input id="f-gcode" className={`inv-code-input ${errors.gcode || codeTaken(gownForm.code) ? 'inv-invalid' : ''}`} type="text" placeholder="e.g. BA123, WD313" maxLength={20}
+                      value={gownForm.code}
+                      onChange={e => { clearErr('gcode'); setGownForm(p => ({ ...p, code: cleanCode(e.target.value) })); }} />
+                    {errors.gcode && <p className="inv-err">{errors.gcode}</p>}
+                    {!errors.gcode && codeTaken(gownForm.code) && <p className="inv-err">This code is already used by another gown.</p>}
+                    <small className="inv-field-hint">Your own code to identify this gown quickly (for example BA = barong, WD = wedding). Each code must be unique.</small>
+                  </div>
 
                   <div className="inv-field">
                     <label>Gown Name</label>

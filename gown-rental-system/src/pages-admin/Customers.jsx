@@ -29,7 +29,7 @@ function GownPicker({ gowns, value, onPick }) {
 
   const list = gowns.filter(g => Number(g.stock) > 0);
   const selected = gowns.find(g => String(g.id) === String(value));
-  const shown = list.filter(g => `${g.name} ${g.category || ''}`.toLowerCase().includes(q.trim().toLowerCase()));
+  const shown = list.filter(g => `${g.code || ''} ${g.name} ${g.category || ''}`.toLowerCase().includes(q.trim().toLowerCase()));
 
   const Thumb = ({ g }) => (
     <span className="gp-thumb">
@@ -45,7 +45,7 @@ function GownPicker({ gowns, value, onPick }) {
         {selected ? (
           <>
             <Thumb g={selected} />
-            <span className="gp-main"><b>{selected.name}</b><small>{pesoFmt(selected.price)} · {selected.stock} left</small></span>
+            <span className="gp-main"><b>{selected.code ? `${selected.code} · ` : ''}{selected.name}</b><small>{pesoFmt(selected.price)} · {selected.stock} left</small></span>
           </>
         ) : <span className="gp-placeholder">Choose a gown…</span>}
         <ChevronDown size={16} className="gp-chev" />
@@ -55,7 +55,7 @@ function GownPicker({ gowns, value, onPick }) {
         <div className="gp-panel">
           <div className="gp-search">
             <Search size={14} />
-            <input autoFocus placeholder="Search gown or suit…" value={q} onChange={e => setQ(e.target.value)} />
+            <input autoFocus placeholder="Search by code or name…" value={q} onChange={e => setQ(e.target.value)} />
             {q && <button type="button" onClick={() => setQ('')} aria-label="Clear"><X size={13} /></button>}
           </div>
           <div className="gp-list">
@@ -65,7 +65,7 @@ function GownPicker({ gowns, value, onPick }) {
                 className={`gp-item ${String(g.id) === String(value) ? 'active' : ''}`}
                 onClick={() => { onPick(g); setOpen(false); setQ(''); }}>
                 <Thumb g={g} />
-                <span className="gp-main"><b>{g.name}</b><small>{g.category || (g.type === 'suit' ? 'Suit' : 'Gown')} · {pesoFmt(g.price)}</small></span>
+                <span className="gp-main"><b>{g.code ? <em className="gp-code">{g.code}</em> : null}{g.name}</b><small>{g.category || (g.type === 'suit' ? 'Suit' : 'Gown')} · {pesoFmt(g.price)}</small></span>
                 <span className="gp-stock">{g.stock} left</span>
                 {String(g.id) === String(value) && <Check size={15} className="gp-check" />}
               </button>
@@ -74,6 +74,22 @@ function GownPicker({ gowns, value, onPick }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ---------- NO PENALTY SWITCH ---------- */
+// 0 is a real value here (= no penalty), so never use "|| 500"
+const numOr = (v, d) => (v === null || v === undefined || v === '' ? d : (Number.isFinite(Number(v)) ? Number(v) : d));
+function NoPenaltyToggle({ on, onChange }) {
+  return (
+    <label className={`nopen-toggle ${on ? 'on' : ''}`}>
+      <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} />
+      <span className="nopen-box" />
+      <span className="nopen-text">
+        <b>No penalty</b>
+        <small>{on ? 'Late and cancel penalties are waived for this booking.' : 'Turn on to waive the late and cancel penalty (for friends / special cases).'}</small>
+      </span>
+    </label>
   );
 }
 
@@ -98,7 +114,8 @@ const accruedPenalty = (b) => {
   const due = new Date(b.returnDate); due.setHours(0, 0, 0, 0);
   if (today <= due) return 0;
 
-  const rate = Number(b.penaltyRate) || 500;
+  const rate = numOr(b.penaltyRate, 500);
+  if (rate <= 0) return 0;
   const days = Math.ceil((today - due) / 86400000);
   let total = 0;
   for (let i = 1; i <= days; i++) total += i > 3 ? rate * 2 : rate;
@@ -463,7 +480,9 @@ const Customers = () => {
       reservationDate: b.reservationDate || '', returnDate: b.returnDate || '',
       rentalPrice: b.rentalPrice || 0,
       discount: b.discount || 0, discountNote: b.discountNote || '',
-      deposit: b.deposit || 0, penaltyRate: b.penaltyRate || 500,
+      deposit: b.deposit || 0, penaltyRate: numOr(b.penaltyRate, 500),
+      cancelPenaltyAmt: numOr(b.cancelPenaltyAmt, 200),
+      noPenalty: numOr(b.penaltyRate, 500) === 0 && numOr(b.cancelPenaltyAmt, 200) === 0,
       commissions: b.commissions || 0, assistedBy: b.assistedBy || '',
     });
     setIsEditMode(true);
@@ -503,7 +522,8 @@ const Customers = () => {
       rental_price: Number(f.rentalPrice) || 0,
       discount: p.discount, discount_note: f.discountNote || null,
       deposit: Number(f.deposit) || 0,
-      penalty_rate: Number(f.penaltyRate) || 500,
+      penalty_rate: f.noPenalty ? 0 : numOr(f.penaltyRate, 500),
+      cancel_penalty_amt: f.noPenalty ? 0 : numOr(f.cancelPenaltyAmt, 200),
       commissions: Number(f.commissions) || 0,
       assisted_by: f.assistedBy,
       total_rent: p.net, balance: p.balance,
@@ -699,7 +719,7 @@ const Customers = () => {
 
     // Unpaid penalty at this moment (computed from the old status, before it changes)
     let finalPenalty = calculatePenalty(booking);
-    if (newStatus === 'cancelled' && booking.returnStatus === 'reserved') finalPenalty = Number(booking.cancelPenaltyAmt) || 200;
+    if (newStatus === 'cancelled' && booking.returnStatus === 'reserved') finalPenalty = numOr(booking.cancelPenaltyAmt, 200);
 
     const fullyPaid = finalPenalty <= 0 && Number(booking.penaltyPaid) > 0;
 
@@ -748,8 +768,8 @@ const Customers = () => {
       reservation_date: holdData.reservationDate || null,
       return_date: holdData.returnDate,
       deposit: Number(holdData.deposit),
-      penalty_rate: Number(holdData.penaltyRate),
-      cancel_penalty_amt: Number(holdData.cancelPenaltyAmt),
+      penalty_rate: numOr(holdData.penaltyRate, 500),
+      cancel_penalty_amt: numOr(holdData.cancelPenaltyAmt, 200),
       assisted_by: holdData.assistedBy,
       return_status: 'reserved',
     }).eq('id', selectedBooking.id);
@@ -853,6 +873,7 @@ const Customers = () => {
 
   // Package of the gown in the New Rental form
   const formGown = gownById(newCustomer.gownId);
+  const noPenForm = numOr(newCustomer.penaltyRate, 500) === 0 && numOr(newCustomer.cancelPenaltyAmt, 200) === 0;
   const formIncPetti = includedPettiOf(formGown);
   const formIncAccs = includedAccsOf(formGown);
 
@@ -1035,10 +1056,12 @@ const Customers = () => {
                       <div className="input-grp"><label>Security Deposit (₱)</label>
                         <input type="number" min="0" value={editForm.deposit} onChange={e => setEditForm({ ...editForm, deposit: e.target.value })} /></div>
                       <div className="input-grp"><label>Daily Penalty Rate (₱)</label>
-                        <input type="number" min="0" value={editForm.penaltyRate} onChange={e => setEditForm({ ...editForm, penaltyRate: e.target.value })} /></div>
+                        <input type="number" min="0" disabled={editForm.noPenalty} value={editForm.noPenalty ? 0 : editForm.penaltyRate} onChange={e => setEditForm({ ...editForm, penaltyRate: e.target.value })} /></div>
                       <div className="input-grp"><label>Staff Commission (₱)</label>
                         <input type="number" min="0" value={editForm.commissions} onChange={e => setEditForm({ ...editForm, commissions: e.target.value })} /></div>
                     </div>
+                    <NoPenaltyToggle on={!!editForm.noPenalty}
+                      onChange={(v) => setEditForm({ ...editForm, noPenalty: v, penaltyRate: v ? 0 : 500, cancelPenaltyAmt: v ? 0 : 200 })} />
 
                     {/* DISCOUNT */}
                     <div className="discount-box">
@@ -1375,7 +1398,11 @@ const Customers = () => {
                           <div className="input-grp"><label>Deposit</label><input type="number" min="0" onChange={e => setHoldData({...holdData, deposit: e.target.value})} /></div>
                           <div className="input-grp"><label>Reservation Date</label><input type="date" onChange={e => setHoldData({...holdData, reservationDate: e.target.value})} /></div>
                           <div className="input-grp"><label>Return Date</label><input type="date" required onChange={e => setHoldData({...holdData, returnDate: e.target.value})} /></div>
-                          <div className="input-grp"><label>Penalty Rate</label><input type="number" defaultValue="500" onChange={e => setHoldData({...holdData, penaltyRate: e.target.value})} /></div>
+                          <div className="input-grp"><label>Penalty Rate</label><input type="number" disabled={numOr(holdData.penaltyRate, 500) === 0 && numOr(holdData.cancelPenaltyAmt, 200) === 0} value={numOr(holdData.penaltyRate, 500)} onChange={e => setHoldData({...holdData, penaltyRate: e.target.value})} /></div>
+                          <div style={{ gridColumn: '1 / -1' }}>
+                            <NoPenaltyToggle on={numOr(holdData.penaltyRate, 500) === 0 && numOr(holdData.cancelPenaltyAmt, 200) === 0}
+                              onChange={(v) => setHoldData({...holdData, penaltyRate: v ? 0 : 500, cancelPenaltyAmt: v ? 0 : 200})} />
+                          </div>
                           <div className="input-grp"><label>Assisted By</label><input type="text" onChange={e => setHoldData({...holdData, assistedBy: e.target.value})} /></div>
                           <button className="btn-finalize-hold" onClick={handleConfirmOnlineHold}>Save & Confirm</button>
                         </div>
@@ -1560,10 +1587,12 @@ const Customers = () => {
                     </p>
                   </div>
                   <div className="form-grid-3">
-                    <div className="input-grp"><label>Daily Penalty Rate</label><input type="number" value={newCustomer.penaltyRate} onChange={e => setNewCustomer({...newCustomer, penaltyRate: e.target.value})} /></div>
-                    <div className="input-grp"><label>Cancel Penalty</label><input type="number" value={newCustomer.cancelPenaltyAmt} onChange={e => setNewCustomer({...newCustomer, cancelPenaltyAmt: e.target.value})} /></div>
+                    <div className="input-grp"><label>Daily Penalty Rate</label><input type="number" disabled={noPenForm} value={newCustomer.penaltyRate} onChange={e => setNewCustomer({...newCustomer, penaltyRate: e.target.value})} /></div>
+                    <div className="input-grp"><label>Cancel Penalty</label><input type="number" disabled={noPenForm} value={newCustomer.cancelPenaltyAmt} onChange={e => setNewCustomer({...newCustomer, cancelPenaltyAmt: e.target.value})} /></div>
                     <div className="input-grp"><label>Staff Commission</label><input type="number" onChange={e => setNewCustomer({...newCustomer, commissions: e.target.value})} /></div>
                   </div>
+                  <NoPenaltyToggle on={noPenForm}
+                    onChange={(v) => setNewCustomer({ ...newCustomer, penaltyRate: v ? 0 : 500, cancelPenaltyAmt: v ? 0 : 200 })} />
                 </div>
 
                 {/* Notes */}

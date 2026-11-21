@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Shirt, Info, Home, Layers, Eye, MessageSquare,
+  Info, Home, Layers, Eye, MessageSquare,
   User, LogOut, ShieldCheck, LogIn, LayoutDashboard,
   Menu, X, ChevronDown, CalendarCheck,
 } from 'lucide-react';
@@ -202,10 +202,7 @@ const PublicNavbar = () => {
     <nav className="public-navbar">
       {/* Brand */}
       <div className="nav-logo" onClick={() => navigate('/')}>
-        <div className="logo-icon-wrapper">
-          <Shirt size={28} className="logo-icon" />
-          <span className="logo-crown">👑</span>
-        </div>
+        <img className="nav-logo-img" src="/mrs-g-logo.png" alt="Mrs. G Gown Rental logo" width="52" height="52" />
         <div className="brand-typography">
           <span className="logo-text">
             Mrs. G <span className="logo-accent">GOWN RENTAL</span>

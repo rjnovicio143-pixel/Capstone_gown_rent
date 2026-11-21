@@ -122,6 +122,14 @@ const ReservationForm = () => {
       const expiryDate = new Date(now.getTime() + HOLD_DAYS * 24 * 60 * 60 * 1000);
       const gownPrice  = Number(gown.price);
 
+      // The gown may have been rented out since the page was opened
+      const { data: stockRow } = await supabase.from('gowns').select('stock').eq('id', gown.id).single();
+      if (stockRow && Number(stockRow.stock) < 1) {
+        setErrorMsg('Sorry, this gown is currently rented out and cannot be reserved right now. Please choose another gown.');
+        setIsSubmitting(false);
+        return;
+      }
+
       const { error } = await supabase.from('bookings').insert([{
         name:               name,
         contact:            contact,

@@ -72,12 +72,14 @@ const NO_GOWN = {
 };
 
 const SLIDERS = [
-  { key: 'waist',  label: 'Width' },
-  { key: 'chest',  label: 'Front & Back' },
+  { key: 'chestW', label: 'Chest · Width',        group: 'Chest' },
+  { key: 'chestD', label: 'Chest · Front & back', group: 'Chest' },
+  { key: 'waistW', label: 'Waist · Width',        group: 'Waist' },
+  { key: 'waistD', label: 'Waist · Front & back', group: 'Waist' },
 ];
 
 const SIZE_LIMITS = [0.8, 1.3];   // fine-tune range (80% - 130%)
-const DEFAULT_ADJUST = { height: 1, waist: 1, chest: 1 };
+const DEFAULT_ADJUST = { height: 1, chestW: 1, chestD: 1, waistW: 1, waistD: 1 };
 
 // Tabs shown under the 3D view on tablet and mobile
 const TABS = [
@@ -163,14 +165,13 @@ const Mannequin3D = () => {
   useEffect(() => {
     let alive = true;
     const refreshFit = async () => {
-      const { data, error } = await supabase.from('gowns').select('id, fit_adjust').eq('is_posted', true);
+      const { data, error } = await supabase.from('gowns').select('id, fit_adjust, stock').eq('is_posted', true);
       if (!alive || error || !data) return;
-      const fresh = new Map(data.map((r) => [String(r.id), parseTweak(r.fit_adjust)]));
-      const changed = (old, nw) => JSON.stringify(old) !== JSON.stringify(nw);
-      setGowns((prev) => (prev.some((g) => fresh.has(String(g.id)) && changed(g.fitAdjust, fresh.get(String(g.id))))
-        ? prev.map((g) => (fresh.has(String(g.id)) ? { ...g, fitAdjust: fresh.get(String(g.id)) } : g)) : prev));
-      setSelectedGown((g) => (g && fresh.has(String(g.id)) && changed(g.fitAdjust, fresh.get(String(g.id)))
-        ? { ...g, fitAdjust: fresh.get(String(g.id)) } : g));
+      const fresh = new Map(data.map((r) => [String(r.id), { fit: parseTweak(r.fit_adjust), stock: Number(r.stock) || 0 }]));
+      const changed = (g, f) => !!f && (JSON.stringify(g.fitAdjust) !== JSON.stringify(f.fit) || g.stock !== f.stock);
+      const merge = (g) => { const f = fresh.get(String(g.id)); return changed(g, f) ? { ...g, fitAdjust: f.fit, stock: f.stock } : g; };
+      setGowns((prev) => (prev.some((g) => changed(g, fresh.get(String(g.id)))) ? prev.map(merge) : prev));
+      setSelectedGown((g) => (g && g.id !== 'none' ? merge(g) : g));
     };
     const onVisible = () => { if (document.visibilityState === 'visible') refreshFit(); };
     const timer = setInterval(refreshFit, 15000);
@@ -219,8 +220,8 @@ const Mannequin3D = () => {
   const bodyModelPath = `/mannequin/${category.file}.glb`;
   const isDefault = Object.keys(DEFAULT_ADJUST).every(k => adjust[k] === DEFAULT_ADJUST[k]);
   const build = useMemo(
-    () => makeBuild(weight, belly, muscle, category.kids),
-    [weight, belly, muscle, category.kids]
+    () => makeBuild(weight, belly, muscle, category.kids, { cw: adjust.chestW, cd: adjust.chestD, ww: adjust.waistW, wd: adjust.waistD }),
+    [weight, belly, muscle, category.kids, adjust.chestW, adjust.chestD, adjust.waistW, adjust.waistD]
   );
 
   const resetAdjust = () => setAdjust(DEFAULT_ADJUST);
@@ -287,15 +288,15 @@ const Mannequin3D = () => {
   );
   const ageOk = !kidAges || kidAges.includes(selectedSize);
   const sizeCheck = useMemo(
-    () => checkSizeFit(bodyRaw, build, gownSizes, adjust.waist * modelScale, adjust.chest * modelScale),
-    [bodyRaw, build, gownSizes, adjust.waist, adjust.chest, modelScale]
+    () => checkSizeFit(bodyRaw, build, gownSizes, modelScale, modelScale),
+    [bodyRaw, build, gownSizes, modelScale]
   );
   // The Body size buttons follow the body: moving Weight / Belly / Muscle or the fine-tune sliders picks the matching size
   useEffect(() => {
     if (category.kids) return;
-    const near = nearestAdultSize(bodyRaw, build, adjust.waist * modelScale, adjust.chest * modelScale);
+    const near = nearestAdultSize(bodyRaw, build, modelScale, modelScale);
     if (near && near !== selectedSize) setSelectedSize(near);
-  }, [bodyRaw, build, adjust.waist, adjust.chest, modelScale, category.kids]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [bodyRaw, build, modelScale, category.kids]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canWear = audienceOk && ageOk && (!sizeCheck || sizeCheck.ok);
 
@@ -322,7 +323,10 @@ const Mannequin3D = () => {
     }
   };
 
+  const soldOut = wearing && !selectedGown.isExample && Number(selectedGown.stock) < 1;
+
   const handleReserve = () => {
+    if (soldOut) return;
     navigate('/reserve', {
       state: {
         gown: {
@@ -489,8 +493,9 @@ const Mannequin3D = () => {
               <p className="m3d-subtitle">Adjust the {selectedSize} model. The gown follows.</p>
 
               <div className="m3d-sliders">
-                {SLIDERS.map(({ key, label }) => (
+                {SLIDERS.map(({ key, label, group }, i) => (
                   <div key={key} className="m3d-slider">
+                    {(i === 0 || SLIDERS[i - 1].group !== group) && <p className="m3d-group-title">{group}</p>}
                     <div className="m3d-slider-label">
                       <span>{label}</span>
                       <span>{Math.round(adjust[key] * 100)}%</span>
@@ -576,7 +581,7 @@ const Mannequin3D = () => {
                         build={build}
                         looseness={looseness}
                         length={length}
-                        scale={[adjust.waist * modelScale, adjust.height * modelScale, adjust.chest * modelScale]}
+                        scale={[modelScale, adjust.height * modelScale, modelScale]}
                       />
                     </Stage>
                   </Suspense>
@@ -633,8 +638,13 @@ const Mannequin3D = () => {
                     </div>
                   </div>
 
-                  <button className="m3d-reserve-btn" onClick={handleReserve}>
-                    <Calendar size={16} /> Reserve this gown
+                  {soldOut && (
+                    <div className="m3d-soldout">
+                      <Info size={14} /> This gown is currently rented out, so it cannot be reserved right now. You can still try it on in 3D.
+                    </div>
+                  )}
+                  <button className="m3d-reserve-btn" onClick={handleReserve} disabled={soldOut}>
+                    <Calendar size={16} /> {soldOut ? 'Currently rented' : 'Reserve this gown'}
                   </button>
                 </>
               )}
@@ -716,7 +726,7 @@ const Mannequin3D = () => {
                   <button
                     type="button"
                     key={gown.id}
-                    className={`m3d-gown-card ${wearing && selectedGown.id === gown.id ? 'selected' : ''}`}
+                    className={`m3d-gown-card ${wearing && selectedGown.id === gown.id ? 'selected' : ''} ${gown.stock < 1 ? 'is-out' : ''}`}
                     onClick={() => handleSelectGown(gown)}
                   >
                     <span className="m3d-thumb">
@@ -746,7 +756,7 @@ const Mannequin3D = () => {
                         ) : (
                           <>
                             <span className={`m3d-stock ${gown.stock > 0 ? 'in' : 'out'}`}>
-                              {gown.stock > 0 ? 'Available' : 'Rented'}
+                              {gown.stock > 0 ? 'Available' : 'Rented · not available'}
                             </span>
                             {!gown.modelPath && <span className="m3d-no3d-badge">No 3D yet</span>}
                           </>

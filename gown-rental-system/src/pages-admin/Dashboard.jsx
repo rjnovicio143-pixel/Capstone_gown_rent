@@ -138,16 +138,23 @@ const Dashboard = () => {
   }, [bookings]);
   const topMax = topGowns[0]?.count || 1;
 
+  // Wedding packages count too (cancelled reservations are already left out)
+  const wedExpected  = wedding?.expected || 0;
+  const wedCollected = wedding?.collected || 0;
+  const totalExpected  = stats.expected + wedExpected;
+  const totalCollected = stats.collected + wedCollected;
+
   const share = [
     { name: 'Rental downpayment', value: stats.rental, color: '#e0a800' },
+    { name: 'Wedding downpayment', value: wedCollected, color: '#be185d' },
     { name: 'Penalty', value: stats.penalty, color: '#e11d48' },
     { name: 'Commissions', value: stats.commissions, color: '#0e7490' },
   ];
   const shareTotal = share.reduce((a, s) => a + s.value, 0);
 
   const KPIS = [
-    { label: 'Expected Revenue', value: formatCurrency(stats.expected), icon: DollarSign, tone: 'gold', hint: 'Cancelled and unconfirmed holds not counted' },
-    { label: 'Cash Collected', value: formatCurrency(stats.collected), icon: TrendingUp, tone: 'orange', hint: 'Downpayment + penalty + commission' },
+    { label: 'Expected Revenue', value: formatCurrency(totalExpected), icon: DollarSign, tone: 'gold', hint: `Rentals ${formatCurrency(stats.expected)} + Weddings ${formatCurrency(wedExpected)}` },
+    { label: 'Cash Collected', value: formatCurrency(totalCollected), icon: TrendingUp, tone: 'orange', hint: `Rental ${formatCurrency(stats.collected)} + Wedding ${formatCurrency(wedCollected)}` },
     { label: 'Penalty Revenue', value: formatCurrency(stats.penalty), icon: AlertCircle, tone: 'red', hint: 'Late return fees paid' },
     { label: 'Staff Commissions', value: formatCurrency(stats.commissions), icon: Users, tone: 'blue', hint: 'Total commissions' },
     { label: 'Active Rentals', value: stats.active, icon: ShoppingBag, tone: 'green', hint: stats.holds ? `${stats.holds} online hold${stats.holds === 1 ? '' : 's'} waiting` : 'Not yet returned' },
@@ -232,7 +239,7 @@ const Dashboard = () => {
 
           <div className="db-card db-chart">
             <h3>Revenue Share</h3>
-            <small>Collected from rentals</small>
+            <small>Collected from rentals and wedding packages</small>
             <div className="db-donut">
               <ResponsiveContainer width="100%" height={190}>
                 <PieChart>

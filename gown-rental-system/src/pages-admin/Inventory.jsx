@@ -746,7 +746,10 @@ const Inventory = () => {
   const totalGowns  = gowns.length;
   const postedCount = gowns.filter(g => g.is_posted).length;
   const draftCount  = gowns.filter(g => !g.is_posted).length;
-  const outCount    = gowns.filter(g => (g.stock || 0) === 0).length;
+  // Out of stock = gowns + accessories (petticoats have no stock)
+  const outGownCount = gowns.filter(g => Number(g.stock || 0) < 1).length;
+  const outAccCount  = accessories.filter(a => Number(a.stock || 0) < 1).length;
+  const outCount     = outGownCount + outAccCount;
 
   return (
     <div className="inv-wrapper">
@@ -770,7 +773,10 @@ const Inventory = () => {
           </div>
           <div className="inv-stat-card">
             <AlertCircle className="inv-stat-icon red" />
-            <div><span>Out of Stock</span><h3>{outCount}</h3></div>
+            <div>
+              <span>Out of Stock</span><h3>{outCount}</h3>
+              {outCount > 0 && <small className="inv-stat-sub">{outGownCount} gown{outGownCount === 1 ? '' : 's'} · {outAccCount} accessor{outAccCount === 1 ? 'y' : 'ies'}</small>}
+            </div>
           </div>
           <div className="inv-stat-card">
             <Layers className="inv-stat-icon purple" />

@@ -325,3 +325,22 @@
   .rep-search-wrapper { width: 100%; }
   .rep-search-wrapper input { width: 100%; box-sizing: border-box; }
 }
+/* --- Shop inventory / customer summary --- */
+.rep-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.rep-chip { background: #fafafa; border: 1px solid #f0f0f0; border-radius: 20px; padding: 5px 12px; font-size: 12px; color: #666; }
+.rep-chip b { color: #333; margin-left: 4px; }
+.rep-chip.bad { background: #fff0f0; border-color: #ffd6dd; color: #ff416c; }
+.rep-chip.bad b { color: #ff416c; }
+.rep-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.rep-tabs button { border: 1px solid #eee; background: #fcfcfc; color: #666; font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 8px; cursor: pointer; }
+.rep-tabs button span { background: #eee; border-radius: 10px; padding: 1px 7px; margin-left: 4px; font-size: 11px; }
+.rep-tabs button.active { background: linear-gradient(135deg, #ffd000, #f09800); color: #fff; border-color: transparent; }
+.rep-tabs button.active span { background: rgba(255,255,255,.3); }
+.rep-code { background: #fff8e1; color: #b8860b; font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 6px; letter-spacing: .03em; }
+.rep-count { background: #f3f3f3; color: #666; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 10px; }
+.rep-row-out td { background: #fff7f8; }
+
+/* --- Export buttons --- */
+.rep-card-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rep-export-tab { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #1d8348, #27ae60); color: #fff; border: none; border-radius: 20px; padding: 9px 16px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.rep-export-tab:hover { opacity: .92; }

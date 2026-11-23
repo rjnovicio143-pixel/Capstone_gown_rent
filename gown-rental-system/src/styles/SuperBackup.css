@@ -1,0 +1,26 @@
+.sb-card { padding: 24px; }
+.sb-last { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #666; margin-bottom: 18px; }
+.sb-last b { color: #333; }
+.sb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.sb-box { background: #fafafa; border: 1px solid #f0f0f0; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 8px; }
+.sb-box h3 { margin: 4px 0 0; font-size: 15px; color: #333; }
+.sb-box p { margin: 0; font-size: 12.5px; color: #777; line-height: 1.5; flex: 1; }
+.sb-ico { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fff; }
+.sb-ico.gold { background: linear-gradient(135deg, #ffd000, #f09800); }
+.sb-ico.green { background: linear-gradient(135deg, #1d8348, #27ae60); }
+.sb-ico.red { background: linear-gradient(135deg, #ff4b2b, #ff416c); }
+.sb-btn { border: none; border-radius: 10px; padding: 11px; font-size: 13px; font-weight: 700; color: #fff; cursor: pointer; margin-top: 6px; }
+.sb-btn.gold { background: linear-gradient(135deg, #ffd000, #f09800); }
+.sb-btn.green { background: linear-gradient(135deg, #1d8348, #27ae60); }
+.sb-btn.red { background: linear-gradient(135deg, #ff4b2b, #ff416c); }
+.sb-btn:disabled { opacity: .5; cursor: not-allowed; }
+.sb-msg { display: flex; align-items: center; gap: 8px; margin-top: 18px; background: #e6f9ee; color: #1d8348; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; }
+.sb-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+.sb-table th { text-align: left; color: #999; font-size: 11px; text-transform: uppercase; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
+.sb-table td { padding: 9px 10px; border-bottom: 1px solid #fafafa; }
+.sb-table .ok { color: #1d8348; font-weight: 600; }
+.sb-table .bad { color: #ff416c; font-weight: 600; }
+.sb-tip { margin: 16px 0 0; font-size: 12px; color: #999; }
+
+.sb-sub { margin: 26px 0 12px; font-size: 14px; color: #444; }
+.sb-total td { font-weight: 700; background: #fafafa; }

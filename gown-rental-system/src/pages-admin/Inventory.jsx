@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Search, PlusCircle, X, Upload, Package, AlertCircle,
   Trash2, Edit, Camera, Eye, EyeOff,
-  Crown, Layers, ShoppingBag, Globe, Download, RefreshCw
+  Crown, Layers, ShoppingBag, Globe, Download, RefreshCw, Image as ImageIcon, Check
 } from 'lucide-react';
 import '../styles/Inventory.css';
 import Header from '../components/Header';
@@ -144,6 +144,12 @@ const Inventory = () => {
   const [editingGown, setEditingGown]     = useState(null);
   const [gownForm, setGownForm]           = useState(emptyGownForm);
   const [imageFile, setImageFile]         = useState(null);
+  // Picker for photos that are already in Storage
+  const [pickerOpen, setPickerOpen]       = useState(false);
+  const [pickerFiles, setPickerFiles]     = useState([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerSearch, setPickerSearch]   = useState('');
+  const [pickerChoice, setPickerChoice]   = useState('');
   const [imagePreview, setImagePreview]   = useState(null);
 
   // Accessory modal
@@ -347,6 +353,36 @@ const Inventory = () => {
     setGownForm(prev => ({ ...prev, image: url }));
   };
 
+  const PHOTO_BUCKET = 'Gown images';
+  const PHOTO_EXT = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif'];
+
+  const openStoragePicker = async () => {
+    setPickerOpen(true); setPickerSearch(''); setPickerChoice(''); setPickerLoading(true);
+    try {
+      const { data, error } = await supabase.storage.from(PHOTO_BUCKET).list('', { limit: 1000, sortBy: { column: 'created_at', order: 'desc' } });
+      if (error) throw error;
+      setPickerFiles((data || [])
+        .filter(f => f.id && PHOTO_EXT.includes((f.name.split('.').pop() || '').toLowerCase()))
+        .map(f => ({ name: f.name, url: supabase.storage.from(PHOTO_BUCKET).getPublicUrl(f.name).data.publicUrl })));
+    } catch (err) {
+      console.error(err);
+      setPickerFiles([]);
+      showAlert('Could not load the photos from Storage. Please try again.', { tone: 'error' });
+    }
+    setPickerLoading(false);
+  };
+
+  const useStoragePhoto = () => {
+    if (!pickerChoice) return;
+    setImageFile(null);
+    setImagePreview(pickerChoice);
+    setGownForm(prev => ({ ...prev, image: pickerChoice }));
+    setPickerOpen(false);
+  };
+
+  // Which gown already uses a photo (shown as a tag in the picker)
+  const gownUsing = (url) => gowns.find(g => g.image === url && g.id !== editingGown?.id);
+
   const uploadImage = async (file) => {
     const ext = file.name.split('.').pop();
     const fileName = `${Date.now()}.${ext}`;
@@ -418,6 +454,8 @@ const Inventory = () => {
       let imageUrl = editingGown?.image || '';
       // Only upload when posting, so unused photos don't pile up in storage
       if (gownForm.is_posted && imageFile) imageUrl = await uploadImage(imageFile);
+      // A photo picked from Storage is already uploaded, so just use its link
+      else if (gownForm.is_posted && !imageFile && /^https?:/.test(gownForm.image || '')) imageUrl = gownForm.image;
 
       const payload = {
         code: cleanCode(gownForm.code) || null,
@@ -1319,6 +1357,9 @@ const Inventory = () => {
                         )}
                         <input type="file" accept="image/*" onChange={handleImageChange} hidden />
                       </label>
+                      <button type="button" className="inv-storage-btn" onClick={openStoragePicker}>
+                        <ImageIcon size={15} /> Choose from Storage
+                      </button>
                       {errors.gphoto && <p className="inv-err">{errors.gphoto}</p>}
                     </div>
                   )}
@@ -1327,6 +1368,49 @@ const Inventory = () => {
                 <button className="inv-save-btn" onClick={handleSaveGown} disabled={loading}>
                   {loading ? 'Saving...' : editingGown ? 'Save Changes' : 'Add to Inventory'}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ════════ STORAGE PHOTO PICKER ════════ */}
+        {pickerOpen && (
+          <div className="inv-overlay inv-overlay-top" onClick={() => setPickerOpen(false)}>
+            <div className="inv-modal inv-picker" onClick={e => e.stopPropagation()}>
+              <div className="inv-modal-header">
+                <h2>Choose a photo from Storage</h2>
+                <button className="inv-modal-close" onClick={() => setPickerOpen(false)} aria-label="Close"><X size={16} /></button>
+              </div>
+              <div className="inv-picker-bar">
+                <Search size={14} />
+                <input type="text" placeholder="Search file name..." value={pickerSearch} onChange={e => setPickerSearch(e.target.value)} />
+              </div>
+              <div className="inv-picker-body">
+                {pickerLoading ? (
+                  <p className="inv-picker-empty">Loading photos…</p>
+                ) : (() => {
+                  const list = pickerFiles.filter(f => !pickerSearch.trim() || f.name.toLowerCase().includes(pickerSearch.trim().toLowerCase()));
+                  if (!list.length) return <p className="inv-picker-empty">{pickerFiles.length ? 'No photo matches your search.' : 'There are no photos in Storage yet.'}</p>;
+                  return (
+                    <div className="inv-picker-grid">
+                      {list.map(f => {
+                        const used = gownUsing(f.url);
+                        return (
+                          <button type="button" key={f.name} className={`inv-picker-item ${pickerChoice === f.url ? 'selected' : ''}`}
+                            onClick={() => setPickerChoice(f.url)} onDoubleClick={() => { setPickerChoice(f.url); setTimeout(useStoragePhoto, 0); }}>
+                            <img src={f.url} alt={f.name} loading="lazy" />
+                            {pickerChoice === f.url && <span className="inv-picker-check"><Check size={14} /></span>}
+                            {used && <span className="inv-picker-used" title={`Used by ${used.name}`}>Used: {used.name}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+              <div className="inv-picker-foot">
+                <button type="button" className="inv-picker-cancel" onClick={() => setPickerOpen(false)}>Cancel</button>
+                <button type="button" className="inv-save-btn" disabled={!pickerChoice} onClick={useStoragePhoto}>Use this photo</button>
               </div>
             </div>
           </div>

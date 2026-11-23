@@ -16,7 +16,7 @@ const Header = () => {
   const [adminName, setAdminName] = useState('Loading...');
   const [adminEmail, setAdminEmail] = useState('');
   const role = localStorage.getItem('userRole');
-  const roleLabel = role === 'super_admin' ? 'Super Admin' : 'Admin';
+  const roleLabel = role === 'super_admin' ? 'System Admin' : 'Admin';
 
   const { notifications, readIds, unreadCount, markRead, markAllRead, dismiss } = useNotifications();
   const [tab, setTab] = useState('all');   // all | unread

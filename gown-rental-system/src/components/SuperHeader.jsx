@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, ChevronDown, ShieldCheck, UserCog, HardDrive, Box } from 'lucide-react';
+import { LogOut, ChevronDown, ShieldCheck, UserCog, HardDrive, Box, DatabaseBackup } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import '../styles/SuperHeader.css';
 
 const SuperHeader = () => {
   const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
-  const [name, setName] = useState('Super Admin');
+  const [name, setName] = useState('System Admin');
   const [email, setEmail] = useState('');
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
@@ -74,7 +74,7 @@ const SuperHeader = () => {
             <span className="sh-avatar">{initial}</span>
             <span className="sh-meta">
               <span className="sh-name">{name}</span>
-              <span className="sh-role">Super Admin</span>
+              <span className="sh-role">System Admin</span>
             </span>
             <ChevronDown size={16} className="sh-chevron" />
           </button>
@@ -86,7 +86,7 @@ const SuperHeader = () => {
                 <div className="sh-card-info">
                   <strong>{name}</strong>
                   {email && <span>{email}</span>}
-                  <em><ShieldCheck size={12} /> Super Admin</em>
+                  <em><ShieldCheck size={12} /> System Admin</em>
                 </div>
               </div>
 
@@ -94,6 +94,7 @@ const SuperHeader = () => {
                 <button type="button" role="menuitem" onClick={() => goTo('/super/accounts')}><UserCog size={16} /> Accounts</button>
                 <button type="button" role="menuitem" onClick={() => goTo('/super/models')}><Box size={16} /> 3D Models</button>
                 <button type="button" role="menuitem" onClick={() => goTo('/super/storage')}><HardDrive size={16} /> Storage</button>
+                <button type="button" role="menuitem" onClick={() => goTo('/super/backup')}><DatabaseBackup size={16} /> Backup &amp; Restore</button>
               </div>
 
               <div className="sh-divider" />

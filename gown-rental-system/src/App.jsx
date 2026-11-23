@@ -19,6 +19,7 @@ import Notifications from './pages-admin/Notifications';
 import SuperAccounts from './pages-super/SuperAccounts';
 import SuperModels from './pages-super/SuperModels';
 import SuperStorage from './pages-super/Superstorage';
+import SuperBackup from './pages-super/SuperBackup';
 
 // Public pages
 import Home from './pages-public/Home';
@@ -185,6 +186,7 @@ function App() {
                     <Route path="accounts" element={<SuperAccounts />} />
                     <Route path="models" element={<SuperModels />} />
                     <Route path="storage" element={<SuperStorage />} />
+                    <Route path="backup" element={<SuperBackup />} />
                     <Route path="*" element={<Navigate to="accounts" replace />} />
                   </Routes>
                 </main>

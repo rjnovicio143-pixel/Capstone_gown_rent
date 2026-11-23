@@ -10,7 +10,7 @@ const MODEL_BUCKET = 'gown-models';
 
 // Tables to scan to find out which files are still in use.
 // If another table holds images or 3D files, add it here.
-const TABLES = ['gowns', 'accessories', 'petticoats', 'wedding_packages', 'wedding_reservations', 'bookings'];
+const TABLES = ['gowns', 'accessories', 'petticoats', 'wedding_packages', 'wedding_reservations', 'bookings', 'trash_bin'];   // trash_bin: photos of deleted gowns are still needed for Restore
 
 const IMG_EXT = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'avif'];
 const MODEL_EXT = ['glb', 'gltf'];

@@ -9,6 +9,8 @@ import {
   MessageSquare, Download, RefreshCw, Layers, Crown, Edit3, Tag, Save, Package, ChevronDown, Check
 } from 'lucide-react';
 import Header from '../components/Header';
+import { moveToTrashById, purgeExpired } from '../utils/Trash';
+import TrashModal, { TrashButton } from '../components/TrashModal';
 import { askConfirm, showAlert, DialogHost } from '../components/Dialogs';
 import '../styles/Customers.css';
 
@@ -140,6 +142,8 @@ const Customers = () => {
   const [petticoats, setPetticoats]             = useState([]);
   const [accessories, setAccessories]           = useState([]);
   const [searchTerm, setSearchTerm]             = useState('');
+  const [trashOpen, setTrashOpen]               = useState(false);
+  const [trashTick, setTrashTick]               = useState(0);
   const [activeTab, setActiveTab]               = useState('all');
   const [isModalOpen, setIsModalOpen]           = useState(false);
   const [selectedBooking, setSelectedBooking]   = useState(null);
@@ -206,7 +210,7 @@ const Customers = () => {
     if (!aRes.error) setAccessories(aRes.data);
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { purgeExpired(); fetchAll(); }, []);
 
   // Reload the currently opened booking after an update
   const refreshSelected = async (id) => {
@@ -796,11 +800,13 @@ const Customers = () => {
       showAlert(`${booking.name} still has the gown / suit and has not returned it yet.\n\nMark it as Returned first, then you can delete this record.`, { title: 'Cannot delete yet', tone: 'warn' });
       return;
     }
-    if (!(await askConfirm(`Delete ${booking.name}'s record? This cannot be undone.`))) return;
-    if (bookingHoldsStock(booking)) { await adjustStock(booking.gownId, 1); await giveAcc(booking.addons); }
-    const { error } = await supabase.from('bookings').delete().eq('id', booking.id);
+    if (!(await askConfirm(`Move ${booking.name}'s record to the Trash?\n\nIt is removed from the system but kept for 30 days, so you can restore it from Trash.`, { title: 'Move to Trash?', confirmText: 'Yes, move to Trash' }))) return;
+    const { error } = await moveToTrashById('bookings', booking.id, `${booking.name} — ${booking.gownName || 'Rental'}`, `${booking.returnStatus || ''}${booking.bookingDate ? ' · ' + booking.bookingDate : ''}`);
     if (error) { showAlert(error.message); return; }
-    await logActivity('booking_deleted', `Deleted booking: ${booking.name}`);
+    // Only give the stock back once the record is really in the Trash
+    if (bookingHoldsStock(booking)) { await adjustStock(booking.gownId, 1); await giveAcc(booking.addons); }
+    await logActivity('booking_deleted', `Deleted booking: ${booking.name} (moved to Trash)`);
+    setTrashTick(t => t + 1);
     closeDetails(); fetchAll();
   };
 
@@ -881,6 +887,21 @@ const Customers = () => {
     <>
       <Header />
       <DialogHost />
+      <TrashModal
+        open={trashOpen}
+        onClose={() => { setTrashOpen(false); setTrashTick(t => t + 1); }}
+        tables={['bookings']}
+        title="Customer Records Trash"
+        onChanged={fetchAll}
+        beforeRestore={async (entry) => {
+          // A reserved / claimed rental holds a gown, so take its stock again
+          const row = entry.data || {};
+          if (row.return_status !== 'reserved' && row.return_status !== 'claimed') return true;
+          if (!(await adjustStock(row.gown_id, -1))) return false;
+          row.addons = await takeAcc((row.addons || []).map(a => ({ ...a, held: false })));
+          return true;
+        }}
+      />
       <div className="customers-luxury-container">
 
         {/* TOP BAR */}
@@ -890,6 +911,7 @@ const Customers = () => {
             <p>Track rentals, payments, discounts, and add-ons</p>
           </div>
           <div className="top-bar-actions">
+            <TrashButton tables={['bookings']} refreshKey={trashTick} onClick={() => setTrashOpen(true)} />
             <button onClick={handleExportExcel} className="btn-export-sheet"><Download size={16} /> Export</button>
             <button onClick={() => setIsModalOpen(true)} className="btn-new-entry"><Plus size={18} /> New Rental</button>
           </div>

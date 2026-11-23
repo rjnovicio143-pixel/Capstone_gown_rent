@@ -10,6 +10,8 @@ import { askConfirm, showAlert, DialogHost } from '../components/Dialogs';
 import { supabase } from '../supabaseClient';
 import { logActivity } from '../utils/activityLogger';
 import { downloadXlsx } from '../utils/exportXlsx';
+import { moveToTrash, purgeExpired } from '../utils/Trash';
+import TrashModal, { TrashButton } from '../components/TrashModal';
 
 const GOWN_CATEGORIES = ['Wedding', 'Debut', 'Formal', 'Ball Gown', 'Others'];
 const SUIT_CATEGORIES = ['Wedding', 'Barong', 'Formal', 'Others'];
@@ -165,6 +167,8 @@ const Inventory = () => {
   const [loading, setLoading] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [trashTick, setTrashTick] = useState(0);
 
   // ── FETCH ──
   const fetchGowns = async () => {
@@ -192,6 +196,7 @@ const Inventory = () => {
   };
 
   useEffect(() => {
+    purgeExpired();   // removes Trash items older than 30 days
     fetchGowns();
     fetchPetticoats();
     fetchAccessories();
@@ -542,11 +547,12 @@ const Inventory = () => {
       );
       return;
     }
-    if (!(await askConfirm(`Delete "${gown.name}"? This cannot be undone.`))) return;
+    if (!(await askConfirm(`Move "${gown.name}" to the Trash?\n\nIt is removed from the system but kept for 30 days, so you can restore it from Trash.`, { title: 'Move to Trash?', confirmText: 'Yes, move to Trash' }))) return;
 
-    const { error } = await supabase.from('gowns').delete().eq('id', gown.id);
+    const { error } = await moveToTrash('gowns', gown, gown.name, [gown.code, gown.category].filter(Boolean).join(' · '));
     if (error) { notify('Error: ' + error.message); return; }
-    await logActivity('gown_deleted', `Deleted gown: ${gown.name}`);
+    await logActivity('gown_deleted', `Deleted gown: ${gown.name} (moved to Trash)`);
+    setTrashTick(t => t + 1);
     fetchGowns();
   };
 
@@ -607,10 +613,11 @@ const Inventory = () => {
       notify(`Cannot delete Layer ${p.layer} — it is used by ${plural(used, 'gown')}. Change the package of those gowns first.`);
       return;
     }
-    if (!await askConfirm(`Delete Layer ${p.layer}?`)) return;
-    const { error } = await supabase.from('petticoats').delete().eq('id', p.id);
+    if (!await askConfirm(`Move Layer ${p.layer} to the Trash?\n\nYou can restore it within 30 days.`, { title: 'Move to Trash?', confirmText: 'Yes, move to Trash' })) return;
+    const { error } = await moveToTrash('petticoats', p, `Petticoat Layer ${p.layer}`, '');
     if (error) { notify('Error: ' + error.message); return; }
-    await logActivity('petticoat_deleted', `Deleted petticoat Layer ${p.layer}`);
+    await logActivity('petticoat_deleted', `Deleted petticoat Layer ${p.layer} (moved to Trash)`);
+    setTrashTick(t => t + 1);
     fetchPetticoats();
   };
 
@@ -669,10 +676,11 @@ const Inventory = () => {
       notify(`Cannot delete "${acc.name}" — it is included in the package of ${plural(used, 'gown')}. Remove it from those gowns first.`);
       return;
     }
-    if (!await askConfirm(`Delete "${acc.name}"?`)) return;
-    const { error } = await supabase.from('accessories').delete().eq('id', acc.id);
+    if (!await askConfirm(`Move "${acc.name}" to the Trash?\n\nYou can restore it within 30 days.`, { title: 'Move to Trash?', confirmText: 'Yes, move to Trash' })) return;
+    const { error } = await moveToTrash('accessories', acc, acc.name, acc.category || '');
     if (error) { notify('Error: ' + error.message); return; }
-    await logActivity('accessory_deleted', `Deleted accessory: ${acc.name}`);
+    await logActivity('accessory_deleted', `Deleted accessory: ${acc.name} (moved to Trash)`);
+    setTrashTick(t => t + 1);
     fetchAccessories();
   };
 
@@ -793,6 +801,7 @@ const Inventory = () => {
     <div className="inv-wrapper">
       <Header />
       <DialogHost />
+      <TrashModal open={trashOpen} onClose={() => { setTrashOpen(false); setTrashTick(t => t + 1); }} tables={['gowns', 'accessories', 'petticoats']} title="Inventory Trash" onChanged={refreshAll} />
       <div className="inv-container">
 
         {/* ── STATS ── */}
@@ -843,6 +852,7 @@ const Inventory = () => {
           <button type="button" className={`inv-tab-refresh ${refreshing ? 'spin' : ''}`} onClick={refreshAll} disabled={refreshing} title="Refresh">
             <RefreshCw size={14} /> Refresh
           </button>
+          <TrashButton tables={['gowns', 'accessories', 'petticoats']} refreshKey={trashTick} onClick={() => setTrashOpen(true)} className="inv-trash-btn" />
         </div>
 
         {/* ════════ TAB: GOWNS ════════ */}

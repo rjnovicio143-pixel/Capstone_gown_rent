@@ -8,6 +8,8 @@ import {
   CheckCircle2, Ban, Wallet, Sparkles, Info, Pencil, Trash2, Shirt, Download
 } from 'lucide-react';
 import Header from '../components/Header';
+import { moveToTrashById, purgeExpired } from '../utils/Trash';
+import TrashModal, { TrashButton } from '../components/TrashModal';
 import { askConfirm, showAlert, DialogHost } from '../components/Dialogs';
 import '../styles/Availability.css';
 
@@ -284,6 +286,8 @@ const Gallery = ({ items, icon, emptyText }) => {
 
 const Availability = () => {
   const [reservations, setReservations] = useState([]);
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [trashTick, setTrashTick] = useState(0);
   const [packages, setPackages] = useState([]);
   const [pkgState, setPkgState] = useState('loading');   // 'loading' | 'ok' | 'missing'
   const [inventory, setInventory] = useState([]);        // gowns + suits from Inventory
@@ -339,6 +343,7 @@ const Availability = () => {
   };
 
   useEffect(() => {
+    purgeExpired();
     fetchReservations();
     fetchPackages();
     fetchInventory();
@@ -518,11 +523,12 @@ const Availability = () => {
     if (active > 0) {
       return showAlert(`Cannot delete "${p.name}" — ${plural(active, 'active reservation')} still use it.`);
     }
-    if (!await askConfirm(`Delete "${p.name}"? Past reservations keep their details.`)) return;
+    if (!await askConfirm(`Move "${p.name}" to the Trash?\n\nPast reservations keep their details. You can restore the package within 30 days.`, { title: 'Move to Trash?', confirmText: 'Yes, move to Trash' })) return;
 
-    const { error } = await supabase.from('wedding_packages').delete().eq('id', p.id);
+    const { error } = await moveToTrashById('wedding_packages', p.id, p.name, 'Wedding package');
     if (error) { showAlert('Error: ' + error.message); return; }
-    await logActivity('wedding_package_deleted', `Deleted wedding package: ${p.name}`);
+    await logActivity('wedding_package_deleted', `Deleted wedding package: ${p.name} (moved to Trash)`);
+    setTrashTick(t => t + 1);
     setPkgEditor(null);
     fetchPackages();
   };
@@ -652,12 +658,13 @@ const Availability = () => {
       showAlert(`${r.name} has picked up the gown / suit and has not returned it yet.\n\nMark it as Returned first, then you can delete this reservation.`, { title: 'Cannot delete yet', tone: 'warn' });
       return;
     }
-    if (!(await askConfirm(`Delete ${r.name}'s reservation permanently?${paidNote} This cannot be undone.`))) return;
+    if (!(await askConfirm(`Move ${r.name}'s reservation to the Trash?${paidNote}\n\nIt is removed from the calendar but kept for 30 days, so you can restore it from Trash.`, { title: 'Move to Trash?', confirmText: 'Yes, move to Trash' }))) return;
 
-    const { error } = await supabase.from('wedding_reservations').delete().eq('id', r.id);
+    const { error } = await moveToTrashById('wedding_reservations', r.id, `${r.name} — ${r.packageName}`, `Wedding date: ${r.weddingDate}`);
     if (error) { showAlert('Error: ' + error.message); return; }
 
-    await logActivity('wedding_deleted', `Deleted ${r.name}'s wedding reservation (${r.packageName}, ${r.weddingDate})`);
+    await logActivity('wedding_deleted', `Deleted ${r.name}'s wedding reservation (${r.packageName}, ${r.weddingDate}) (moved to Trash)`);
+    setTrashTick(t => t + 1);
     fetchReservations();
   };
 
@@ -925,6 +932,7 @@ const Availability = () => {
     <>
       <Header />
       <DialogHost />
+      <TrashModal open={trashOpen} onClose={() => { setTrashOpen(false); setTrashTick(t => t + 1); }} tables={['wedding_reservations', 'wedding_packages']} title="Wedding Trash" onChanged={() => { fetchReservations(); fetchPackages(); }} />
       <div className="wa-page">
 
         {/* TOP BAR */}
@@ -933,9 +941,12 @@ const Availability = () => {
             <h1>Wedding Package Availability</h1>
             <p>Pick a date to see open slots, packages, and who is booked.</p>
           </div>
-          <button className="wa-btn wa-gold" onClick={() => openForm()}>
-            <Plus size={17} /> New Reservation
-          </button>
+          <div className="wa-top-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <TrashButton tables={['wedding_reservations', 'wedding_packages']} refreshKey={trashTick} onClick={() => setTrashOpen(true)} />
+            <button className="wa-btn wa-gold" onClick={() => openForm()}>
+              <Plus size={17} /> New Reservation
+            </button>
+          </div>
         </div>
 
         {/* SETUP NOTICE (only if the wedding_packages table is not created yet) */}

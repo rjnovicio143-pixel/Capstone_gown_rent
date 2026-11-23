@@ -9,7 +9,7 @@ import '../styles/SuperBackup.css';
 
 // Tables that are saved. Order matters for restore (parents first).
 // A table that does not exist in your database is skipped automatically.
-const TABLES = ['petticoats', 'accessories', 'gowns', 'bookings', 'wedding_packages', 'wedding_reservations'];
+const TABLES = ['petticoats', 'accessories', 'gowns', 'bookings', 'wedding_packages', 'wedding_reservations', 'trash_bin'];
 const LAST_KEY = 'mrsg_last_backup';
 
 const readLast = () => { try { return localStorage.getItem(LAST_KEY) || ''; } catch { return ''; } };

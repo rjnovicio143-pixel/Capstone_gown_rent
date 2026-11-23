@@ -22,8 +22,8 @@ function SceneLoader() {
 }
 
 /* ---------- CONSTANTS ---------- */
-const MODEL_BUCKET = 'gown-models'; // Supabase Storage bucket (public)
-const PAGE_SIZE = 8;                // gowns shown per "Show more" step
+const MODEL_BUCKET = 'gown-models';
+const PAGE_SIZE = 8;               
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
 

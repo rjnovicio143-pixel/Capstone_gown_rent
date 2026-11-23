@@ -27,11 +27,18 @@ export async function moveToTrash(table, row, label, detail = '') {
   return { error: null };
 }
 
-// Removes everything older than 30 days (runs when a page or the Trash window opens)
+// Two steps, so a mistake can still be fixed:
+//  1) Trash older than 30 days is moved to "recovery" (hidden from the Trash, still saved).
+//  2) Items that stayed in recovery for 30 days are erased for good.
 export async function purgeExpired() {
   const cutoff = new Date(Date.now() - TRASH_DAYS * DAY).toISOString();
-  await supabase.from('trash_bin').delete().lt('deleted_at', cutoff);
+  await supabase.from('trash_bin').update({ purged_at: new Date().toISOString() }).is('purged_at', null).lt('deleted_at', cutoff);
+  await supabase.from('trash_bin').delete().not('purged_at', 'is', null).lt('purged_at', cutoff);
 }
+
+// Days left in recovery
+export const recoveryDaysLeft = (purgedAt) =>
+  Math.max(0, Math.ceil((new Date(purgedAt).getTime() + TRASH_DAYS * DAY - Date.now()) / DAY));
 
 export async function restoreEntry(entry) {
   const { error } = await supabase.from(entry.table_name).upsert(entry.data);
@@ -40,12 +47,39 @@ export async function restoreEntry(entry) {
   return { error: null };
 }
 
+// "Delete forever" in the Trash: hide it, but keep it in recovery for 30 more days
 export async function deleteForever(entry) {
+  return supabase.from('trash_bin').update({ purged_at: new Date().toISOString() }).eq('id', entry.id);
+}
+
+// Really erase (only used from the System Admin recovery list)
+export async function eraseNow(entry) {
   return supabase.from('trash_bin').delete().eq('id', entry.id);
 }
 
+// A reserved / claimed rental holds a gown, so take its stock again. Returns an error message or ''.
+export async function retakeBookingStock(row) {
+  if (row.return_status !== 'reserved' && row.return_status !== 'claimed') return '';
+  if (row.gown_id) {
+    const { data: g } = await supabase.from('gowns').select('name, stock').eq('id', row.gown_id).single();
+    if (g) {
+      const next = (Number(g.stock) || 0) - 1;
+      if (next < 0) return `No stock left for "${g.name}".`;
+      await supabase.from('gowns').update({ stock: next, status: next > 0 ? 'Available' : 'Out of Stock' }).eq('id', row.gown_id);
+    }
+  }
+  const out = [];
+  for (const a of row.addons || []) {
+    const { data: r } = await supabase.from('accessories').select('stock').eq('id', a.id).single();
+    if (r) await supabase.from('accessories').update({ stock: Math.max(0, (Number(r.stock) || 0) - 1) }).eq('id', a.id);
+    out.push({ ...a, held: true });
+  }
+  row.addons = out;
+  return '';
+}
+
 export async function countTrash(tables) {
-  const { count } = await supabase.from('trash_bin').select('id', { count: 'exact', head: true }).in('table_name', tables);
+  const { count } = await supabase.from('trash_bin').select('id', { count: 'exact', head: true }).in('table_name', tables).is('purged_at', null);
   return count || 0;
 }
 

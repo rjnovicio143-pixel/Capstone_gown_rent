@@ -1,9 +1,11 @@
 import { useState, useRef } from 'react';
-import { DatabaseBackup, Download, FileSpreadsheet, Upload, ShieldCheck, Clock, Image as ImageIcon } from 'lucide-react';
+import { DatabaseBackup, Download, FileSpreadsheet, Upload, ShieldCheck, Clock, Image as ImageIcon, RotateCcw, Trash2, LifeBuoy } from 'lucide-react';
+import { useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import SuperHeader from '../components/SuperHeader';
 import { askConfirm, showAlert, DialogHost } from '../components/Dialogs';
 import { downloadWorkbook } from '../utils/exportWorkbook';
+import { purgeExpired, restoreEntry, eraseNow, retakeBookingStock, recoveryDaysLeft, TRASH_DAYS } from '../utils/Trash';
 import '../styles/SuperAdmin.css';
 import '../styles/SuperBackup.css';
 
@@ -94,6 +96,31 @@ export default function SuperBackup() {
   const [last, setLast] = useState(readLast());
   const fileRef = useRef(null);
   const photoRef = useRef(null);
+  const [recovery, setRecovery] = useState([]);
+  const [recBusy, setRecBusy] = useState(null);
+
+  const loadRecovery = async () => {
+    await purgeExpired();
+    const { data } = await supabase.from('trash_bin').select('*').not('purged_at', 'is', null).order('purged_at', { ascending: false });
+    setRecovery(data || []);
+  };
+  useEffect(() => { loadRecovery(); }, []);
+
+  const recRestore = async (r) => {
+    setRecBusy(r.id);
+    const stockErr = r.table_name === 'bookings' ? await retakeBookingStock(r.data) : '';
+    if (stockErr) { await showAlert(stockErr + '\n\nThis rental cannot be restored right now.', { tone: 'warn' }); setRecBusy(null); return; }
+    const { error } = await restoreEntry(r);
+    setRecBusy(null);
+    if (error) { await showAlert(`Could not restore "${r.label}".\n\n${error.message}`, { tone: 'error' }); return; }
+    setMsg(`Restored "${r.label}".`);
+    loadRecovery();
+  };
+  const recErase = async (r) => {
+    if (!(await askConfirm(`Erase "${r.label}" for good?\n\nThis cannot be undone.`, { title: 'Erase for good?', tone: 'danger', confirmText: 'Yes, erase' }))) return;
+    await eraseNow(r);
+    loadRecovery();
+  };
   const [progress, setProgress] = useState('');
   const [photoReport, setPhotoReport] = useState(null);   // { title, rows: [{bucket, ...stat}] }
 
@@ -333,6 +360,26 @@ export default function SuperBackup() {
                 </tbody>
               </table>
             </>
+          )}
+
+          <h4 className="sb-sub"><LifeBuoy size={15} style={{ verticalAlign: '-2px' }} /> Recovery (deleted forever by mistake?)</h4>
+          <p className="sb-rec-note">Items that were deleted forever from a Trash stay here for {TRASH_DAYS} more days, then they are erased. They are also included in "Backup now".</p>
+          {recovery.length === 0 ? <p className="sb-rec-empty">Nothing here.</p> : (
+            <div className="sb-rec-list">
+              {recovery.map(r => (
+                <div key={r.id} className="sb-rec-row">
+                  <div className="sb-rec-info">
+                    <span className="sb-rec-kind">{r.table_name.replace('_', ' ')}</span>
+                    <strong>{r.label}</strong>
+                    <span className="sb-rec-left">{recoveryDaysLeft(r.purged_at)} day(s) left before it is erased</span>
+                  </div>
+                  <div className="sb-rec-actions">
+                    <button type="button" className="sb-rec-restore" disabled={recBusy === r.id} onClick={() => recRestore(r)}><RotateCcw size={14} /> Restore</button>
+                    <button type="button" className="sb-rec-erase" disabled={recBusy === r.id} onClick={() => recErase(r)} title="Erase for good"><Trash2 size={14} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           {msg && <div className="sb-msg"><ShieldCheck size={15} /> {msg}</div>}

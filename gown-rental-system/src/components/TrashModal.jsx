@@ -32,7 +32,7 @@ const TrashModal = ({ open, onClose, tables, title = 'Trash', beforeRestore, onC
   const load = useCallback(async () => {
     setLoading(true);
     await purgeExpired();
-    const { data } = await supabase.from('trash_bin').select('*').in('table_name', tables).order('deleted_at', { ascending: false });
+    const { data } = await supabase.from('trash_bin').select('*').in('table_name', tables).is('purged_at', null).order('deleted_at', { ascending: false });
     setRows(data || []);
     setLoading(false);
   }, [tables.join()]); // eslint-disable-line
@@ -52,7 +52,7 @@ const TrashModal = ({ open, onClose, tables, title = 'Trash', beforeRestore, onC
   };
 
   const remove = async (r) => {
-    if (!(await askConfirm(`Delete "${r.label}" forever?\n\nThis cannot be undone.`, { title: 'Delete forever?', tone: 'danger', confirmText: 'Yes, delete forever' }))) return;
+    if (!(await askConfirm(`Remove "${r.label}" from the Trash?\n\nIt will no longer show here. The System Admin can still recover it for 30 more days (Backup & Restore > Recovery), and then it is erased for good.`, { title: 'Delete forever?', tone: 'danger', confirmText: 'Yes, delete' }))) return;
     setBusyId(r.id);
     const { error } = await deleteForever(r);
     setBusyId(null);
@@ -63,8 +63,8 @@ const TrashModal = ({ open, onClose, tables, title = 'Trash', beforeRestore, onC
 
   const emptyAll = async () => {
     if (!rows.length) return;
-    if (!(await askConfirm(`Delete all ${rows.length} item(s) in the Trash forever?`, { title: 'Empty Trash?', tone: 'danger', confirmText: 'Yes, empty Trash' }))) return;
-    await supabase.from('trash_bin').delete().in('id', rows.map(r => r.id));
+    if (!(await askConfirm(`Remove all ${rows.length} item(s) from the Trash?\n\nThe System Admin can still recover them for 30 more days.`, { title: 'Empty Trash?', tone: 'danger', confirmText: 'Yes, empty Trash' }))) return;
+    await supabase.from('trash_bin').update({ purged_at: new Date().toISOString() }).in('id', rows.map(r => r.id));
     await logActivity('trash_emptied', `Emptied the Trash (${rows.length} item(s))`);
     await load(); onChanged && onChanged();
   };
@@ -76,7 +76,7 @@ const TrashModal = ({ open, onClose, tables, title = 'Trash', beforeRestore, onC
           <h2><Trash2 size={18} /> {title}</h2>
           <button type="button" className="trash-x" onClick={onClose} aria-label="Close"><X size={16} /></button>
         </div>
-        <p className="trash-note"><Clock size={13} /> Deleted items stay here for {TRASH_DAYS} days. After that they are removed for good.</p>
+        <p className="trash-note"><Clock size={13} /> Deleted items stay here for {TRASH_DAYS} days. After that they are hidden; the System Admin can still recover them for 30 more days before they are erased for good.</p>
 
         <div className="trash-list">
           {loading ? <p className="trash-empty">Loading…</p>

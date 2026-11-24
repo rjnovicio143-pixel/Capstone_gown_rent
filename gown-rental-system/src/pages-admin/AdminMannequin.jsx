@@ -368,21 +368,6 @@ const AdminMannequin = () => {
               {renderSlider('Width', waist, setWaist, 0.8, 1.3)}
               {renderSlider('Front & Back', chest, setChest, 0.8, 1.3)}
             </div>
-
-            <div className="am-section-card">
-              <h3><Shirt size={18} /> Gown Fit</h3>
-              <p className="section-subtitle">The gown auto-fits the avatar. Adjust if anything pokes through.</p>
-              {renderSlider('Looseness', looseness, setLooseness, 0.95, 1.2)}
-              {renderSlider('Gown length', length, setLength, 0.85, 1.15)}
-              <label className="am-check">
-                <input
-                  type="checkbox"
-                  checked={showBody}
-                  onChange={(e) => setShowBody(e.target.checked)}
-                />{' '}
-                Show avatar body
-              </label>
-            </div>
             </>)}
 
             {tab === 'limits' && (<>
@@ -503,6 +488,10 @@ const AdminMannequin = () => {
                   </div>
                 </div>
               )}
+              <label className="am-check" style={{ display: 'block', marginBottom: 12 }}>
+                <input type="checkbox" checked={showBody} onChange={(e) => setShowBody(e.target.checked)} />{' '}
+                Show avatar body
+              </label>
               <div className="presets-list">
                 {!category.kids && (
                   <button className="preset-btn" onClick={() => applyPreset(category, 'M')}>Use size M</button>

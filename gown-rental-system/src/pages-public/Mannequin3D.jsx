@@ -72,14 +72,12 @@ const NO_GOWN = {
 };
 
 const SLIDERS = [
-  { key: 'chestW', label: 'Chest · Width',        group: 'Chest' },
-  { key: 'chestD', label: 'Chest · Front & back', group: 'Chest' },
-  { key: 'waistW', label: 'Waist · Width',        group: 'Waist' },
-  { key: 'waistD', label: 'Waist · Front & back', group: 'Waist' },
+  { key: 'width', label: 'Width' },
+  { key: 'depth', label: 'Front & Back' },
 ];
 
 const SIZE_LIMITS = [0.8, 1.3];   // fine-tune range (80% - 130%)
-const DEFAULT_ADJUST = { height: 1, chestW: 1, chestD: 1, waistW: 1, waistD: 1 };
+const DEFAULT_ADJUST = { height: 1, width: 1, depth: 1 };
 
 // Tabs shown under the 3D view on tablet and mobile
 const TABS = [
@@ -220,8 +218,8 @@ const Mannequin3D = () => {
   const bodyModelPath = `/mannequin/${category.file}.glb`;
   const isDefault = Object.keys(DEFAULT_ADJUST).every(k => adjust[k] === DEFAULT_ADJUST[k]);
   const build = useMemo(
-    () => makeBuild(weight, belly, muscle, category.kids, { cw: adjust.chestW, cd: adjust.chestD, ww: adjust.waistW, wd: adjust.waistD }),
-    [weight, belly, muscle, category.kids, adjust.chestW, adjust.chestD, adjust.waistW, adjust.waistD]
+    () => makeBuild(weight, belly, muscle, category.kids),
+    [weight, belly, muscle, category.kids]
   );
 
   const resetAdjust = () => setAdjust(DEFAULT_ADJUST);
@@ -288,15 +286,15 @@ const Mannequin3D = () => {
   );
   const ageOk = !kidAges || kidAges.includes(selectedSize);
   const sizeCheck = useMemo(
-    () => checkSizeFit(bodyRaw, build, gownSizes, modelScale, modelScale),
-    [bodyRaw, build, gownSizes, modelScale]
+    () => checkSizeFit(bodyRaw, build, gownSizes, adjust.width * modelScale, adjust.depth * modelScale),
+    [bodyRaw, build, gownSizes, adjust.width, adjust.depth, modelScale]
   );
   // The Body size buttons follow the body: moving Weight / Belly / Muscle or the fine-tune sliders picks the matching size
   useEffect(() => {
     if (category.kids) return;
-    const near = nearestAdultSize(bodyRaw, build, modelScale, modelScale);
+    const near = nearestAdultSize(bodyRaw, build, adjust.width * modelScale, adjust.depth * modelScale);
     if (near && near !== selectedSize) setSelectedSize(near);
-  }, [bodyRaw, build, modelScale, category.kids]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [bodyRaw, build, adjust.width, adjust.depth, modelScale, category.kids]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canWear = audienceOk && ageOk && (!sizeCheck || sizeCheck.ok);
 
@@ -419,7 +417,7 @@ const Mannequin3D = () => {
 
             <div className="m3d-adj-switch" role="tablist" aria-label="Adjust">
               <button type="button" className={adjTab === 'build' ? 'active' : ''} onClick={() => setAdjTab('build')}>Body build</button>
-              <button type="button" className={adjTab === 'fit' ? 'active' : ''} onClick={() => setAdjTab('fit')}>Fine-tune</button>
+              <button type="button" className={adjTab === 'fit' ? 'active' : ''} onClick={() => setAdjTab('fit')}>Fine-Tune Scale</button>
             </div>
 
             <div className={`m3d-card m3d-pane-body m3d-adj ${adjTab === 'build' ? 'on' : ''}`}>
@@ -485,17 +483,16 @@ const Mannequin3D = () => {
 
             <div className={`m3d-card m3d-pane-fit m3d-adj ${adjTab === 'fit' ? 'on' : ''}`}>
               <div className="m3d-card-head">
-                <h3><Sliders size={17} /> Fine-tune</h3>
+                <h3><Sliders size={17} /> Fine-Tune Scale</h3>
                 <button className="m3d-reset" onClick={resetAdjust} disabled={isDefault}>
                   <RotateCcw size={13} /> Reset
                 </button>
               </div>
-              <p className="m3d-subtitle">Adjust the {selectedSize} model. The gown follows.</p>
+              <p className="m3d-subtitle">Fine adjustments for {category.id} ({selectedSize}); the gown follows:</p>
 
               <div className="m3d-sliders">
-                {SLIDERS.map(({ key, label, group }, i) => (
+                {SLIDERS.map(({ key, label }) => (
                   <div key={key} className="m3d-slider">
-                    {(i === 0 || SLIDERS[i - 1].group !== group) && <p className="m3d-group-title">{group}</p>}
                     <div className="m3d-slider-label">
                       <span>{label}</span>
                       <span>{Math.round(adjust[key] * 100)}%</span>
@@ -507,21 +504,6 @@ const Mannequin3D = () => {
                       step="0.01"
                       value={adjust[key]}
                       onChange={(e) => setAdjust(prev => ({ ...prev, [key]: parseFloat(e.target.value) }))}
-                    />
-                  </div>
-                ))}
-                {[
-                  ['Gown looseness', looseness, setLooseness, 0.95, 1.2],
-                  ['Gown length', length, setLength, 0.85, 1.15],
-                ].map(([label, value, setter, min, max]) => (
-                  <div key={label} className="m3d-slider">
-                    <div className="m3d-slider-label">
-                      <span>{label}</span>
-                      <span>{Math.round(value * 100)}%</span>
-                    </div>
-                    <input
-                      type="range" min={min} max={max} step="0.01" value={value}
-                      onChange={(e) => setter(parseFloat(e.target.value))}
                     />
                   </div>
                 ))}
@@ -581,7 +563,7 @@ const Mannequin3D = () => {
                         build={build}
                         looseness={looseness}
                         length={length}
-                        scale={[modelScale, adjust.height * modelScale, modelScale]}
+                        scale={[adjust.width * modelScale, adjust.height * modelScale, adjust.depth * modelScale]}
                       />
                     </Stage>
                   </Suspense>
